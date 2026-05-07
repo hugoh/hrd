@@ -19,7 +19,12 @@ HK_PKL_BACKEND = "pklr"
 
 [tasks.lint]
 description = "Lint code"
-run = ["go mod tidy -diff", "golangci-lint run ./...", "goreleaser check"]
+run = [
+  "go mod tidy -diff",
+  "golangci-lint run --tests=false ./...",
+  "golangci-lint run ./...",
+  "goreleaser check"
+]
 
 [tasks.test]
 description = "Run tests"
