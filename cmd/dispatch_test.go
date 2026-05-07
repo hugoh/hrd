@@ -116,6 +116,30 @@ func TestLsCmdWithDetails(t *testing.T) {
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "repo1")
+	assert.Contains(t, stdout, "MSG")
+}
+
+func TestLlCmd(t *testing.T) {
+	gitDir := setupFakeGitRepo(t)
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: gitDir, Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ll"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Contains(t, stdout, "repo1")
+	assert.Contains(t, stdout, "MSG")
 }
 
 func TestLsCmdWithReposFlag(t *testing.T) {

@@ -237,51 +237,55 @@ func lsCmd(cfgPath *string) *cli.Command {
 				Usage:   "show commit message and time",
 			},
 		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, err := config.Load(*cfgPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
+		Action: lsAction(cfgPath),
+	}
+}
 
-			names, err := resolveScope(cmd, &cfg)
-			if err != nil {
-				return fmt.Errorf("resolving scope: %w", err)
-			}
+func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
+	return func(ctx context.Context, cmd *cli.Command) error {
+		cfg, err := config.Load(*cfgPath)
+		if err != nil {
+			return fmt.Errorf("loading config: %w", err)
+		}
 
-			if len(names) == 0 {
-				ui.Outf("no repos tracked")
+		names, err := resolveScope(cmd, &cfg)
+		if err != nil {
+			return fmt.Errorf("resolving scope: %w", err)
+		}
 
-				return nil
-			}
+		if len(names) == 0 {
+			ui.Outf("no repos tracked")
 
-			vcsByName := make(map[string]string, len(names))
-			for _, n := range names {
-				vcsByName[n] = cfg.Repos[n].ActiveBackend()
-			}
+			return nil
+		}
 
-			// ll alias implies -l (details)
-			details := cmd.Bool("details")
-			if cmd.Name == "ll" {
-				details = true
-			}
+		vcsByName := make(map[string]string, len(names))
+		for _, n := range names {
+			vcsByName[n] = cfg.Repos[n].ActiveBackend()
+		}
 
-			return progressiveStatus(
-				names,
-				vcsByName,
-				details,
-				func(resultCh chan<- runner.StatusResult) {
-					statusCh := runner.GatherStatus(
-						ctx,
-						cfg.Repos,
-						names,
-						int64(cfg.Settings.Concurrency),
-					)
-					for res := range statusCh {
-						resultCh <- res
-					}
-				},
-			)
-		},
+		// ll alias implies -l (details)
+		details := cmd.Bool("details")
+		if cmd.Name == "ll" || cmd.Root().Args().First() == "ll" {
+			details = true
+		}
+
+		return progressiveStatus(
+			names,
+			vcsByName,
+			details,
+			func(resultCh chan<- runner.StatusResult) {
+				statusCh := runner.GatherStatus(
+					ctx,
+					cfg.Repos,
+					names,
+					int64(cfg.Settings.Concurrency),
+				)
+				for res := range statusCh {
+					resultCh <- res
+				}
+			},
+		)
 	}
 }
 

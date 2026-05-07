@@ -223,13 +223,13 @@ func TestExtractCount(t *testing.T) {
 
 func TestExtractCommitMsg(t *testing.T) {
 	assert.Equal(t, "msg", extractCommitMsg("msg"))
-	assert.Equal(t, "", extractCommitMsg(""))
+	assert.Empty(t, extractCommitMsg(""))
 }
 
 func TestExtractCommitTime(t *testing.T) {
 	assert.Equal(t, "time", extractCommitTime("msg\x1ftime"))
-	assert.Equal(t, "", extractCommitTime("msg"))
-	assert.Equal(t, "", extractCommitTime(""))
+	assert.Empty(t, extractCommitTime("msg"))
+	assert.Empty(t, extractCommitTime(""))
 }
 
 func TestBackend_Name_JJ(t *testing.T) {

@@ -243,6 +243,7 @@ func fillCommitMsgFromAncestors(ctx context.Context, path string, status *backen
 
 func extractCommitMsg(out string) string {
 	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+
 	return strings.TrimSpace(parts[0])
 }
 
