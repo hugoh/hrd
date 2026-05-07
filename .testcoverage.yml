@@ -1,0 +1,10 @@
+profile: cover.out
+
+threshold:
+  total: 90
+
+override:
+  - path: backends/git
+    threshold: 100
+  - path: backends/jj
+    threshold: 100
