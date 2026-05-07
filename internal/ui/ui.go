@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -21,30 +20,18 @@ const (
 	colNameWidth     = 20
 )
 
-//nolint:gochecknoglobals // UI colour and style definitions are inherently global
-var (
-	colorSynced   = lipgloss.Color("2")
-	colorDiverged = lipgloss.Color("196")
-)
-
-//nolint:gochecknoglobals // UI color and style definitions are inherently global
-var (
-	styleErr  = lipgloss.NewStyle().Foreground(colorDiverged)
-	styleBold = lipgloss.NewStyle().Bold(true)
-)
-
 // RenderDispatchResult renders a dispatch result (success/failure).
 func RenderDispatchResult(res runner.Result) string {
-	name := styleBold.Width(colNameWidth).Render(res.RepoName)
+	name := fmt.Sprintf("%-20s", res.RepoName)
 	if res.Err != nil {
-		return name + " " + styleErr.Render("✗ "+res.Err.Error())
+		return name + " " + text.FgRed.Sprint("✗ "+res.Err.Error())
 	}
 
 	if res.ExitCode != 0 {
-		return name + " " + styleErr.Render("✗ exit "+strconv.Itoa(res.ExitCode))
+		return name + " " + text.FgRed.Sprint("✗ exit "+strconv.Itoa(res.ExitCode))
 	}
 
-	return name + " " + lipgloss.NewStyle().Foreground(colorSynced).Bold(true).Render("✓")
+	return name + " " + text.Colors{text.Bold, text.FgGreen}.Sprint("✓")
 }
 
 // Outf prints to stdout with formatting.
