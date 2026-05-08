@@ -21,7 +21,7 @@ HK_PKL_BACKEND = "pklr"
 description = "Lint code"
 run = [
   "go mod tidy -diff",
-  "golangci-lint run --tests=false ./...",
+  "golangci-lint run --enable-only unused --tests=false ./...",
   "golangci-lint run ./...",
   "goreleaser check"
 ]
