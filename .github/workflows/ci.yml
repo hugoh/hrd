@@ -14,9 +14,6 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: read
-      # To report GitHub Actions status checks
-      statuses: write
     runs-on: ubuntu-latest
     steps:
       - &checkout
@@ -33,6 +30,8 @@ jobs:
   versions:
     timeout-minutes: 30
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       tools: ${{ steps.mise.outputs.tools }}
     steps:
