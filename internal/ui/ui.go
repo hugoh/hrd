@@ -90,11 +90,12 @@ func Wrap(s string, maxLen int) string {
 }
 
 // ComputeRemainderWidth calculates remaining width after accounting for used columns.
-func ComputeRemainderWidth(termWidth, minWidth, numSeparators int, usedWidths ...int) int {
-	total := 0
+func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
+	var total, numSeparators int
 
 	for _, w := range usedWidths {
 		total += w
+		numSeparators++
 	}
 
 	return max(termWidth-total-numSeparators*separatorWidth, minWidth)

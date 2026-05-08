@@ -57,12 +57,12 @@ func TestWrap(t *testing.T) {
 func TestComputeRemainderWidth(t *testing.T) {
 	// termWidth=100, minWidth=10, separators=1, used=[20, 30]
 	// total used = 50, separator width = 2 * 1 = 2
-	// remainder = 100 - 50 - 2 = 48
-	w := ui.ComputeRemainderWidth(100, 10, 1, 20, 30)
-	assert.Equal(t, 48, w)
+	// remainder = 100 - 50 - 2*2 = 46
+	w := ui.ComputeRemainderWidth(100, 10, 20, 30)
+	assert.Equal(t, 46, w)
 
 	// When remainder < min, should return min
-	w2 := ui.ComputeRemainderWidth(10, 20, 1, 20, 30)
+	w2 := ui.ComputeRemainderWidth(10, 20, 20, 30)
 	assert.Equal(t, 20, w2)
 }
 
