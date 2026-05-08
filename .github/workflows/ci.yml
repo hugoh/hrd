@@ -81,10 +81,21 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - *setup-go
-      - uses: go-semantic-release/action@2e9dc4247a6004f8377781bef4cb9dad273a741f
-        with:
-          hooks: goreleaser
-          allow-initial-development-versions: true
-          prerelease: true
+      - *mise
+      - name: Calculate next version and create tag
+        id: version
+        run: |
+          RAW=$(git cliff --bumped-version)
+          RAW="${RAW#v}"
+          if git rev-parse --verify --quiet "v${RAW}" >/dev/null 2>&1; then
+            echo "No new version to release — v${RAW} already exists"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            git tag "v${RAW}"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Release
+        if: steps.version.outputs.skip != 'true'
+        run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
