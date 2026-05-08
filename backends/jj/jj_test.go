@@ -194,6 +194,21 @@ func TestParseBookmarks_EmptyBookmarkName(t *testing.T) {
 	assert.Empty(t, result[0].Name)
 }
 
+func TestParseBookmarks_SkipGitRemote(t *testing.T) {
+	// Colocated jj+git repos have a synthetic @git remote that always
+	// appears before @origin in the output. We must skip @git and
+	// use @origin as the true remote.
+	input := "main: lolyspwl 5d874311 lint fix\n" +
+		"  @git: lolyspwl 5d874311 lint fix\n" +
+		"  @origin (ahead by 1 commits, behind by 1 commits): lolyspwl/1 6f42490f (hidden) lint fix\n"
+	result := parseBookmarks(input)
+	require.Len(t, result, 1)
+	assert.Equal(t, "origin", result[0].Remote)
+	assert.Equal(t, 1, result[0].Ahead)
+	assert.Equal(t, 1, result[0].Behind)
+	assert.Equal(t, "diverged", result[0].State.String())
+}
+
 func TestParseBookmarks_BlankLines(t *testing.T) {
 	input := "\nmain: rlkvwrto 9f3a1b2c\n\n  @origin (tracking)\n\n"
 	result := parseBookmarks(input)

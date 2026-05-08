@@ -362,6 +362,11 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 
 	remote = strings.TrimSuffix(remote, ":")
 
+	// Skip synthetic @git remote (internal colocation bookmark, not a real remote).
+	if remote == "git" {
+		return
+	}
+
 	// Use the first tracking remote only.
 	if current.Remote != "" {
 		return
