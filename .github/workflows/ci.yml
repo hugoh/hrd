@@ -58,11 +58,13 @@ jobs:
       - name: Test
         run: mise test
       - name: Coverage
-        run: mise covercheck
+        run: mise coverage
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Coverage check
+        run: mise covercheck
       - name: Build
         run: go build .
 
