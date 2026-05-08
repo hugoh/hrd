@@ -19,7 +19,8 @@ jobs:
       statuses: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - &checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
       - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac
@@ -35,10 +36,7 @@ jobs:
     outputs:
       tools: ${{ steps.mise.outputs.tools }}
     steps:
-      - &checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
+      - *checkout
       - uses: yshrsmz/action-mise-values@92f49c5a07ebc7ffa957be5efa6a2c673578bbb0
         id: mise
 
