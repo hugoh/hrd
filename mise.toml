@@ -25,7 +25,7 @@ run = [
   "go mod tidy -diff",
   "golangci-lint run --enable-only unused --tests=false ./...",
   "golangci-lint run ./...",
-  # "goreleaser check",
+  "goreleaser check",
 ]
 
 [tasks.test]
