@@ -58,11 +58,6 @@ type Context struct {
 type Settings struct {
 	// Concurrency caps the number of parallel subprocess invocations.
 	Concurrency int `toml:"concurrency"`
-
-	// InteractiveCommands lists subcommand names that must run sequentially
-	// with a real terminal (e.g. "log", "difftool"). Matched by exact prefix
-	// of the args slice passed to Run.
-	InteractiveCommands []string `toml:"interactive_commands"`
 }
 
 // Config is the top-level config structure that maps directly to the TOML file.

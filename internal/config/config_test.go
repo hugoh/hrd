@@ -29,7 +29,6 @@ func TestRepo_ActiveBackend(t *testing.T) {
 func TestDefaultConfig(t *testing.T) {
 	cfg := defaultConfig()
 	assert.Equal(t, defaultConcurrency, cfg.Settings.Concurrency)
-	assert.Nil(t, cfg.Settings.InteractiveCommands)
 	assert.NotNil(t, cfg.Repos)
 	assert.NotNil(t, cfg.Groups)
 }
@@ -69,7 +68,6 @@ current = "work"
 
 [settings]
 concurrency = 4
-interactive_commands = ["log", "diff"]
 `
 	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
