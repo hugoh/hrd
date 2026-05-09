@@ -14,9 +14,9 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 - **Parallel execution** — commands run concurrently across all matched repos, with results streaming in as each one completes.
 - **Live status dashboard** — `hrd ls` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
 - **Repo groups and context** — organize repos into named groups and set an active context so commands default to a focused scope.
-- **Three dispatch commands** — `git`, `jj`, and `shell`. Clean and composable.
-- **Extensible backend system** — new VCS backends implement a single interface and self-register. Zero changes to core code.
+- **Three dispatch commands** — `git`, `jj`, and `shell`.
 - **Shell completion** — bash, zsh, and fish, with dynamic completion of repo and group names from your live config.
+- **Extensible backend system** — new VCS backends implement a single interface and self-register.
 
 ## Install
 
@@ -36,6 +36,12 @@ sudo apt install ./hrd_*.deb
 
 # RHEL/Fedora
 sudo dnf install ./hrd_*.rpm
+```
+
+### mise
+
+```sh
+mise use -g github:hugoh/hrd
 ```
 
 ### Go install
@@ -80,27 +86,27 @@ hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ## Status dashboard
 
 ```text
-REPO                 VCS   REF            FLG  BOOKMARKS / BRANCHES
-────────────────────────────────────────────────────────────────────
-myproject            git   main            *   [main ↑2]
-dotfiles             jj    rlkvwrto            [main ✓] [feat]
-infra                git   feat/rework         [feat/rework ↑1↓3]
-old-service          jj    qpvuntop        ‼   [legacy ✗] [fix !]
+NAME         VCS  REF               MSG
+myproject    git  main ↑2*          feat: add new feature (2 hours ago)
+dotfiles     jj   main ✓∅           config: update zshrc (1 day ago)
+infra        git  feat/rework ↑1↓3  refactor: networking layer (3 days ago)
+old-service  jj   legacy ✗✓!‼       fix: critical bug (1 week ago)
 ```
 
-Bookmark badges are color-coded at a glance:
+Status symbols at a glance:
 
-| Badge         | Meaning                |
-| ------------- | ---------------------- |
-| `[main ✓]`    | synced with remote     |
-| `[main ↑2]`   | 2 commits ahead        |
-| `[main ↓1]`   | 1 commit behind        |
-| `[main ↑2↓1]` | diverged               |
-| `[feat]`      | local only, no remote  |
-| `[main !]`    | bookmark conflict (jj) |
-| `[old ✗]`     | remote was deleted     |
-
-Flags: `*` dirty working copy · `‼` unresolved conflict
+| Symbol | Meaning                |
+| ------ | ---------------------- |
+| `✓`    | synced with remote     |
+| `↑2`   | 2 commits ahead        |
+| `↓1`   | 1 commit behind        |
+| `↑2↓1` | diverged               |
+| `∅`    | local only, no remote  |
+| `!`    | bookmark conflict (jj) |
+| `✗`    | remote was deleted     |
+| `*`    | dirty working copy     |
+| `‼`    | unresolved conflict    |
+| `?`    | unknown remote state   |
 
 ## Command reference
 
@@ -177,10 +183,14 @@ Implement the `Backend` interface in a new package, add a `Register()` function 
 
 ## Related tools
 
-**[gita](https://github.com/nosarthur/gita)** is the direct inspiration for `hrd`. It pioneered the repo-groups-context mental model for multi-repo management and demonstrated how useful a clean status dashboard is in a polyrepo workflow. `hrd` builds on those ideas with native jj support, an extensible backend system, richer bookmark/branch tracking, and a live-updating terminal UI.
+**[gita](https://github.com/nosarthur/gita)** — the direct inspiration for `hrd`.
 
 **[gitbatch](https://github.com/isacikgoz/gitbatch)** — interactive TUI for batch git operations.
 
 **[ghq](https://github.com/x-motemen/ghq)** — manages repository locations and clones. Complementary to `hrd`: use `ghq` to clone and organize, `hrd` to operate across them.
 
 **[jj](https://github.com/jj-vcs/jj)** — the Jujutsu VCS that motivated first-class non-git support in `hrd`.
+
+## Disclaimer
+
+LLMs were used to put together the initial version.
