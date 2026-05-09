@@ -28,30 +28,29 @@ jobs:
         if: failure()
         run: cat /home/runner/.local/state/hk/output.log
 
-  versions:
-    timeout-minutes: 30
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      tools: ${{ steps.mise.outputs.tools }}
-    steps:
-      - *checkout
-      - uses: yshrsmz/action-mise-values@92f49c5a07ebc7ffa957be5efa6a2c673578bbb0
-        id: mise
-
   goci:
     timeout-minutes: 30
-    needs: versions
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - *checkout
-      - &setup-go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+      - &go-version
+        name: Get Go version
+        id: go-version
+        run: |
+          GO_VERSION=$(grep '^go ' mise.toml | sed 's/.*"\(.*\)"/\1/')
+          echo "go=${GO_VERSION}" >> "$GITHUB_OUTPUT"
+      - &go-cache
+        name: Cache Go modules
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          go-version: ${{ fromJson(needs.versions.outputs.tools).go }}
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-
       - *mise
       - name: Lint
         run: mise lint
@@ -71,7 +70,7 @@ jobs:
   release:
     timeout-minutes: 30
     runs-on: ubuntu-latest
-    needs: [hk, versions, goci]
+    needs: [hk, goci]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: write
@@ -80,7 +79,8 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - *setup-go
+      - *go-version
+      - *go-cache
       - *mise
       - name: Bump version
         id: version
