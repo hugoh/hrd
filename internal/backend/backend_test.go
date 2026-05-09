@@ -362,7 +362,7 @@ func TestDetectWithRealGitRepo(t *testing.T) {
 	registry = nil
 
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".git", "config"), []byte("[core]\n"), 0o644)
 	require.NoError(t, err)

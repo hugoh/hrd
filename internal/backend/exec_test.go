@@ -62,7 +62,7 @@ func TestRunCommand_Interactive(t *testing.T) {
 
 func TestDetectDir_MarkerExists(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".testmarker"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".testmarker"), 0o750)
 	require.NoError(t, err)
 
 	ok, err := DetectDir(dir, ".testmarker")
