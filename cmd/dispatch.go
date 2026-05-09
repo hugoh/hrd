@@ -239,12 +239,50 @@ func lsCmd(cfgPath *string) *cli.Command {
 				Usage:   "repo names or a group name",
 			},
 			&cli.BoolFlag{
-				Name:    "details",
-				Aliases: []string{"l"},
+				Name:    "message",
+				Aliases: []string{"m"},
 				Usage:   "show commit message and time",
+			},
+			&cli.BoolFlag{
+				Name:    "names",
+				Aliases: []string{"n"},
+				Usage:   "show repo names only, one per line",
+			},
+			&cli.BoolFlag{
+				Name:    "dirs",
+				Aliases: []string{"d"},
+				Usage:   "show repo dirs only, one per line",
 			},
 		},
 		Action: lsAction(cfgPath),
+	}
+}
+
+func lsNamesOnly(names []string) {
+	for _, n := range names {
+		ui.Outf(n)
+	}
+}
+
+func lsDirsOnly(repos map[string]config.Repo, names []string) {
+	for _, n := range names {
+		if repo, ok := repos[n]; ok {
+			ui.Outf(repo.Path)
+		}
+	}
+}
+
+func lsGatherCallback(ctx context.Context, repos map[string]config.Repo, names []string, concurrency int64) func(chan<- runner.StatusResult) {
+	return func(resultCh chan<- runner.StatusResult) {
+		statusCh := runner.GatherStatus(
+			ctx,
+			repos,
+			names,
+			concurrency,
+		)
+		for res := range statusCh {
+			resultCh <- res
+		}
 	}
 }
 
@@ -266,32 +304,33 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 			return nil
 		}
 
+		switch {
+		case cmd.Bool("names"):
+			lsNamesOnly(names)
+
+			return nil
+		case cmd.Bool("dirs"):
+			lsDirsOnly(cfg.Repos, names)
+
+			return nil
+		}
+
 		vcsByName := make(map[string]string, len(names))
 		for _, n := range names {
 			vcsByName[n] = cfg.Repos[n].ActiveBackend()
 		}
 
-		// ll alias implies -l (details)
-		details := cmd.Bool("details")
+		// ll alias implies -m (message)
+		message := cmd.Bool("message")
 		if cmd.Name == "ll" || cmd.Root().Args().First() == "ll" {
-			details = true
+			message = true
 		}
 
 		return gatherStatus(
 			names,
 			vcsByName,
-			details,
-			func(resultCh chan<- runner.StatusResult) {
-				statusCh := runner.GatherStatus(
-					ctx,
-					cfg.Repos,
-					names,
-					int64(cfg.Settings.Concurrency),
-				)
-				for res := range statusCh {
-					resultCh <- res
-				}
-			},
+			message,
+			lsGatherCallback(ctx, cfg.Repos, names, int64(cfg.Settings.Concurrency)),
 		)
 	}
 }

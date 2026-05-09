@@ -96,7 +96,7 @@ func TestLsCmdWithRepos(t *testing.T) {
 	assert.Contains(t, stdout, "repo1")
 }
 
-func TestLsCmdWithDetails(t *testing.T) {
+func TestLsCmdWithMessage(t *testing.T) {
 	gitDir := setupFakeGitRepo(t)
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
@@ -111,7 +111,7 @@ func TestLsCmdWithDetails(t *testing.T) {
 	stdout := captureStdout(t, func() {
 		err := app.Run(
 			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "-l"},
+			[]string{"hrd", "--config", cfgPath, "ls", "-m"},
 		)
 		assert.NoError(t, err)
 	})
@@ -164,6 +164,95 @@ func TestLsCmdWithReposFlag(t *testing.T) {
 	})
 	assert.Contains(t, stdout, "repo1")
 	assert.NotContains(t, stdout, "repo2")
+}
+
+func TestLsCmdNamesOnly(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+			"repo2": {Path: "/tmp/r2", Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ls", "-n"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Equal(t, "repo1\nrepo2\n", stdout)
+}
+
+func TestLsCmdNamesOnlyLongFlag(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ls", "--names"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Equal(t, "repo1\n", stdout)
+}
+
+func TestLsCmdDirsOnly(t *testing.T) {
+	repo1Dir := t.TempDir()
+	repo2Dir := t.TempDir()
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+			"repo2": {Path: repo2Dir, Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ls", "-d"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Equal(t, repo1Dir+"\n"+repo2Dir+"\n", stdout)
+}
+
+func TestLsCmdDirsOnlyLongFlag(t *testing.T) {
+	repo1Dir := t.TempDir()
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ls", "--dirs"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Equal(t, repo1Dir+"\n", stdout)
 }
 
 func TestStatusCmd(t *testing.T) {
