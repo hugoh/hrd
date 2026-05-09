@@ -119,7 +119,6 @@ func parseStatus(raw string, remotes []string) backend.RepoStatus {
 
 	var ahead, behind int
 
-
 	hasUpstream := false
 
 	for line := range strings.SplitSeq(raw, "\n") {
