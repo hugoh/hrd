@@ -39,8 +39,10 @@ var _ backend.Backend = (*Backend)(nil)
 // Name returns the backend identifier "jj".
 func (*Backend) Name() string { return "jj" }
 
+// Priority returns the jj detection priority.
+func (*Backend) Priority() int { return backend.PriorityJj }
+
 // Detect returns true if path contains a .jj directory.
-// jj is registered before git so colocated repos (jj + .git) are claimed by jj.
 func (*Backend) Detect(path string) (bool, error) {
 	ok, err := backend.DetectDir(path, ".jj")
 	if err != nil {

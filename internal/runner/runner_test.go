@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 type gitBackend struct{}
 
 func (*gitBackend) Name() string                  { return "git" }
+func (*gitBackend) Priority() int                 { return 10 }
 func (*gitBackend) Detect(_ string) (bool, error) { return false, nil }
 func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil

@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBackend_Priority(t *testing.T) {
+	b := &Backend{}
+	assert.Positive(t, b.Priority())
+}
+
 func TestParseStatus_Empty(t *testing.T) {
 	st := parseStatus("", nil)
 	assert.Empty(t, st.Ref)

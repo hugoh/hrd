@@ -27,6 +27,9 @@ var _ backend.Backend = (*Backend)(nil)
 // Name returns the backend identifier "git".
 func (*Backend) Name() string { return "git" }
 
+// Priority returns the git detection priority.
+func (*Backend) Priority() int { return backend.PriorityGit }
+
 // Detect returns true if path contains a .git directory.
 func (*Backend) Detect(path string) (bool, error) {
 	ok, err := backend.DetectDir(path, ".git")
