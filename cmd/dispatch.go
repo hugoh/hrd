@@ -608,7 +608,7 @@ func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
 		vcsWidth,
 	)
 
-	header := table.Row{"NAME", "VCS", "STATUS"}
+	header := table.Row{"NAME", "VCS", "REF"}
 
 	colConfigs := []table.ColumnConfig{
 		{Number: colName, WidthMax: nameWidth, WidthMaxEnforcer: ui.Truncate},
