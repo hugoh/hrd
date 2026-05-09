@@ -27,6 +27,7 @@ const (
 	minNameWidth   = 15  // minimum width for name column
 	cmdNameGit     = "git"
 	cmdNameShell   = "shell"
+	fmtSummary     = "%d/%d repos completed successfully"
 )
 
 var (
@@ -333,6 +334,16 @@ func runInteractive(ctx context.Context, dir, bin string, args []string) error {
 	return execInteractive(ctx, dir, bin, args)
 }
 
+func dispatchSummary(total, failures int) {
+	success := total - failures
+
+	if failures > 0 {
+		ui.Fail(fmtSummary, success, total)
+	} else {
+		ui.Success(fmtSummary, success, total)
+	}
+}
+
 // runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
 // Each repo uses its own active backend (git or jj).
 func runSubcmdInteractive(
@@ -360,9 +371,7 @@ func runSubcmdInteractive(
 		}
 	}
 
-	success := len(names) - len(failed)
-
-	ui.Success("%d/%d repos completed successfully", success, len(names))
+	dispatchSummary(len(names), len(failed))
 
 	return nil
 }
@@ -390,9 +399,7 @@ func dispatchInteractive(
 		}
 	}
 
-	success := len(names) - len(failed)
-
-	ui.Success("%d/%d repos completed successfully", success, len(names))
+	dispatchSummary(len(names), len(failed))
 
 	return nil
 }
@@ -472,8 +479,7 @@ func dispatch(
 		ui.Fail("failed: %s", strings.Join(errs, ", "))
 	}
 
-	success := len(names) - len(errs)
-	ui.Success("%d/%d repos completed successfully", success, len(names))
+	dispatchSummary(len(names), len(errs))
 
 	return nil
 }
