@@ -830,3 +830,24 @@ func TestJjCmd(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errNoReposWithBackend)
 }
+
+// TestJjCmdInteractiveMismatch verifies the interactive dispatch path also filters by
+// backend — `jj diff` (interactive) on a git-only repo should error, not try to exec jj.
+func TestJjCmdInteractiveMismatch(t *testing.T) {
+	gitDir := setupFakeGitRepo(t)
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: gitDir, Backends: []string{"git"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	// diff is in the default interactive commands list, so this hits the
+	// interactive code path in runDispatch
+	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "jj", "--", "diff"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errNoReposWithBackend)
+}

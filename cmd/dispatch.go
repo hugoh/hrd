@@ -318,27 +318,54 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
-	interactive := isInteractive(vcsArgs, cfg.Settings.InteractiveCommands)
-
-	if interactive {
-		var failed []string
-
-		for _, name := range names {
-			repo := cfg.Repos[name]
-
-			if err := runInteractive(ctx, repo.Path, backendName, vcsArgs); err != nil {
-				ui.Errf("%s: %v", name, err)
-				failed = append(failed, name)
-			}
-		}
-
-		success := len(names) - len(failed)
-
-		ui.Success("%d/%d repos completed successfully", success, len(names))
-
-		return nil
+	if isInteractive(vcsArgs, cfg.Settings.InteractiveCommands) {
+		return dispatchInteractive(ctx, cfg.Repos, names, backendName, vcsArgs)
 	}
 
+	return dispatchNonInteractive(ctx, &cfg, names, backendName, vcsArgs)
+}
+
+func runInteractive(ctx context.Context, dir, bin string, args []string) error {
+	return execInteractive(ctx, dir, bin, args)
+}
+
+func dispatchInteractive(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	backendName string,
+	vcsArgs []string,
+) error {
+	names = filterMatching(names, repos, backendName)
+	if len(names) == 0 {
+		return fmt.Errorf("%w %s", errNoReposWithBackend, backendName)
+	}
+
+	var failed []string
+
+	for _, name := range names {
+		repo := repos[name]
+
+		if err := runInteractive(ctx, repo.Path, backendName, vcsArgs); err != nil {
+			ui.Errf("%s: %v", name, err)
+			failed = append(failed, name)
+		}
+	}
+
+	success := len(names) - len(failed)
+
+	ui.Success("%d/%d repos completed successfully", success, len(names))
+
+	return nil
+}
+
+func dispatchNonInteractive(
+	ctx context.Context,
+	cfg *config.Config,
+	names []string,
+	backendName string,
+	vcsArgs []string,
+) error {
 	label := backendName + " " + strings.Join(vcsArgs, " ")
 
 	names = filterMatching(names, cfg.Repos, backendName)
@@ -363,10 +390,6 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 			resultCh <- res
 		}
 	})
-}
-
-func runInteractive(ctx context.Context, dir, bin string, args []string) error {
-	return execInteractive(ctx, dir, bin, args)
 }
 
 func dispatch(
