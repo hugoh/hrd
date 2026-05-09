@@ -242,8 +242,8 @@ func Shell(
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
 			var buf bytes.Buffer
 
-			//nolint:gosec // user shell commands
-			cmd := exec.CommandContext(ctx, "sh", "-c", shellCmd)
+			//nolint:gosec // intentional: user shell commands
+			cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
 			cmd.Dir = repo.Path
 			cmd.Stdout = &buf
 			cmd.Stderr = &buf
