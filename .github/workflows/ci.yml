@@ -85,14 +85,19 @@ jobs:
       - name: Calculate next version and create tag
         id: version
         run: |
-          RAW=$(git cliff --bumped-version)
-          RAW="${RAW#v}"
-          if git rev-parse --verify --quiet "v${RAW}" >/dev/null 2>&1; then
-            echo "No new version to release — v${RAW} already exists"
-            echo "skip=true" >> "$GITHUB_OUTPUT"
+          RAW=$(cog bump --auto --dry-run 2>/dev/null)
+          if echo "$RAW" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+            RAW="${RAW#v}"
+            if git rev-parse --verify --quiet "v${RAW}" >/dev/null 2>&1; then
+              echo "No new version to release — v${RAW} already exists"
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              git tag "v${RAW}"
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
           else
-            git tag "v${RAW}"
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "No conventional commits requiring a bump"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           fi
       - name: Release
         if: steps.version.outputs.skip != 'true'
