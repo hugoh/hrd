@@ -1,0 +1,7 @@
+[git]
+filter_unconventional = false
+
+[changelog]
+commit_parsers = [
+    { message = ".*", group = "Other", bump = "patch" },
+]
