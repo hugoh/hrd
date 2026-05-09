@@ -26,33 +26,32 @@ func forEachRepo(
 	repos map[string]config.Repo,
 	names []string,
 	concurrency int64,
-	fn func(ctx context.Context, repo config.Repo, name string) error,
+	workFn func(ctx context.Context, repo config.Repo, name string) error,
 ) {
 	sem := semaphore.NewWeighted(concurrency)
-	eg, ctx := errgroup.WithContext(ctx)
+	group, ctx := errgroup.WithContext(ctx)
 
 	for _, name := range names {
 		repo, ok := repos[name]
 		if !ok {
 			// Repo not found — call fn synchronously (channel is buffered, won't block).
-			fn(ctx, config.Repo{}, name)
+			_ = workFn(ctx, config.Repo{}, name)
 
 			continue
 		}
 
-		name := name
-		eg.Go(func() error {
+		group.Go(func() error {
 			if err := sem.Acquire(ctx, 1); err != nil {
 				return fmt.Errorf("acquiring semaphore: %w", err)
 			}
 
 			defer sem.Release(1)
 
-			return fn(ctx, repo, name)
+			return workFn(ctx, repo, name)
 		})
 	}
 
-	_ = eg.Wait()
+	_ = group.Wait()
 }
 
 // Result is the outcome for a single repo, sent through the results channel.
@@ -80,7 +79,7 @@ func forEachRepoChan[T any](
 	repos map[string]config.Repo,
 	names []string,
 	concurrency int64,
-	fn func(context.Context, config.Repo, string, chan<- T) error,
+	taskFn func(context.Context, config.Repo, string, chan<- T) error,
 	errResult func(string) T,
 ) <-chan T {
 	results := make(chan T, len(names))
@@ -96,7 +95,7 @@ func forEachRepoChan[T any](
 					return nil
 				}
 
-				return fn(ctx, repo, name, results)
+				return taskFn(ctx, repo, name, results)
 			},
 		)
 	}()
@@ -116,14 +115,14 @@ func Dispatch(
 	args []string,
 	concurrency int64,
 ) (<-chan Result, error) {
-	be, err := backend.ByName(backendName)
+	bck, err := backend.ByName(backendName)
 	if err != nil {
 		return nil, fmt.Errorf("checking backend %q: %w", backendName, err)
 	}
 
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
-			res, err := be.Run(ctx, repo.Path, args, false)
+			res, err := bck.Run(ctx, repo.Path, args, false)
 			results <- Result{
 				RepoName: name,
 				RepoPath: repo.Path,
@@ -176,6 +175,7 @@ func vcsRun(
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
 			bin := repo.ActiveBackend()
+
 			cmdArgs := append([]string{subcmd}, args...)
 
 			var buf bytes.Buffer
@@ -283,14 +283,14 @@ func GatherStatus(
 		names,
 		concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- StatusResult) error {
-			be, err := backend.ByName(repo.ActiveBackend())
+			bck, err := backend.ByName(repo.ActiveBackend())
 			if err != nil {
 				results <- StatusResult{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
 
 				return nil
 			}
 
-			st, err := be.Status(ctx, repo.Path)
+			st, err := bck.Status(ctx, repo.Path)
 			results <- StatusResult{
 				RepoName: name,
 				RepoPath: repo.Path,

@@ -42,7 +42,12 @@ func (b *Backend) Name() string { return "jj" }
 // Detect returns true if path contains a .jj directory.
 // jj is registered before git so colocated repos (jj + .git) are claimed by jj.
 func (b *Backend) Detect(path string) (bool, error) {
-	return backend.DetectDir(path, ".jj")
+	ok, err := backend.DetectDir(path, ".jj")
+	if err != nil {
+		return false, fmt.Errorf("detect jj: %w", err)
+	}
+
+	return ok, nil
 }
 
 // Status queries jj for the current change, all local bookmark tracking

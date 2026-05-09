@@ -29,7 +29,12 @@ func (b *Backend) Name() string { return "git" }
 
 // Detect returns true if path contains a .git directory.
 func (b *Backend) Detect(path string) (bool, error) {
-	return backend.DetectDir(path, ".git")
+	ok, err := backend.DetectDir(path, ".git")
+	if err != nil {
+		return false, fmt.Errorf("detect git: %w", err)
+	}
+
+	return ok, nil
 }
 
 // Status queries git for the current branch/remote relationship and working

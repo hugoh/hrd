@@ -12,7 +12,7 @@ import (
 
 // ExtractExitCode returns the exit code from an exec.ExitError.
 // Returns ok=false if err is nil or not an ExitError.
-func ExtractExitCode(err error) (code int, ok bool) {
+func ExtractExitCode(err error) (int, bool) {
 	if err == nil {
 		return 0, false
 	}
