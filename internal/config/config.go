@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -148,44 +149,24 @@ func Save(path string, cfg Config) (err error) {
 	return nil
 }
 
+func stripGroupPrefix(name string) string {
+	return strings.TrimPrefix(name, "@")
+}
+
 // ResolveScope returns the list of repo names to operate on given an explicit
 // set of names/group passed on the CLI.
 func (c *Config) ResolveScope(names []string) ([]string, error) {
 	if len(names) == 0 {
-		if c.Context.Current != "" {
-			g, ok := c.Groups[c.Context.Current]
-			if !ok {
-				return nil, fmt.Errorf("%w %q", errActiveContextNotFound, c.Context.Current)
-			}
-
-			return g.Repos, nil
-		}
-		// All repos in deterministic order.
-		out := make([]string, 0, len(c.Repos))
-		for name := range c.Repos {
-			out = append(out, name)
-		}
-
-		slices.Sort(out)
-
-		return out, nil
+		return c.allRepos()
 	}
 
-	// Single name that is a group name → expand.
 	if len(names) == 1 {
-		if g, ok := c.Groups[names[0]]; ok {
-			return g.Repos, nil
+		if repos, ok := c.groupRepos(names[0]); ok {
+			return repos, nil
 		}
 	}
 
-	// Validate every name is a known repo.
-	for _, name := range names {
-		if _, ok := c.Repos[name]; !ok {
-			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
-		}
-	}
-
-	return names, nil
+	return c.validatedRepos(names)
 }
 
 // AddRepo adds or updates a repo entry. The name is derived from the
@@ -216,4 +197,50 @@ func (c *Config) AddGroup(name string, repos []string) error {
 	c.Groups[name] = Group{Repos: repos}
 
 	return nil
+}
+
+func (c *Config) allRepos() ([]string, error) {
+	if c.Context.Current != "" {
+		g, ok := c.Groups[c.Context.Current]
+		if !ok {
+			return nil, fmt.Errorf("%w %q", errActiveContextNotFound, c.Context.Current)
+		}
+
+		return g.Repos, nil
+	}
+
+	out := make([]string, 0, len(c.Repos))
+	for name := range c.Repos {
+		out = append(out, name)
+	}
+
+	slices.Sort(out)
+
+	return out, nil
+}
+
+func (c *Config) groupRepos(name string) ([]string, bool) {
+	if g, ok := c.Groups[name]; ok {
+		return g.Repos, true
+	}
+
+	stripped := stripGroupPrefix(name)
+	if stripped != name {
+		if g, ok := c.Groups[stripped]; ok {
+			return g.Repos, true
+		}
+	}
+
+	return nil, false
+}
+
+func (c *Config) validatedRepos(names []string) ([]string, error) {
+	for _, name := range names {
+		lookupName := stripGroupPrefix(name)
+		if _, ok := c.Repos[lookupName]; !ok {
+			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
+		}
+	}
+
+	return names, nil
 }

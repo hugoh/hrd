@@ -83,6 +83,8 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 			names = append(names, arg)
 		} else if _, ok := cfg.Groups[arg]; ok {
 			names = append(names, arg)
+		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
+			names = append(names, stripGroupPrefix(arg))
 		}
 	}
 
@@ -110,7 +112,9 @@ func vcsArgsFilter(
 
 		if _, ok := repos[arg]; !ok {
 			if _, ok := groups[arg]; !ok {
-				filtered = append(filtered, arg)
+				if _, ok := groups[stripGroupPrefix(arg)]; !ok {
+					filtered = append(filtered, arg)
+				}
 			}
 		}
 	}

@@ -890,3 +890,72 @@ func TestJjCmdInteractiveMismatch(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errNoReposWithBackend)
 }
+
+// ─── @-prefix for group names in dispatch ─────────────────────────────────
+
+func TestVcsArgsFilterWithAtPrefix(t *testing.T) {
+	repos := map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+	}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"repo1"}},
+	}
+
+	args := vcsArgsFilter([]string{"@work", "--", "status"}, repos, groups)
+	assert.Equal(t, []string{"status"}, args)
+}
+
+func TestVcsArgsFilterWithAtPrefixOnly(t *testing.T) {
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"repo1"}},
+	}
+
+	args := vcsArgsFilter([]string{"@work", "--"}, nil, groups)
+	assert.Empty(t, args)
+}
+
+func TestResolveScopeWithAtPrefix(t *testing.T) {
+	cfg := config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+		},
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1"}},
+		},
+	}
+
+	names, err := cfg.ResolveScope([]string{"@work"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"repo1"}, names)
+}
+
+func TestResolveScopeWithAtPrefixNotGroupBecomesRepo(t *testing.T) {
+	cfg := config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+		},
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1"}},
+		},
+	}
+
+	// @work alone (single-name) expands via group lookup.
+	names, err := cfg.ResolveScope([]string{"@work"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"repo1"}, names)
+}
+
+func TestVcsArgsFilterWithMixedAtAndPlain(t *testing.T) {
+	repos := map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+		"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+	}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"repo1"}},
+	}
+
+	args := vcsArgsFilter([]string{"repo1", "@work", "--", "status"}, repos, groups)
+	assert.Equal(t, []string{"status"}, args)
+}

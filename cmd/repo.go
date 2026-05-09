@@ -206,7 +206,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 
 			names := make([]string, 0, len(cfg.Repos))
 
-			if g := cmd.String("group"); g != "" {
+			if g := stripGroupPrefix(cmd.String("group")); g != "" {
 				grp, ok := cfg.Groups[g]
 				if !ok {
 					return fmt.Errorf("%w %q", errUnknownGroup, g)

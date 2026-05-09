@@ -75,6 +75,8 @@ hrd jj --repos dotfiles -- log
 hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ```
 
+**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd context set work` and `hrd context set @work` both work.
+
 ## Status dashboard
 
 ```text
@@ -113,12 +115,12 @@ hrd repo rename <old> <new>
 hrd repo refresh <name>... | --all
 
 # Group management
-hrd group add <name> <repo>...
+hrd group add <name> <repo>...  # @-prefix optional on input; displayed as @<name>
 hrd group rm  <name>
 hrd group ls [<name>]
 
 # Context (default scope)
-hrd context set   <group>
+hrd context set   <group>       # @-prefix optional on input; displayed as @<group>
 hrd context clear
 hrd context show
 
@@ -165,7 +167,7 @@ current = "oss"
 concurrency = 8
 ```
 
-Use the `--interactive` / `-i` flag on dispatch commands to run with a real terminal (pagers, interactive diffs). Interactive commands run sequentially on one repo at a time rather than in parallel.
+**Note**: Group names in the CLI are prefixed with `@` (e.g., `hrd context set @oss`, `hrd group ls @work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. The config file stores group names without the `@` prefix. on dispatch commands to run with a real terminal (pagers, interactive diffs). Interactive commands run sequentially on one repo at a time rather than in parallel.
 
 ## Adding a backend
 
