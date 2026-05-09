@@ -744,11 +744,11 @@ func bookmarkSymbols(bookmark backend.BookmarkStatus) []string {
 			),
 		)
 	case backend.RefStateGone:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "✗"))
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "✗"))
 	case backend.RefStateNoRemote:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "∅"))
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "∅"))
 	case backend.RefStateUnknown:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "?"))
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "?"))
 	}
 
 	if bookmark.Conflict {
@@ -769,7 +769,7 @@ func statusColor(state backend.RefState) text.Colors {
 	case backend.RefStateDiverged:
 		return text.Colors{text.FgRed}
 	case backend.RefStateGone, backend.RefStateNoRemote, backend.RefStateUnknown:
-		return text.Colors{text.FgHiBlack}
+		return text.Colors{text.FgMagenta}
 	default:
 		return text.Colors{text.FgHiBlack}
 	}
