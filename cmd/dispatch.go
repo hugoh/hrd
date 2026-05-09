@@ -132,6 +132,10 @@ func diffCmd(cfgPath *string) *cli.Command {
 	return vcsSubcmdCmd(cfgPath, "diff", "show diff for repos (git diff or jj diff)")
 }
 
+func logCmd(cfgPath *string) *cli.Command {
+	return vcsSubcmdCmd(cfgPath, "log", "show log for repos (git log or jj log)")
+}
+
 func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 	return &cli.Command{
 		Name:      subcmd,

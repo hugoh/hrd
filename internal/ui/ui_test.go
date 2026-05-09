@@ -39,11 +39,6 @@ func TestColorSprint(t *testing.T) {
 	assert.Contains(t, out, "hello")
 }
 
-func TestTableStyle(t *testing.T) {
-	s := ui.TableStyle()
-	assert.NotNil(t, s)
-}
-
 func TestTruncate(t *testing.T) {
 	assert.Equal(t, "hel", ui.Truncate("hello world", 3))
 	assert.Equal(t, "hello world", ui.Truncate("hello world", 99))

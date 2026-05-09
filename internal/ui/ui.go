@@ -17,8 +17,14 @@ import (
 const (
 	separatorWidth   = 2
 	defaultTermWidth = 80
-	colNameWidth     = 20
 )
+
+var tableStyle = table.Style{ //nolint:gochecknoglobals
+	Box: table.StyleBoxDefault,
+	Color: table.ColorOptions{
+		Header: text.Colors{text.Bold, text.FgHiCyan},
+	},
+}
 
 // RenderDispatchResult renders a dispatch result (success/failure).
 func RenderDispatchResult(res runner.Result) string {
@@ -69,16 +75,6 @@ func ColorSprint(c text.Colors, s string) string {
 	return c.Sprint(s)
 }
 
-// TableStyle returns the table styling for status output.
-func TableStyle() table.Style {
-	return table.Style{
-		Box: table.StyleBoxDefault,
-		Color: table.ColorOptions{
-			Header: text.Colors{text.Bold, text.FgHiCyan},
-		},
-	}
-}
-
 // Truncate truncates a string to the given maximum length.
 func Truncate(s string, maxLen int) string {
 	return truncate.String(s, uint(maxLen))
@@ -107,7 +103,7 @@ func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
 func NewTable() table.Writer {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(TableStyle())
+	t.SetStyle(tableStyle)
 
 	return t
 }

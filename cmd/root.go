@@ -41,6 +41,7 @@ func NewApp() *cli.Command {
 			lsCmd(&cfgPath),
 			statusCmd(&cfgPath),
 			diffCmd(&cfgPath),
+			logCmd(&cfgPath),
 
 			// VCS dispatch
 			gitCmd(&cfgPath),
