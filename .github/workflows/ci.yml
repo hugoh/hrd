@@ -86,8 +86,20 @@ jobs:
         id: version
         continue-on-error: true
         run: cog bump --auto
-      - name: Release
+      - name: Check tag at HEAD
+        id: check-tag
         if: steps.version.outcome == 'success'
+        run: |
+          TAG=$(git tag --points-at HEAD | head -1)
+          if [ -z "$TAG" ]; then
+            echo "tag_created=false" >> "$GITHUB_OUTPUT"
+            echo "No tag at HEAD — skipping release"
+          else
+            echo "tag_created=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Release
+        if: steps.check-tag.outputs.tag_created == 'true'
         run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
