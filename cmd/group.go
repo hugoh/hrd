@@ -110,17 +110,31 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 
 func groupListCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:   "ls",
-		Usage:  "list groups",
-		Action: listGroupsAction(cfgPath),
+		Name:      "ls",
+		Usage:     "list groups",
+		ArgsUsage: "[name]",
+		Action:    listGroupsAction(cfgPath),
 	}
 }
 
-func listGroupsAction(cfgPath *string) func(_ context.Context, _ *cli.Command) error {
-	return func(_ context.Context, _ *cli.Command) error {
+func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) error {
+	return func(_ context.Context, cmd *cli.Command) error {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
+		}
+
+		if name := cmd.Args().First(); name != "" {
+			group, ok := cfg.Groups[name]
+			if !ok {
+				return fmt.Errorf("%w %q", errUnknownGroup, name)
+			}
+
+			for _, repo := range group.Repos {
+				ui.Outf(repo)
+			}
+
+			return nil
 		}
 
 		if len(cfg.Groups) == 0 {

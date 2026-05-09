@@ -344,6 +344,51 @@ func TestGroupListNoGroups(t *testing.T) {
 	assert.Contains(t, stdout, "no groups defined")
 }
 
+func TestGroupListWithName(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+			"repo3": {Path: "/tmp/repo3", Backends: []string{"git"}},
+		},
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1", "repo2"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	stdout := captureStdout(t, func() {
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "group", "ls", "work"},
+		)
+		assert.NoError(t, err)
+	})
+	assert.Equal(t, "repo1\nrepo2\n", stdout)
+}
+
+func TestGroupListUnknownName(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1"}},
+		},
+	})
+
+	app := NewApp()
+	app.Writer = &bytes.Buffer{}
+	app.ErrWriter = &bytes.Buffer{}
+
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "ls", "nonexistent"},
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUnknownGroup)
+}
+
 func TestGroupAddTooFewArgs(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
