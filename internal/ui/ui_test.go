@@ -50,8 +50,8 @@ func TestWrap(t *testing.T) {
 }
 
 func TestComputeRemainderWidth(t *testing.T) {
-	// termWidth=100, minWidth=10, separators=1, used=[20, 30]
-	// total used = 50, separator width = 2 * 1 = 2
+	// termWidth=100, minWidth=10, used=[20, 30] (2 fixed widths)
+	// total used = 50, numSeparators = 2, separatorWidth = 2
 	// remainder = 100 - 50 - 2*2 = 46
 	w := ui.ComputeRemainderWidth(100, 10, 20, 30)
 	assert.Equal(t, 46, w)
