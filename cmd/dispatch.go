@@ -27,7 +27,8 @@ const (
 	minNameWidth   = 15  // minimum width for name column
 	cmdNameGit     = "git"
 	cmdNameShell   = "shell"
-	fmtSummary     = "%d/%d repos completed successfully"
+	fmtSuccess     = "%d/%d repos completed successfully"
+	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
 )
 
 var (
@@ -338,13 +339,13 @@ func runInteractive(ctx context.Context, dir, bin string, args []string) error {
 	return execInteractive(ctx, dir, bin, args)
 }
 
-func dispatchSummary(total, failures int) {
-	success := total - failures
+func dispatchSummary(total int, failed []string) {
+	success := total - len(failed)
 
-	if failures > 0 {
-		ui.Fail(fmtSummary, success, total)
+	if len(failed) > 0 {
+		ui.Fail(fmtFailSummary, success, total, strings.Join(failed, ", "))
 	} else {
-		ui.Success(fmtSummary, success, total)
+		ui.Success(fmtSuccess, success, total)
 	}
 }
 
@@ -375,7 +376,7 @@ func runSubcmdInteractive(
 		}
 	}
 
-	dispatchSummary(len(names), len(failed))
+	dispatchSummary(len(names), failed)
 
 	return nil
 }
@@ -403,7 +404,7 @@ func dispatchInteractive(
 		}
 	}
 
-	dispatchSummary(len(names), len(failed))
+	dispatchSummary(len(names), failed)
 
 	return nil
 }
@@ -479,11 +480,7 @@ func dispatch(
 		}
 	}
 
-	if len(errs) > 0 {
-		ui.Fail("failed: %s", strings.Join(errs, ", "))
-	}
-
-	dispatchSummary(len(names), len(errs))
+	dispatchSummary(len(names), errs)
 
 	return nil
 }

@@ -57,6 +57,27 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stderr = w
+
+	fn()
+
+	_ = w.Close()
+
+	os.Stderr = old
+
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+
+	return string(out)
+}
+
 // Helper to create a temporary directory that looks like a git repo.
 func setupFakeGitRepo(t *testing.T) string {
 	t.Helper()

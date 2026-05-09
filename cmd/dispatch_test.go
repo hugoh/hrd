@@ -536,6 +536,19 @@ func TestDispatchNonZeroExitCode(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestDispatchSummaryListsFailedRepos(t *testing.T) {
+	names := []string{"repo1", "repo2", "repo3"}
+	stderr := captureStderr(t, func() {
+		err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
+			resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
+			resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
+			resultCh <- runner.Result{RepoName: "repo3", Output: "", ExitCode: 1}
+		})
+		assert.NoError(t, err)
+	})
+	assert.Contains(t, stderr, "; failed: repo2, repo3")
+}
+
 func TestVcsArgs_FiltersRepoAndGroupNames(t *testing.T) {
 	cfg := config.Config{
 		Repos: map[string]config.Repo{
