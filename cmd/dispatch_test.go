@@ -283,7 +283,7 @@ func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
 		context.Background(),
 		[]string{"hrd", "--config", cfgPath, "git", "repo1", "repo2", "--", "log"},
 	)
-	assert.ErrorIs(t, err, errInteractiveSingle)
+	assert.NoError(t, err)
 }
 
 func TestGitCmdNoArgsFmt(t *testing.T) {

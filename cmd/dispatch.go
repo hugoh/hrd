@@ -34,7 +34,6 @@ var (
 	errNoShellCommand     = errors.New("no shell command provided")
 	errNoArgsFmt          = errors.New("no args provided")
 	errNoReposWithBackend = errors.New("no repos with backend")
-	errInteractiveSingle  = errors.New("interactive command requires single repo")
 )
 
 //nolint:gochecknoglobals // CLI flag definitions are package-level by nature
@@ -322,13 +321,22 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 	interactive := isInteractive(vcsArgs, cfg.Settings.InteractiveCommands)
 
 	if interactive {
-		if len(names) > 1 {
-			return fmt.Errorf("%w %q; specify a single repo", errInteractiveSingle, vcsArgs[0])
+		var failed []string
+
+		for _, name := range names {
+			repo := cfg.Repos[name]
+
+			if err := runInteractive(ctx, repo.Path, backendName, vcsArgs); err != nil {
+				ui.Errf("%s: %v", name, err)
+				failed = append(failed, name)
+			}
 		}
 
-		repo := cfg.Repos[names[0]]
+		success := len(names) - len(failed)
 
-		return runInteractive(ctx, repo.Path, backendName, vcsArgs)
+		ui.Success("%d/%d repos completed successfully", success, len(names))
+
+		return nil
 	}
 
 	label := backendName + " " + strings.Join(vcsArgs, " ")
