@@ -13,18 +13,12 @@ import (
 )
 
 const (
+	priorityJj           = 20
 	colorNeverFlag       = "--color=never"
 	ignoreWorkingCopyArg = "--ignore-working-copy"
 	noGraphFlag          = "--no-graph"
 	templateFlag         = "--template"
 	separator            = "\x1f"
-	partsCountMin        = 2 // minimum parts for working copy parsing
-	partsCountSecond     = 2 // index for second part check
-	workingCopyPartCount = 5 // number of parts in working copy output
-	idxDirty             = 2 // index for dirty flag in working copy
-	idxConflict          = 3 // index for conflict flag in working copy
-	idxDescription       = 4 // index for description in working copy
-	idxTimeAgo           = 5 // index for time ago in working copy
 	cmdNameLog           = "log"
 )
 
@@ -40,7 +34,7 @@ var _ backend.Backend = (*Backend)(nil)
 func (*Backend) Name() string { return "jj" }
 
 // Priority returns the jj detection priority.
-func (*Backend) Priority() int { return backend.PriorityJj }
+func (*Backend) Priority() int { return priorityJj }
 
 // Detect returns true if path contains a .jj directory.
 func (*Backend) Detect(path string) (bool, error) {
@@ -141,10 +135,17 @@ var runJJ = func(ctx context.Context, path string, args []string) (string, error
 //
 // Fields: changeID \x1f "dirty"|"" \x1f "conflict"|"" \x1f description \x1f time_ago.
 func parseWorkingCopy(raw string) backend.RepoStatus {
+	const (
+		idxDirty = iota + 2
+		idxConflict
+		idxDescription
+		idxTimeAgo
+	)
+
 	parts := strings.SplitN(
 		strings.TrimRight(raw, "\n"),
 		separator,
-		workingCopyPartCount,
+		5, //nolint:mnd
 	)
 
 	var status backend.RepoStatus
@@ -203,15 +204,15 @@ func fillCommitMsgFromAncestors(ctx context.Context, path string, status *backen
 }
 
 func extractCommitMsg(out string) string {
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2) //nolint:mnd
 
 	return strings.TrimSpace(parts[0])
 }
 
 func extractCommitTime(out string) string {
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2) //nolint:mnd
 
-	if len(parts) >= partsCountSecond {
+	if len(parts) >= 2 { //nolint:mnd
 		return strings.TrimSpace(parts[1])
 	}
 

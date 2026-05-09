@@ -13,8 +13,8 @@ import (
 )
 
 const (
+	priorityGit  = 10
 	abPartsCount = 2      // number of parts in "branch.ab +<ahead> -<behind>"
-	gitBin       = "git"  // git binary name
 	headRef      = "HEAD" // HEAD reference name
 	logCmd       = "log"  // log command name
 )
@@ -28,7 +28,7 @@ var _ backend.Backend = (*Backend)(nil)
 func (*Backend) Name() string { return "git" }
 
 // Priority returns the git detection priority.
-func (*Backend) Priority() int { return backend.PriorityGit }
+func (*Backend) Priority() int { return priorityGit }
 
 // Detect returns true if path contains a .git directory.
 func (*Backend) Detect(path string) (bool, error) {
@@ -69,7 +69,7 @@ func (*Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	res, err := backend.RunCommand(ctx, gitBin, path, args, interactive)
+	res, err := backend.RunCommand(ctx, "git", path, args, interactive)
 	if err != nil {
 		return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
 	}

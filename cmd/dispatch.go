@@ -18,15 +18,14 @@ import (
 )
 
 const (
-	percentDivisor = 100 // divisor for percentage calculations
-	minStatusWidth = 20  // minimum width for status column
-	colName        = 1   // column number for repo name
-	colVCS         = 2   // column number for VCS type
-	colStatus      = 3   // column number for status
-	colMsg         = 4   // column number for message
-	minNameWidth   = 15  // minimum width for name column
-	cmdNameGit     = "git"
-	cmdNameShell   = "shell"
+	cmdNameGit   = "git"
+	cmdNameShell = "shell"
+
+	colName = iota + 1
+	colVCS
+	colStatus
+	colMsg
+
 	fmtSuccess     = "%d/%d repos completed successfully"
 	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
 )
@@ -620,23 +619,25 @@ func gatherStatus(
 }
 
 func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
-	const vcsWidth = 3
+	const (
+		minNameWidth   = 15
+		minStatusWidth = 20
+		vcsWidth       = 3
+	)
 
-	var namePercent, statusPercent int
+	type layoutWeights struct{ name, status int }
 
-	if !details {
-		namePercent = 25
-		statusPercent = 75
-	} else {
-		namePercent = 20
-		statusPercent = 37
+	weights := layoutWeights{name: 25, status: 75} //nolint:mnd
+	if details {
+		weights = layoutWeights{name: 20, status: 37} //nolint:mnd
 	}
 
 	termWidth := ui.GetTermWidth()
-	nameWidth := max(termWidth*namePercent/percentDivisor, minNameWidth)
-	namePlusStatusWidth := termWidth * (namePercent + statusPercent) / percentDivisor
+	pct := func(p int) int { return termWidth * p / 100 } //nolint:mnd
+
+	nameWidth := max(pct(weights.name), minNameWidth)
 	statusWidth := ui.ComputeRemainderWidth(
-		namePlusStatusWidth,
+		pct(weights.name+weights.status),
 		minStatusWidth,
 		nameWidth,
 		vcsWidth,

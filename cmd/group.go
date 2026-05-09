@@ -14,9 +14,6 @@ import (
 )
 
 const (
-	groupWidth     = 20 // width for group column
-	reposMinWidth  = 20 // minimum width for repos column
-	groupColNumber = 2  // column number for repos
 	cmdNameGroup   = "group"
 	cmdNameAdd     = "add"
 	cmdNameContext = "context"
@@ -176,6 +173,11 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 }
 
 func renderGroupTable(cfg config.Config) error {
+	const (
+		groupWidth    = 20 // width for group column
+		reposMinWidth = 20 // minimum width for repos column
+	)
+
 	tbl := ui.NewTable()
 	tbl.AppendHeader(table.Row{"GROUP", "REPOS", ""})
 
@@ -185,7 +187,7 @@ func renderGroupTable(cfg config.Config) error {
 
 	tbl.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true, WidthMax: groupWidth},
-		{Number: groupColNumber, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap},
+		{Number: 2, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap}, //nolint:mnd
 	})
 
 	for name, group := range cfg.Groups {

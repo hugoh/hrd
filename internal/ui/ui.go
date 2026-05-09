@@ -14,11 +14,6 @@ import (
 	"golang.org/x/term"
 )
 
-const (
-	separatorWidth   = 2
-	defaultTermWidth = 80
-)
-
 var tableStyle = table.Style{ //nolint:gochecknoglobals
 	Box: table.StyleBoxDefault,
 	Color: table.ColorOptions{
@@ -95,6 +90,8 @@ func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
 		numSeparators++
 	}
 
+	const separatorWidth = 2
+
 	return max(termWidth-total-numSeparators*separatorWidth, minWidth)
 }
 
@@ -111,6 +108,8 @@ func NewTable() table.Writer {
 
 // GetTermWidth returns the current terminal width.
 func GetTermWidth() int {
+	const defaultTermWidth = 80
+
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		return w
 	}

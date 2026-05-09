@@ -224,7 +224,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 			tbl := ui.NewTable()
 			tbl.AppendHeader(table.Row{"NAME", "VCS", "PATH"})
 			tbl.SetColumnConfigs([]table.ColumnConfig{
-				{Number: 1, AutoMerge: true},
+				{Number: colName, AutoMerge: true},
 				{Number: colVCS, AutoMerge: true},
 			})
 
@@ -247,7 +247,6 @@ func repoListCmd(cfgPath *string) *cli.Command {
 }
 
 const (
-	repoNameAndVCS = 2
 	cmdNameRepo    = "repo"
 	cmdNameRename  = "rename"
 	cmdNameRefresh = "refresh"
@@ -259,7 +258,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 		Usage:     "rename a repository",
 		ArgsUsage: "<old-name> <new-name>",
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != repoNameAndVCS {
+			if cmd.NArg() != 2 { //nolint:mnd
 				return errRepoRenameUsage
 			}
 
