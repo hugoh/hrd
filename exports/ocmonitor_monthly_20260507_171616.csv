@@ -1,9 +1,0 @@
-# OpenCode Monitor Export
-# Generated: 2026-05-07T17:16:16.517281
-# Records: 3
-# Currency: USD (rate: 1.0 from USD)
-#
-cache_read_tokens,cache_write_tokens,input_tokens,month,output_tokens,sessions_count,total_interactions,total_tokens,year
-1410685,15272,66001240,3,315189,65,1477,67742386,2026
-62540654,19514,217468487,4,1193246,221,5185,281221901,2026
-203452594,4707020,4615410,5,853671,22,2409,213628695,2026

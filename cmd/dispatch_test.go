@@ -479,33 +479,33 @@ func TestResolveScopeWithCommand(t *testing.T) {
 	assert.Equal(t, []string{"repo1"}, names)
 }
 
-func TestProgressiveDispatchEmptyOutput(t *testing.T) {
+func TestDispatchEmptyOutput(t *testing.T) {
 	names := []string{"repo1"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "", ExitCode: 0}
 	})
 	assert.NoError(t, err)
 }
 
-func TestProgressiveDispatchWithError(t *testing.T) {
+func TestDispatchWithError(t *testing.T) {
 	names := []string{"repo1"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Err: assert.AnError}
 	})
 	assert.NoError(t, err)
 }
 
-func TestProgressiveDispatchWithOutput(t *testing.T) {
+func TestDispatchWithOutput(t *testing.T) {
 	names := []string{"repo1"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "line1\nline2\n", ExitCode: 0}
 	})
 	assert.NoError(t, err)
 }
 
-func TestProgressiveDispatchMultipleRepos(t *testing.T) {
+func TestDispatchMultipleRepos(t *testing.T) {
 	names := []string{"repo1", "repo2"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
 
 		resultCh <- runner.Result{RepoName: "repo2", Output: "ok", ExitCode: 0}
@@ -513,9 +513,9 @@ func TestProgressiveDispatchMultipleRepos(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveDispatchMixedResults(t *testing.T) {
+func TestDispatchMixedResults(t *testing.T) {
 	names := []string{"repo1", "repo2", "repo3"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
 
 		resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
@@ -525,9 +525,9 @@ func TestProgressiveDispatchMixedResults(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveDispatchNonZeroExitCode(t *testing.T) {
+func TestDispatchNonZeroExitCode(t *testing.T) {
 	names := []string{"repo1"}
-	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "", ExitCode: 1}
 	})
 	assert.NoError(t, err)
@@ -578,19 +578,19 @@ func vcsArgsForTest(cfg config.Config, args []string) []string {
 	return out
 }
 
-func TestProgressiveStatus_WithError(t *testing.T) {
+func TestGatherStatus_WithError(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Err: assert.AnError}
 	})
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_WithDetails(t *testing.T) {
+func TestGatherStatus_WithDetails(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:        "main",
 			CommitMsg:  "initial commit",
@@ -600,10 +600,10 @@ func TestProgressiveStatus_WithDetails(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Synced(t *testing.T) {
+func TestGatherStatus_Synced(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
@@ -613,10 +613,10 @@ func TestProgressiveStatus_Synced(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Ahead(t *testing.T) {
+func TestGatherStatus_Ahead(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateAhead, Ahead: 2}},
@@ -626,10 +626,10 @@ func TestProgressiveStatus_Ahead(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Dirty(t *testing.T) {
+func TestGatherStatus_Dirty(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
@@ -640,10 +640,10 @@ func TestProgressiveStatus_Dirty(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Conflict(t *testing.T) {
+func TestGatherStatus_Conflict(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "jj"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "abc123",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced, Conflict: true}},
@@ -654,10 +654,10 @@ func TestProgressiveStatus_Conflict(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Gone(t *testing.T) {
+func TestGatherStatus_Gone(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "jj"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "abc123",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateGone}},
@@ -667,10 +667,10 @@ func TestProgressiveStatus_Gone(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_NoRemote(t *testing.T) {
+func TestGatherStatus_NoRemote(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "jj"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "abc123",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "feat", State: backend.RefStateNoRemote}},
@@ -680,10 +680,10 @@ func TestProgressiveStatus_NoRemote(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Unknown(t *testing.T) {
+func TestGatherStatus_Unknown(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "jj"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "abc123",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateUnknown}},
@@ -693,10 +693,10 @@ func TestProgressiveStatus_Unknown(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Diverged(t *testing.T) {
+func TestGatherStatus_Diverged(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateDiverged, Ahead: 2, Behind: 1}},
@@ -706,10 +706,10 @@ func TestProgressiveStatus_Diverged(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_Behind(t *testing.T) {
+func TestGatherStatus_Behind(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateBehind, Behind: 3}},
@@ -719,10 +719,10 @@ func TestProgressiveStatus_Behind(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_NoBookmarks(t *testing.T) {
+func TestGatherStatus_NoBookmarks(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{},
@@ -732,10 +732,10 @@ func TestProgressiveStatus_NoBookmarks(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_JJRef(t *testing.T) {
+func TestGatherStatus_JJRef(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "jj"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "abc123def",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
@@ -745,10 +745,10 @@ func TestProgressiveStatus_JJRef(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_DefaultState(t *testing.T) {
+func TestGatherStatus_DefaultState(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefState(999)}},
@@ -758,10 +758,10 @@ func TestProgressiveStatus_DefaultState(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestProgressiveStatus_DetailsTimeOnly(t *testing.T) {
+func TestGatherStatus_DetailsTimeOnly(t *testing.T) {
 	names := []string{"repo1"}
 	vcsByName := map[string]string{"repo1": "git"}
-	err := progressiveStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
+	err := gatherStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
 		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
 			Ref:          "main",
 			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},

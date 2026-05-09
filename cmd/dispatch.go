@@ -18,17 +18,15 @@ import (
 )
 
 const (
-	percentDivisor     = 100 // divisor for percentage calculations
-	minStatusWidth     = 20  // minimum width for status column
-	separatorsBasic    = 2   // number of separators in basic view
-	separatorsDetailed = 3   // number of separators in detailed view
-	colName            = 1   // column number for repo name
-	colVCS             = 2   // column number for VCS type
-	colStatus          = 3   // column number for status
-	colMsg             = 4   // column number for message
-	minNameWidth       = 15  // minimum width for name column
-	cmdNameGit         = "git"
-	cmdNameShell       = "shell"
+	percentDivisor = 100 // divisor for percentage calculations
+	minStatusWidth = 20  // minimum width for status column
+	colName        = 1   // column number for repo name
+	colVCS         = 2   // column number for VCS type
+	colStatus      = 3   // column number for status
+	colMsg         = 4   // column number for message
+	minNameWidth   = 15  // minimum width for name column
+	cmdNameGit     = "git"
+	cmdNameShell   = "shell"
 )
 
 var (
@@ -161,7 +159,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				return errNoReposMatched
 			}
 
-			return progressiveDispatch(names, subcmd, func(resultCh chan<- runner.Result) {
+			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
 				ch := runner.VCS(ctx, cfg.Repos, names, subcmd, int64(cfg.Settings.Concurrency))
 				for res := range ch {
 					resultCh <- res
@@ -199,7 +197,7 @@ func shellCmd(cfgPath *string) *cli.Command {
 
 			shellCmdStr := strings.Join(shellArgs, " ")
 
-			return progressiveDispatch(
+			return dispatch(
 				names,
 				"shell: "+shellCmdStr,
 				func(resultCh chan<- runner.Result) {
@@ -270,7 +268,7 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 			details = true
 		}
 
-		return progressiveStatus(
+		return gatherStatus(
 			names,
 			vcsByName,
 			details,
@@ -318,7 +316,7 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 
 	vcsArgs := vcsArgs(cmd, &cfg)
 	if len(vcsArgs) == 0 {
-		return fmt.Errorf("%w; use: hrd %s [repos] -- <args>", errNoArgsFmt, backendName)
+		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
 	interactive := isInteractive(vcsArgs, cfg.Settings.InteractiveCommands)
@@ -340,7 +338,7 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 		return fmt.Errorf("%w %s", errNoReposWithBackend, backendName)
 	}
 
-	return progressiveDispatch(names, label, func(resultCh chan<- runner.Result) {
+	return dispatch(names, label, func(resultCh chan<- runner.Result) {
 		dispatchCh, err := runner.Dispatch(
 			ctx,
 			cfg.Repos,
@@ -363,7 +361,7 @@ func runInteractive(ctx context.Context, dir, bin string, args []string) error {
 	return execInteractive(ctx, dir, bin, args)
 }
 
-func progressiveDispatch(
+func dispatch(
 	names []string,
 	cmdLabel string,
 	dispatch func(resultCh chan<- runner.Result),
@@ -425,7 +423,7 @@ func printDispatchResult(res runner.Result) {
 	ui.Outf("")
 }
 
-func progressiveStatus(
+func gatherStatus(
 	names []string,
 	vcsByName map[string]string,
 	details bool,
@@ -491,7 +489,6 @@ func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
 	statusWidth := ui.ComputeRemainderWidth(
 		namePlusStatusWidth,
 		minStatusWidth,
-		separatorsBasic,
 		nameWidth,
 		vcsWidth,
 	)
@@ -510,7 +507,6 @@ func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
 		msgWidth := ui.ComputeRemainderWidth(
 			termWidth,
 			minStatusWidth,
-			separatorsDetailed,
 			nameWidth,
 			vcsWidth,
 			statusWidth,
