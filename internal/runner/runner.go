@@ -74,6 +74,36 @@ type StatusResult struct {
 	Err      error
 }
 
+// forEachRepoChan runs fn across repos concurrently, streaming one T per repo.
+func forEachRepoChan[T any](
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	concurrency int64,
+	fn func(context.Context, config.Repo, string, chan<- T) error,
+	errResult func(string) T,
+) <-chan T {
+	results := make(chan T, len(names))
+
+	go func() {
+		defer close(results)
+
+		forEachRepo(ctx, repos, names, concurrency,
+			func(ctx context.Context, repo config.Repo, name string) error {
+				if repo.Path == "" {
+					results <- errResult(name)
+
+					return nil
+				}
+
+				return fn(ctx, repo, name, results)
+			},
+		)
+	}()
+
+	return results
+}
+
 // Dispatch runs args via backendName across the given repos, streaming
 // one Result per repo to the returned channel. The channel is closed when
 // all goroutines finish. The caller should drain the channel before
@@ -91,39 +121,22 @@ func Dispatch(
 		return nil, fmt.Errorf("checking backend %q: %w", backendName, err)
 	}
 
-	results := make(chan Result, len(names))
+	return forEachRepoChan(ctx, repos, names, concurrency,
+		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
+			res, err := be.Run(ctx, repo.Path, args, false)
+			results <- Result{
+				RepoName: name,
+				RepoPath: repo.Path,
+				VCS:      backendName,
+				Output:   res.Output,
+				ExitCode: res.ExitCode,
+				Err:      err,
+			}
 
-	go func() {
-		defer close(results)
-
-		forEachRepo(
-			ctx,
-			repos,
-			names,
-			concurrency,
-			func(ctx context.Context, repo config.Repo, name string) error {
-				if repo.Path == "" {
-					results <- Result{RepoName: name, Err: errRepoNotFound}
-
-					return nil
-				}
-
-				res, err := be.Run(ctx, repo.Path, args, false)
-				results <- Result{
-					RepoName: name,
-					RepoPath: repo.Path,
-					VCS:      backendName,
-					Output:   res.Output,
-					ExitCode: res.ExitCode,
-					Err:      err,
-				}
-
-				return nil
-			},
-		)
-	}()
-
-	return results, nil
+			return nil
+		},
+		func(name string) Result { return Result{RepoName: name, Err: errRepoNotFound} },
+	), nil
 }
 
 // VCS runs `<vcs> <subcmd>` (e.g. `git status`, `jj diff`) for each repo,
@@ -160,58 +173,38 @@ func vcsRun(
 	args []string,
 	concurrency int64,
 ) <-chan Result {
-	results := make(chan Result, len(names))
+	return forEachRepoChan(ctx, repos, names, concurrency,
+		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
+			bin := repo.ActiveBackend()
+			cmdArgs := append([]string{subcmd}, args...)
 
-	go func() {
-		defer close(results)
+			var buf bytes.Buffer
 
-		forEachRepo(
-			ctx,
-			repos,
-			names,
-			concurrency,
-			func(ctx context.Context, repo config.Repo, name string) error {
-				if repo.Path == "" {
-					results <- Result{RepoName: name, Err: errRepoNotFound}
+			//nolint:gosec // controlled command execution, args from user input
+			execCmd := exec.CommandContext(ctx, bin, cmdArgs...)
+			execCmd.Dir = repo.Path
+			execCmd.Stdout = &buf
+			execCmd.Stderr = &buf
 
-					return nil
-				}
-
-				bin := repo.ActiveBackend()
-				cmdArgs := append([]string{subcmd}, args...)
-
-				var buf bytes.Buffer
-
-				//nolint:gosec // controlled command execution, args from user input
-				execCmd := exec.CommandContext(ctx, bin, cmdArgs...)
-				execCmd.Dir = repo.Path
-				execCmd.Stdout = &buf
-				execCmd.Stderr = &buf
-
-				exitCode := 0
-				err := execCmd.Run()
-				if ec, ok := backend.ExtractExitCode(err); ok {
-					exitCode = ec
-				} else if err != nil {
-					results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-
-					return nil
-				}
-
+			err := execCmd.Run()
+			if ec, ok := backend.ExtractExitCode(err); ok {
 				results <- Result{
-					RepoName: name,
-					RepoPath: repo.Path,
-					VCS:      bin,
-					Output:   buf.String(),
-					ExitCode: exitCode,
+					RepoName: name, RepoPath: repo.Path, VCS: bin,
+					Output: buf.String(), ExitCode: ec,
 				}
+			} else if err != nil {
+				results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
+			} else {
+				results <- Result{
+					RepoName: name, RepoPath: repo.Path, VCS: bin,
+					Output: buf.String(), ExitCode: 0,
+				}
+			}
 
-				return nil
-			},
-		)
-	}()
-
-	return results
+			return nil
+		},
+		func(name string) Result { return Result{RepoName: name, Err: errRepoNotFound} },
+	)
 }
 
 // Status runs `git status` or `jj status` for each repo, streaming
@@ -245,55 +238,35 @@ func Shell(
 	shellCmd string,
 	concurrency int64,
 ) <-chan Result {
-	results := make(chan Result, len(names))
+	return forEachRepoChan(ctx, repos, names, concurrency,
+		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
+			var buf bytes.Buffer
 
-	go func() {
-		defer close(results)
+			//nolint:gosec // user shell commands
+			cmd := exec.CommandContext(ctx, "sh", "-c", shellCmd)
+			cmd.Dir = repo.Path
+			cmd.Stdout = &buf
+			cmd.Stderr = &buf
 
-		forEachRepo(
-			ctx,
-			repos,
-			names,
-			concurrency,
-			func(ctx context.Context, repo config.Repo, name string) error {
-				if repo.Path == "" {
-					results <- Result{RepoName: name, Err: errRepoNotFound}
-
-					return nil
-				}
-
-				var buf bytes.Buffer
-
-				//nolint:gosec // shell command execution, intentionally runs user shell commands
-				cmd := exec.CommandContext(ctx, "sh", "-c", shellCmd)
-				cmd.Dir = repo.Path
-				cmd.Stdout = &buf
-				cmd.Stderr = &buf
-
-				exitCode := 0
-				err := cmd.Run()
-				if ec, ok := backend.ExtractExitCode(err); ok {
-					exitCode = ec
-				} else if err != nil {
-					results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-
-					return nil
-				}
-
+			err := cmd.Run()
+			if ec, ok := backend.ExtractExitCode(err); ok {
 				results <- Result{
-					RepoName: name,
-					RepoPath: repo.Path,
-					VCS:      repo.ActiveBackend(),
-					Output:   buf.String(),
-					ExitCode: exitCode,
+					RepoName: name, RepoPath: repo.Path, VCS: repo.ActiveBackend(),
+					Output: buf.String(), ExitCode: ec,
 				}
+			} else if err != nil {
+				results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
+			} else {
+				results <- Result{
+					RepoName: name, RepoPath: repo.Path, VCS: repo.ActiveBackend(),
+					Output: buf.String(), ExitCode: 0,
+				}
+			}
 
-				return nil
-			},
-		)
-	}()
-
-	return results
+			return nil
+		},
+		func(name string) Result { return Result{RepoName: name, Err: errRepoNotFound} },
+	)
 }
 
 // GatherStatus fetches the VCS status for each repo concurrently,
@@ -304,43 +277,30 @@ func GatherStatus(
 	names []string,
 	concurrency int64,
 ) <-chan StatusResult {
-	results := make(chan StatusResult, len(names))
-
-	go func() {
-		defer close(results)
-
-		forEachRepo(
-			ctx,
-			repos,
-			names,
-			concurrency,
-			func(ctx context.Context, repo config.Repo, name string) error {
-				if repo.Path == "" {
-					results <- StatusResult{RepoName: name, Err: errRepoNotFound}
-
-					return nil
-				}
-
-				be, err := backend.ByName(repo.ActiveBackend())
-				if err != nil {
-					results <- StatusResult{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
-
-					return nil
-				}
-
-				st, err := be.Status(ctx, repo.Path)
-				results <- StatusResult{
-					RepoName: name,
-					RepoPath: repo.Path,
-					VCS:      repo.ActiveBackend(),
-					Status:   st,
-					Err:      err,
-				}
+	return forEachRepoChan(
+		ctx,
+		repos,
+		names,
+		concurrency,
+		func(ctx context.Context, repo config.Repo, name string, results chan<- StatusResult) error {
+			be, err := backend.ByName(repo.ActiveBackend())
+			if err != nil {
+				results <- StatusResult{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
 
 				return nil
-			},
-		)
-	}()
+			}
 
-	return results
+			st, err := be.Status(ctx, repo.Path)
+			results <- StatusResult{
+				RepoName: name,
+				RepoPath: repo.Path,
+				VCS:      repo.ActiveBackend(),
+				Status:   st,
+				Err:      err,
+			}
+
+			return nil
+		},
+		func(name string) StatusResult { return StatusResult{RepoName: name, Err: errRepoNotFound} },
+	)
 }

@@ -1,4 +1,4 @@
 {
-  "exitCode": 1,
-  "ignore": ["**/*_test.go"]
+  "ignore": ["**/*_test.go"],
+  "exitCode": 1
 }
