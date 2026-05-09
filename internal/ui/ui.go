@@ -28,16 +28,17 @@ var tableStyle = table.Style{ //nolint:gochecknoglobals
 
 // RenderDispatchResult renders a dispatch result (success/failure).
 func RenderDispatchResult(res runner.Result) string {
-	name := fmt.Sprintf("%-20s", res.RepoName)
+	header := text.Colors{text.BgHiBlack, text.FgHiWhite}.Sprintf(" %-19s", res.RepoName)
+
 	if res.Err != nil {
-		return name + " " + text.FgRed.Sprint("✗ "+res.Err.Error())
+		return header + " " + text.FgRed.Sprint("✗ "+res.Err.Error())
 	}
 
 	if res.ExitCode != 0 {
-		return name + " " + text.FgRed.Sprint("✗ exit "+strconv.Itoa(res.ExitCode))
+		return header + " " + text.FgRed.Sprint("✗ exit "+strconv.Itoa(res.ExitCode))
 	}
 
-	return name + " " + text.Colors{text.Bold, text.FgGreen}.Sprint("✓")
+	return header + " " + text.Colors{text.Bold, text.FgGreen}.Sprint("✓")
 }
 
 // Outf prints to stdout with formatting.
