@@ -38,17 +38,6 @@ func (*gitBackend) Run(
 	return backend.RunResult{}, nil
 }
 
-func TestResultFields(t *testing.T) {
-	r := Result{RepoName: "test", RepoPath: "/test", VCS: "git", Output: "ok", ExitCode: 0}
-	assert.Equal(t, "test", r.RepoName)
-	assert.Equal(t, "/test", r.RepoPath)
-}
-
-func TestStatusResultFields(t *testing.T) {
-	sr := StatusResult{RepoName: "test", RepoPath: "/test", VCS: "git"}
-	assert.Equal(t, "test", sr.RepoName)
-}
-
 func TestDispatch(t *testing.T) {
 	repos := map[string]config.Repo{
 		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
