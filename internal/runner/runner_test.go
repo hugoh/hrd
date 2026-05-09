@@ -23,13 +23,13 @@ func TestMain(m *testing.M) {
 
 type gitBackend struct{}
 
-func (g *gitBackend) Name() string                  { return "git" }
-func (g *gitBackend) Detect(_ string) (bool, error) { return false, nil }
-func (g *gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
+func (*gitBackend) Name() string                  { return "git" }
+func (*gitBackend) Detect(_ string) (bool, error) { return false, nil }
+func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
 
-func (g *gitBackend) Run(
+func (*gitBackend) Run(
 	_ context.Context,
 	_ string,
 	_ []string,

@@ -37,11 +37,11 @@ type Backend struct{}
 var _ backend.Backend = (*Backend)(nil)
 
 // Name returns the backend identifier "jj".
-func (b *Backend) Name() string { return "jj" }
+func (*Backend) Name() string { return "jj" }
 
 // Detect returns true if path contains a .jj directory.
 // jj is registered before git so colocated repos (jj + .git) are claimed by jj.
-func (b *Backend) Detect(path string) (bool, error) {
+func (*Backend) Detect(path string) (bool, error) {
 	ok, err := backend.DetectDir(path, ".jj")
 	if err != nil {
 		return false, fmt.Errorf("detect jj: %w", err)
@@ -56,7 +56,7 @@ func (b *Backend) Detect(path string) (bool, error) {
 // Two subprocess calls are made:
 //  1. jj log -r @ → change ID, dirty flag, conflict flag
 //  2. jj bookmark list --all-remotes → structured bookmark tracking data
-func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
+func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
 	const sep = "\x1f"
 
 	const detailTmpl = `change_id.short(8) ++ "` + sep + `" ++ ` +
@@ -99,7 +99,7 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 }
 
 // Run executes arbitrary jj args in path.
-func (b *Backend) Run(
+func (*Backend) Run(
 	ctx context.Context,
 	path string,
 	args []string,
