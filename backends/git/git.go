@@ -143,7 +143,7 @@ func parseStatus(raw string, remotes []string) backend.RepoStatus {
 			continue
 		}
 
-		if len(line) == 0 || line[0] == '#' {
+		if line == "" || line[0] == '#' {
 			continue
 		}
 
