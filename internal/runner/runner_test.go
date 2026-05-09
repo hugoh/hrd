@@ -3,6 +3,8 @@ package runner
 import (
 	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -137,6 +139,42 @@ func TestVCSArgs(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, count)
+}
+
+func TestVCS_RunsInRepoDir(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "config", "user.email", "test@test.com")
+	runGit(t, dir, "config", "user.name", "Test")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
+	runGit(t, dir, "add", "test.txt")
+	runGit(t, dir, "commit", "-m", "initial")
+
+	repos := map[string]config.Repo{
+		"r1": {Path: dir, Backends: []string{"git"}},
+	}
+
+	ch := VCSArgs(
+		context.Background(),
+		repos,
+		[]string{"r1"},
+		"rev-parse",
+		[]string{"--git-dir"},
+		1,
+	)
+	results := collectResults(ch)
+	require.Len(t, results, 1)
+
+	require.NoError(t, results[0].Err)
+	assert.Contains(t, results[0].Output, ".git")
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	require.NoError(t, cmd.Run())
 }
 
 func TestStatus(t *testing.T) {

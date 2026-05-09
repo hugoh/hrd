@@ -177,9 +177,16 @@ func parseStatus(raw string) backend.RepoStatus {
 			continue
 		}
 
-		if len(line) > 0 && line[0] != '#' {
-			status.Dirty = true
+		if len(line) == 0 || line[0] == '#' {
+			continue
 		}
+
+		// Porcelain v2 unmerged entries start with 'u'.
+		if line[0] == 'u' {
+			status.Conflict = true
+		}
+
+		status.Dirty = true
 	}
 
 	if hasUpstream {

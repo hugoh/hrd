@@ -110,11 +110,12 @@ hrd repo add <path>... [--vcs git|jj] [--name <n>]
 hrd repo rm  <name>...
 hrd repo ls  [--group <g>]
 hrd repo rename <old> <new>
+hrd repo refresh <name>... | --all
 
 # Group management
 hrd group add <name> <repo>...
 hrd group rm  <name>
-hrd group ls
+hrd group ls [<name>]
 
 # Context (default scope)
 hrd context set   <group>
@@ -122,13 +123,18 @@ hrd context clear
 hrd context show
 
 # Status
-hrd ls [--repos <name,...>]
-hrd ls -l [--repos <name,...>]
+hrd ls [--repos <name,...>] [--names] [--dirs] [--message]
+hrd ll [--repos <name,...>]   # detailed view (alias for ls --message)
 
 # Dispatch
-hrd git   [--repos <r>] [--strict] -- <git args>
-hrd jj    [--repos <r>] [--strict] -- <jj args>
-hrd shell [--repos <r>] -- <shell command>
+hrd git   [--repos <r>] [--interactive] -- <git args>
+hrd jj    [--repos <r>] [--interactive] -- <jj args>
+hrd shell [--repos <r>] [--interactive] -- <shell command>
+
+# VCS subcommands (use each repo's active backend)
+hrd status [--repos <name,...>]
+hrd diff   [--repos <name,...>]
+hrd log    [--repos <name,...>]
 
 # Shell completion
 eval "$(hrd completion bash)"   # add to .bashrc
@@ -157,14 +163,13 @@ current = "oss"
 
 [settings]
 concurrency = 8
-interactive_commands = ["log", "diff", "difftool", "mergetool", "show"]
 ```
 
-`interactive_commands` lists VCS subcommands that require a real terminal (pagers, interactive diffs). These always run sequentially on a single repo rather than in parallel.
+Use the `--interactive` / `-i` flag on dispatch commands to run with a real terminal (pagers, interactive diffs). Interactive commands run sequentially on one repo at a time rather than in parallel.
 
 ## Adding a backend
 
-Implement the `Backend` interface in a new package, call `backend.Register()` in `init()`, and add a blank import to `main.go`. The interface is four methods: `Name`, `Detect`, `Status`, and `Run`.
+Implement the `Backend` interface in a new package, add a `Register()` function that calls `backend.Register()`, and call it from `main.go`'s `Run()` function. The interface is four methods: `Name`, `Detect`, `Status`, and `Run`.
 
 ---
 

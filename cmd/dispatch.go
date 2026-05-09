@@ -526,7 +526,11 @@ func dispatch(
 	ui.Outf(cmdLabel)
 
 	resultCh := make(chan runner.Result, len(names))
-	go dispatch(resultCh)
+	go func() {
+		defer close(resultCh)
+
+		dispatch(resultCh)
+	}()
 
 	results := make([]runner.Result, len(names))
 
@@ -535,17 +539,10 @@ func dispatch(
 		resultIdx[n] = i
 	}
 
-	done := 0
-
 	for res := range resultCh {
 		printDispatchResult(res)
 
 		results[resultIdx[res.RepoName]] = res
-
-		done++
-		if done == len(names) {
-			break
-		}
 	}
 
 	var errs []string
@@ -593,20 +590,13 @@ func gatherStatus(
 		results = append(results, res)
 	}
 
+	rank := make(map[string]int, len(names))
+	for i, name := range names {
+		rank[name] = i
+	}
+
 	sort.Slice(results, func(indexI, indexJ int) bool {
-		idxI, idxJ := -1, -1
-
-		for idx, name := range names {
-			if results[indexI].RepoName == name {
-				idxI = idx
-			}
-
-			if results[indexJ].RepoName == name {
-				idxJ = idx
-			}
-		}
-
-		return idxI < idxJ
+		return rank[results[indexI].RepoName] < rank[results[indexJ].RepoName]
 	})
 
 	tbl := ui.NewTable()
@@ -689,13 +679,11 @@ func appendStatusRows(
 		}
 
 		status := res.Status
-		vcs := vcsByName[res.RepoName]
 
 		var statusStr string
 
 		if len(status.Bookmarks) > 0 {
-			bm := status.Bookmarks[0]
-			statusStr = bm.Name
+			statusStr = status.Bookmarks[0].Name
 		} else {
 			statusStr = status.Ref
 		}
@@ -710,14 +698,16 @@ func appendStatusRows(
 			symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgYellow}, "*"))
 		}
 
+		if status.Conflict {
+			symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgRed}, "‼"))
+		}
+
 		symStr := strings.Join(symbols, "")
-
 		situColor := statusColor(status.OverallState)
-
 		combined := situColor.Sprintf("%s %s", statusStr, symStr)
 		row := []any{
 			res.RepoName,
-			vcs,
+			vcsByName[res.RepoName],
 			combined,
 		}
 

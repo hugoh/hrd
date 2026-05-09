@@ -133,16 +133,26 @@ func detectExplicitBackend(vcsName, abs string) ([]string, error) {
 		return nil, fmt.Errorf("checking backend %q: %w", vcsName, err)
 	}
 
-	bList, _ := backend.DetectAll(abs)
-
-	if len(bList) == 0 {
+	bList, err := backend.DetectAll(abs)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", abs, errNoVCSDetected)
 	}
 
-	names := make([]string, len(bList))
+	names := make([]string, 0, len(bList))
+	hasVCS := false
 
-	for i, b := range bList {
-		names[i] = b.Name()
+	for _, entry := range bList {
+		if entry.Name() == vcsName {
+			hasVCS = true
+
+			names = append([]string{vcsName}, names...)
+		} else {
+			names = append(names, entry.Name())
+		}
+	}
+
+	if !hasVCS {
+		return nil, fmt.Errorf("%w: %s not detected at %s", errNoVCSDetected, vcsName, abs)
 	}
 
 	return names, nil

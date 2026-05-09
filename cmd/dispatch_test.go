@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
@@ -609,6 +610,25 @@ func TestResolveScopeWithCommand(t *testing.T) {
 	assert.Equal(t, []string{"repo1"}, names)
 }
 
+func TestDispatchWithFewerResultsThanNames(t *testing.T) {
+	names := []string{"repo1", "repo2", "repo3"}
+	done := make(chan struct{})
+
+	go func() {
+		err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
+			resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
+		})
+		assert.NoError(t, err)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dispatch hung: resultCh was not closed after callback finished")
+	}
+}
+
 func TestDispatchEmptyOutput(t *testing.T) {
 	names := []string{"repo1"}
 	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
@@ -769,6 +789,23 @@ func TestGatherStatus_Ahead(t *testing.T) {
 		}}
 	})
 	assert.NoError(t, err)
+}
+
+func TestGatherStatus_ConflictFlag(t *testing.T) {
+	names := []string{"repo1"}
+	vcsByName := map[string]string{"repo1": "git"}
+	stdout := captureStdout(t, func() {
+		err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+			resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
+				Ref:          "main",
+				Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
+				OverallState: backend.RefStateSynced,
+				Conflict:     true,
+			}}
+		})
+		assert.NoError(t, err)
+	})
+	assert.Contains(t, stdout, "‼", "repo-level conflict should display ‼ flag")
 }
 
 func TestGatherStatus_Dirty(t *testing.T) {

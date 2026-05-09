@@ -123,6 +123,28 @@ func TestParseStatus_CleanWorkingTree(t *testing.T) {
 	assert.False(t, st.Dirty)
 }
 
+func TestParseStatus_WithConflict(t *testing.T) {
+	input := "# branch.head main\n" +
+		"# branch.upstream origin/main\n" +
+		"# branch.ab +0 -0\n" +
+		"u UU N... 100644 100644 100644 abc def file.txt\n"
+
+	st := parseStatus(input)
+	assert.True(t, st.Dirty)
+	assert.True(t, st.Conflict, "porcelain v2 'u' lines should mark conflict")
+}
+
+func TestParseStatus_ConflictAndChanges(t *testing.T) {
+	input := "# branch.head main\n" +
+		"# branch.upstream origin/main\n" +
+		"# branch.ab +0 -0\n" +
+		"u UU N... 100644 100644 100644 abc def conflicted.txt\n" +
+		"1 M. N... 100644 100644 100644 abc modified.txt\n"
+	st := parseStatus(input)
+	assert.True(t, st.Dirty)
+	assert.True(t, st.Conflict)
+}
+
 func TestBackend_Name(t *testing.T) {
 	b := &Backend{}
 	assert.Equal(t, "git", b.Name())

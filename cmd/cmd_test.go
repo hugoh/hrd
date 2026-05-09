@@ -499,9 +499,12 @@ func TestDetectBackends(t *testing.T) {
 func TestDetectBackendsWithOverride(t *testing.T) {
 	gitDir := setupFakeGitRepo(t)
 
-	backends, err := detectBackends("jj", gitDir)
+	_, err := detectBackends("jj", gitDir)
+	require.ErrorIs(t, err, errNoVCSDetected)
+
+	backends, err := detectBackends("git", gitDir)
 	require.NoError(t, err)
-	assert.Contains(t, backends, "git")
+	assert.Equal(t, "git", backends[0])
 }
 
 func TestDetectBackendsNoVCS(t *testing.T) {

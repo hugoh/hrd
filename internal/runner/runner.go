@@ -184,6 +184,7 @@ func runVCSCore(
 		bin,
 		cmdArgs...,
 	)
+	execCmd.Dir = repo.Path
 	execCmd.Stdout = &buf
 	execCmd.Stderr = &buf
 
