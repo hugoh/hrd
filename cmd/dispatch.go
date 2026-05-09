@@ -158,6 +158,10 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				return errNoReposMatched
 			}
 
+			if isInteractive([]string{subcmd}, cfg.Settings.InteractiveCommands) {
+				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd)
+			}
+
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
 				ch := runner.VCS(ctx, cfg.Repos, names, subcmd, int64(cfg.Settings.Concurrency))
 				for res := range ch {
@@ -327,6 +331,40 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 
 func runInteractive(ctx context.Context, dir, bin string, args []string) error {
 	return execInteractive(ctx, dir, bin, args)
+}
+
+// runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
+// Each repo uses its own active backend (git or jj).
+func runSubcmdInteractive(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	subcmd string,
+) error {
+	var failed []string
+
+	for _, name := range names {
+		repo := repos[name]
+		bin := repo.ActiveBackend()
+
+		if bin == "" {
+			ui.Errf("%s: no active backend", name)
+			failed = append(failed, name)
+
+			continue
+		}
+
+		if err := runInteractive(ctx, repo.Path, bin, []string{subcmd}); err != nil {
+			ui.Errf("%s: %v", name, err)
+			failed = append(failed, name)
+		}
+	}
+
+	success := len(names) - len(failed)
+
+	ui.Success("%d/%d repos completed successfully", success, len(names))
+
+	return nil
 }
 
 func dispatchInteractive(

@@ -191,6 +191,9 @@ func TestDiffCmd(t *testing.T) {
 		Repos: map[string]config.Repo{
 			"repo1": {Path: gitDir, Backends: []string{"git"}},
 		},
+		Settings: config.Settings{
+			InteractiveCommands: []string{},
+		},
 	})
 
 	app := NewApp()
