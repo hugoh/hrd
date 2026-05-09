@@ -74,22 +74,32 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 	return names, nil
 }
 
-func vcsArgs(cmd *cli.Command, cfg *config.Config) []string {
-	var args []string
+// vcsArgsFilter returns the subset of args that are not repo/group names.
+// It skips "--" separator.
+func vcsArgsFilter(
+	args []string,
+	repos map[string]config.Repo,
+	groups map[string]config.Group,
+) []string {
+	var filtered []string
 
-	for _, arg := range cmd.Args().Slice() {
+	for _, arg := range args {
 		if arg == "--" {
 			continue
 		}
 
-		if _, ok := cfg.Repos[arg]; !ok {
-			if _, ok := cfg.Groups[arg]; !ok {
-				args = append(args, arg)
+		if _, ok := repos[arg]; !ok {
+			if _, ok := groups[arg]; !ok {
+				filtered = append(filtered, arg)
 			}
 		}
 	}
 
-	return args
+	return filtered
+}
+
+func vcsArgs(cmd *cli.Command, cfg *config.Config) []string {
+	return vcsArgsFilter(cmd.Args().Slice(), cfg.Repos, cfg.Groups)
 }
 
 func gitCmd(cfgPath *string) *cli.Command {
