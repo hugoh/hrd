@@ -16,8 +16,8 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - &checkout
-        name: Checkout code
+      - &checkout-full
+        name: Checkout code with full history
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
@@ -37,7 +37,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - *checkout
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - &go-version
         name: Get Go version
         id: go-version
@@ -78,11 +81,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
+      - *checkout-full
       - *go-version
       - *go-cache
       - *mise
