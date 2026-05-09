@@ -321,16 +321,16 @@ func TestBackend_Run_Interactive(t *testing.T) {
 }
 
 func TestBackend_Run_InteractiveNonZero(t *testing.T) {
-    dir := t.TempDir()
-    err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-    require.NoError(t, err)
-    err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-    require.NoError(t, err)
+	dir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
+	require.NoError(t, err)
 
-    b := &Backend{}
-    res, err := b.Run(context.Background(), dir, []string{"nonexistent-command"}, true)
-    require.NoError(t, err)
-    assert.NotEqual(t, 0, res.ExitCode)
+	b := &Backend{}
+	res, err := b.Run(context.Background(), dir, []string{"nonexistent-command"}, true)
+	require.NoError(t, err)
+	assert.NotEqual(t, 0, res.ExitCode)
 }
 
 func TestRegister_JJ(t *testing.T) {

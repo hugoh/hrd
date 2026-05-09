@@ -94,12 +94,12 @@ func setupFakeGitRepo(t *testing.T) string {
 
 // Helper to create a temporary directory that looks like a jj repo.
 func setupFakeJJRepo(t *testing.T) string {
-    t.Helper()
-    dir := t.TempDir()
-    err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-    require.NoError(t, err)
+	t.Helper()
+	dir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
+	require.NoError(t, err)
 
-    return dir
+	return dir
 }
 
 func TestFilterMatching(t *testing.T) {
