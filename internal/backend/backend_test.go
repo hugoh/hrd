@@ -110,11 +110,11 @@ type mockBackend struct {
 
 func (m *mockBackend) Name() string                     { return m.name }
 func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
-func (m *mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
+func (*mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
 	return RepoStatus{}, nil
 }
 
-func (m *mockBackend) Run(
+func (*mockBackend) Run(
 	_ context.Context,
 	_ string,
 	_ []string,
