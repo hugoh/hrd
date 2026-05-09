@@ -104,28 +104,6 @@ func setupFakeJJRepo(t *testing.T) string {
 
 // ─── Pure function tests ──────────────────────────────────────────────────────────
 
-func TestIsInteractive(t *testing.T) {
-	tests := []struct {
-		name        string
-		vcsArgs     []string
-		interactive []string
-		want        bool
-	}{
-		{"empty args", nil, []string{"log"}, false},
-		{"nil interactive list", []string{"log"}, nil, false},
-		{"match first arg", []string{"log", "--oneline"}, []string{"log", "diff"}, true},
-		{"no match", []string{"fetch", "--all"}, []string{"log", "diff"}, false},
-		{"match second not checked", []string{"fetch", "log"}, []string{"log"}, false},
-		{"empty interactive list", []string{"log"}, []string{}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isInteractive(tt.vcsArgs, tt.interactive)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestVcsArgs(t *testing.T) {
 	tests := []struct {
 		name string

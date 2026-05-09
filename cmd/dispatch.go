@@ -45,6 +45,11 @@ var dispatchFlags = []cli.Flag{
 		Aliases: []string{"r"},
 		Usage:   "comma-separated repo names or a single group name",
 	},
+	&cli.BoolFlag{
+		Name:    "interactive",
+		Aliases: []string{"i"},
+		Usage:   "run with a real terminal (sequential, one repo at a time)",
+	},
 }
 
 const cmdReposFlag = "repos"
@@ -85,14 +90,6 @@ func vcsArgs(cmd *cli.Command, cfg *config.Config) []string {
 	}
 
 	return args
-}
-
-func isInteractive(vcsArgs []string, interactive []string) bool {
-	if len(vcsArgs) == 0 {
-		return false
-	}
-
-	return slices.Contains(interactive, vcsArgs[0])
 }
 
 func gitCmd(cfgPath *string) *cli.Command {
@@ -148,6 +145,11 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				Aliases: []string{"r"},
 				Usage:   "repo names or a group name",
 			},
+			&cli.BoolFlag{
+				Name:    "interactive",
+				Aliases: []string{"i"},
+				Usage:   "run with a real terminal (sequential, one repo at a time)",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			cfg, err := config.Load(*cfgPath)
@@ -164,7 +166,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				return errNoReposMatched
 			}
 
-			if isInteractive([]string{subcmd}, cfg.Settings.InteractiveCommands) {
+			if cmd.Bool("interactive") {
 				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd)
 			}
 
@@ -185,45 +187,75 @@ func shellCmd(cfgPath *string) *cli.Command {
 		ArgsUsage: "[repo|group...] -- <shell command>",
 		Flags:     dispatchFlags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, err := config.Load(*cfgPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-
-			names, err := resolveScope(cmd, &cfg)
-			if err != nil {
-				return fmt.Errorf("resolving scope: %w", err)
-			}
-
-			if len(names) == 0 {
-				return errNoReposMatched
-			}
-
-			shellArgs := vcsArgs(cmd, &cfg)
-			if len(shellArgs) == 0 {
-				return errNoShellCommand
-			}
-
-			shellCmdStr := strings.Join(shellArgs, " ")
-
-			return dispatch(
-				names,
-				"shell: "+shellCmdStr,
-				func(resultCh chan<- runner.Result) {
-					dispatchCh := runner.Shell(
-						ctx,
-						cfg.Repos,
-						names,
-						shellCmdStr,
-						int64(cfg.Settings.Concurrency),
-					)
-					for res := range dispatchCh {
-						resultCh <- res
-					}
-				},
-			)
+			return shellCmdAction(ctx, cmd, cfgPath)
 		},
 	}
+}
+
+func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) error {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+
+	names, err := resolveScope(cmd, &cfg)
+	if err != nil {
+		return fmt.Errorf("resolving scope: %w", err)
+	}
+
+	if len(names) == 0 {
+		return errNoReposMatched
+	}
+
+	shellArgs := vcsArgs(cmd, &cfg)
+	if len(shellArgs) == 0 {
+		return errNoShellCommand
+	}
+
+	shellCmdStr := strings.Join(shellArgs, " ")
+
+	if cmd.Bool("interactive") {
+		runShellInteractive(ctx, cfg.Repos, names, shellCmdStr)
+
+		return nil
+	}
+
+	return dispatch(
+		names,
+		"shell: "+shellCmdStr,
+		func(resultCh chan<- runner.Result) {
+			dispatchCh := runner.Shell(
+				ctx,
+				cfg.Repos,
+				names,
+				shellCmdStr,
+				int64(cfg.Settings.Concurrency),
+			)
+			for res := range dispatchCh {
+				resultCh <- res
+			}
+		},
+	)
+}
+
+func runShellInteractive(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	cmdStr string,
+) {
+	var failed []string
+
+	for _, name := range names {
+		repo := repos[name]
+
+		if err := runInteractive(ctx, repo.Path, "sh", []string{"-c", cmdStr}); err != nil {
+			ui.Errf("%s: %v", name, err)
+			failed = append(failed, name)
+		}
+	}
+
+	dispatchSummary(len(names), failed)
 }
 
 func lsCmd(cfgPath *string) *cli.Command {
@@ -272,7 +304,12 @@ func lsDirsOnly(repos map[string]config.Repo, names []string) {
 	}
 }
 
-func lsGatherCallback(ctx context.Context, repos map[string]config.Repo, names []string, concurrency int64) func(chan<- runner.StatusResult) {
+func lsGatherCallback(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	concurrency int64,
+) func(chan<- runner.StatusResult) {
 	return func(resultCh chan<- runner.StatusResult) {
 		statusCh := runner.GatherStatus(
 			ctx,
@@ -367,7 +404,7 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
-	if isInteractive(vcsArgs, cfg.Settings.InteractiveCommands) {
+	if cmd.Bool("interactive") {
 		return dispatchInteractive(ctx, cfg.Repos, names, backendName, vcsArgs)
 	}
 

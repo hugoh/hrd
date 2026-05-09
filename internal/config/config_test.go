@@ -29,11 +29,7 @@ func TestRepo_ActiveBackend(t *testing.T) {
 func TestDefaultConfig(t *testing.T) {
 	cfg := defaultConfig()
 	assert.Equal(t, defaultConcurrency, cfg.Settings.Concurrency)
-	assert.Equal(
-		t,
-		[]string{"log", "diff", "difftool", "mergetool", "show"},
-		cfg.Settings.InteractiveCommands,
-	)
+	assert.Nil(t, cfg.Settings.InteractiveCommands)
 	assert.NotNil(t, cfg.Repos)
 	assert.NotNil(t, cfg.Groups)
 }

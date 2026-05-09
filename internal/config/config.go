@@ -78,8 +78,7 @@ func defaultConfig() Config {
 		Repos:  make(map[string]Repo),
 		Groups: make(map[string]Group),
 		Settings: Settings{
-			Concurrency:         defaultConcurrency,
-			InteractiveCommands: []string{"log", "diff", "difftool", "mergetool", "show"},
+			Concurrency: defaultConcurrency,
 		},
 	}
 }

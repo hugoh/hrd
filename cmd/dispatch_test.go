@@ -280,9 +280,6 @@ func TestDiffCmd(t *testing.T) {
 		Repos: map[string]config.Repo{
 			"repo1": {Path: gitDir, Backends: []string{"git"}},
 		},
-		Settings: config.Settings{
-			InteractiveCommands: []string{},
-		},
 	})
 
 	app := NewApp()
@@ -361,10 +358,6 @@ func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
 			"repo1": {Path: gitDir, Backends: []string{"git"}},
 			"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
 		},
-		Settings: config.Settings{
-			Concurrency:         8,
-			InteractiveCommands: []string{"log"},
-		},
 	})
 
 	app := NewApp()
@@ -373,7 +366,7 @@ func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
 
 	err := app.Run(
 		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "git", "repo1", "repo2", "--", "log"},
+		[]string{"hrd", "--config", cfgPath, "git", "-i", "repo1", "repo2", "--", "log"},
 	)
 	assert.NoError(t, err)
 }
@@ -675,7 +668,9 @@ func TestDispatchSummaryListsFailedRepos(t *testing.T) {
 	stderr := captureStderr(t, func() {
 		err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
 			resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
+
 			resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
+
 			resultCh <- runner.Result{RepoName: "repo3", Output: "", ExitCode: 1}
 		})
 		assert.NoError(t, err)
@@ -995,9 +990,10 @@ func TestJjCmdInteractiveMismatch(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	// diff is in the default interactive commands list, so this hits the
-	// interactive code path in runDispatch
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "jj", "--", "diff"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "jj", "-i", "--", "diff"},
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errNoReposWithBackend)
 }
