@@ -183,7 +183,7 @@ func TestBackend_Name(t *testing.T) {
 
 func TestBackend_Detect_WithGitDir(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 
 	b := &Backend{}

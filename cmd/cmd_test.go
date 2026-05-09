@@ -83,7 +83,7 @@ func setupFakeGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	// Initialize a real git repo so backend.DetectAll can find it.
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 	// Create minimal git repo structure
 	err = os.WriteFile(filepath.Join(dir, ".git", "config"), []byte("[core]\n"), 0o644)
@@ -94,12 +94,12 @@ func setupFakeGitRepo(t *testing.T) string {
 
 // Helper to create a temporary directory that looks like a jj repo.
 func setupFakeJJRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
-	require.NoError(t, err)
+    t.Helper()
+    dir := t.TempDir()
+    err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
+    require.NoError(t, err)
 
-	return dir
+    return dir
 }
 
 func TestFilterMatching(t *testing.T) {
