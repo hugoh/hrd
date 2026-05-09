@@ -119,6 +119,7 @@ func parseStatus(raw string, remotes []string) backend.RepoStatus {
 
 	var ahead, behind int
 
+
 	hasUpstream := false
 
 	for line := range strings.SplitSeq(raw, "\n") {
@@ -143,7 +144,7 @@ func parseStatus(raw string, remotes []string) backend.RepoStatus {
 			continue
 		}
 
-		if len(line) == 0 || line[0] == '#' {
+		if line == "" || line[0] == '#' {
 			continue
 		}
 
