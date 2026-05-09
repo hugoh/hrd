@@ -20,6 +20,9 @@ local linters = new Mapping<String, Step> {
   ["conventional-commit"] {
     check = "cog check --from-latest-tag"
   }
+  ["duplication"] = {
+    check = "jscpd --exitCode 1"
+  }
 }
 
 hooks {
