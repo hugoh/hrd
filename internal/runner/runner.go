@@ -18,6 +18,43 @@ import (
 // errRepoNotFound is returned when a repo is not found in the map.
 var errRepoNotFound = errors.New("repo not found")
 
+// forEachRepo calls fn concurrently for each repo, limiting parallelism with a
+// semaphore. When a repo name isn't found in the map, fn is called synchronously
+// with an empty Repo (so it can report the not-found error via its own channel).
+func forEachRepo(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	concurrency int64,
+	fn func(ctx context.Context, repo config.Repo, name string) error,
+) {
+	sem := semaphore.NewWeighted(concurrency)
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for _, name := range names {
+		repo, ok := repos[name]
+		if !ok {
+			// Repo not found — call fn synchronously (channel is buffered, won't block).
+			fn(ctx, config.Repo{}, name)
+
+			continue
+		}
+
+		name := name
+		eg.Go(func() error {
+			if err := sem.Acquire(ctx, 1); err != nil {
+				return fmt.Errorf("acquiring semaphore: %w", err)
+			}
+
+			defer sem.Release(1)
+
+			return fn(ctx, repo, name)
+		})
+	}
+
+	_ = eg.Wait()
+}
+
 // Result is the outcome for a single repo, sent through the results channel.
 type Result struct {
 	RepoName string
@@ -49,7 +86,7 @@ func Dispatch(
 	args []string,
 	concurrency int64,
 ) (<-chan Result, error) {
-	backend, err := backend.ByName(backendName)
+	be, err := backend.ByName(backendName)
 	if err != nil {
 		return nil, fmt.Errorf("checking backend %q: %w", backendName, err)
 	}
@@ -59,24 +96,19 @@ func Dispatch(
 	go func() {
 		defer close(results)
 
-		sem := semaphore.NewWeighted(concurrency)
-		errGroup, ctx := errgroup.WithContext(ctx)
+		forEachRepo(
+			ctx,
+			repos,
+			names,
+			concurrency,
+			func(ctx context.Context, repo config.Repo, name string) error {
+				if repo.Path == "" {
+					results <- Result{RepoName: name, Err: errRepoNotFound}
 
-		for _, name := range names {
-			repo, ok := repos[name] // repos is a map; caller passes config.Config.Repos
-			if !ok {
-				results <- Result{RepoName: name, Err: errRepoNotFound}
-
-				continue
-			}
-
-			errGroup.Go(func() error {
-				if err := sem.Acquire(ctx, 1); err != nil {
-					return fmt.Errorf("acquiring semaphore: %w", err)
+					return nil
 				}
-				defer sem.Release(1)
 
-				res, err := backend.Run(ctx, repo.Path, args, false)
+				res, err := be.Run(ctx, repo.Path, args, false)
 				results <- Result{
 					RepoName: name,
 					RepoPath: repo.Path,
@@ -86,11 +118,9 @@ func Dispatch(
 					Err:      err,
 				}
 
-				return nil // per-repo errors go through the channel, not errgroup
-			})
-		}
-
-		_ = errGroup.Wait()
+				return nil
+			},
+		)
 	}()
 
 	return results, nil
@@ -135,82 +165,53 @@ func vcsRun(
 	go func() {
 		defer close(results)
 
-		sem := semaphore.NewWeighted(concurrency)
-		errGroup, ctx := errgroup.WithContext(ctx)
+		forEachRepo(
+			ctx,
+			repos,
+			names,
+			concurrency,
+			func(ctx context.Context, repo config.Repo, name string) error {
+				if repo.Path == "" {
+					results <- Result{RepoName: name, Err: errRepoNotFound}
 
-		for _, name := range names {
-			repo, ok := repos[name]
-			if !ok {
-				results <- Result{RepoName: name, Err: errRepoNotFound}
+					return nil
+				}
 
-				continue
-			}
+				bin := repo.ActiveBackend()
+				cmdArgs := append([]string{subcmd}, args...)
 
-			errGroup.Go(func() error {
-				return runVCSCore(ctx, sem, results, repo, name, subcmd, args)
-			})
-		}
+				var buf bytes.Buffer
 
-		_ = errGroup.Wait()
+				//nolint:gosec // controlled command execution, args from user input
+				execCmd := exec.CommandContext(ctx, bin, cmdArgs...)
+				execCmd.Dir = repo.Path
+				execCmd.Stdout = &buf
+				execCmd.Stderr = &buf
+
+				exitCode := 0
+				err := execCmd.Run()
+				if ec, ok := backend.ExtractExitCode(err); ok {
+					exitCode = ec
+				} else if err != nil {
+					results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
+
+					return nil
+				}
+
+				results <- Result{
+					RepoName: name,
+					RepoPath: repo.Path,
+					VCS:      bin,
+					Output:   buf.String(),
+					ExitCode: exitCode,
+				}
+
+				return nil
+			},
+		)
 	}()
 
 	return results
-}
-
-// runVCSCore executes a VCS subcommand for a single repo.
-func runVCSCore(
-	ctx context.Context,
-	sem *semaphore.Weighted,
-	results chan<- Result,
-	repo config.Repo,
-	name string,
-	subcmd string,
-	args []string,
-) error {
-	if err := sem.Acquire(ctx, 1); err != nil {
-		return fmt.Errorf("acquiring semaphore: %w", err)
-	}
-	defer sem.Release(1)
-
-	bin := repo.ActiveBackend()
-
-	cmdArgs := append([]string{subcmd}, args...)
-
-	var buf bytes.Buffer
-
-	//nolint:gosec // controlled command execution, args from user input
-	execCmd := exec.CommandContext(
-		ctx,
-		bin,
-		cmdArgs...,
-	)
-	execCmd.Dir = repo.Path
-	execCmd.Stdout = &buf
-	execCmd.Stderr = &buf
-
-	exitCode := 0
-
-	err := execCmd.Run()
-	if err != nil {
-		ee := &exec.ExitError{}
-		if errors.As(err, &ee) {
-			exitCode = ee.ExitCode()
-		} else {
-			results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-
-			return nil
-		}
-	}
-
-	results <- Result{
-		RepoName: name,
-		RepoPath: repo.Path,
-		VCS:      bin,
-		Output:   buf.String(),
-		ExitCode: exitCode,
-	}
-
-	return nil
 }
 
 // Status runs `git status` or `jj status` for each repo, streaming
@@ -249,78 +250,50 @@ func Shell(
 	go func() {
 		defer close(results)
 
-		sem := semaphore.NewWeighted(concurrency)
-		errGroup, ctx := errgroup.WithContext(ctx)
+		forEachRepo(
+			ctx,
+			repos,
+			names,
+			concurrency,
+			func(ctx context.Context, repo config.Repo, name string) error {
+				if repo.Path == "" {
+					results <- Result{RepoName: name, Err: errRepoNotFound}
 
-		for _, name := range names {
-			repo, ok := repos[name]
-			if !ok {
-				results <- Result{RepoName: name, Err: errRepoNotFound}
+					return nil
+				}
 
-				continue
-			}
+				var buf bytes.Buffer
 
-			errGroup.Go(func() error {
-				return runShellCore(ctx, sem, results, repo, name, shellCmd)
-			})
-		}
+				//nolint:gosec // shell command execution, intentionally runs user shell commands
+				cmd := exec.CommandContext(ctx, "sh", "-c", shellCmd)
+				cmd.Dir = repo.Path
+				cmd.Stdout = &buf
+				cmd.Stderr = &buf
 
-		_ = errGroup.Wait()
+				exitCode := 0
+				err := cmd.Run()
+				if ec, ok := backend.ExtractExitCode(err); ok {
+					exitCode = ec
+				} else if err != nil {
+					results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
+
+					return nil
+				}
+
+				results <- Result{
+					RepoName: name,
+					RepoPath: repo.Path,
+					VCS:      repo.ActiveBackend(),
+					Output:   buf.String(),
+					ExitCode: exitCode,
+				}
+
+				return nil
+			},
+		)
 	}()
 
 	return results
-}
-
-// runShellCore executes a shell command for a single repo.
-func runShellCore(
-	ctx context.Context,
-	sem *semaphore.Weighted,
-	results chan<- Result,
-	repo config.Repo,
-	name string,
-	shellCmd string,
-) error {
-	if err := sem.Acquire(ctx, 1); err != nil {
-		return fmt.Errorf("acquiring semaphore: %w", err)
-	}
-	defer sem.Release(1)
-
-	var buf bytes.Buffer
-
-	//nolint:gosec // shell command execution, intentionally runs user shell commands
-	cmd := exec.CommandContext(
-		ctx,
-		"sh",
-		"-c",
-		shellCmd,
-	)
-	cmd.Dir = repo.Path
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	exitCode := 0
-
-	err := cmd.Run()
-	if err != nil {
-		ee := &exec.ExitError{}
-		if errors.As(err, &ee) {
-			exitCode = ee.ExitCode()
-		} else {
-			results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-
-			return nil
-		}
-	}
-
-	results <- Result{
-		RepoName: name,
-		RepoPath: repo.Path,
-		VCS:      repo.ActiveBackend(),
-		Output:   buf.String(),
-		ExitCode: exitCode,
-	}
-
-	return nil
 }
 
 // GatherStatus fetches the VCS status for each repo concurrently,
@@ -336,56 +309,38 @@ func GatherStatus(
 	go func() {
 		defer close(results)
 
-		sem := semaphore.NewWeighted(concurrency)
-		errGroup, ctx := errgroup.WithContext(ctx)
+		forEachRepo(
+			ctx,
+			repos,
+			names,
+			concurrency,
+			func(ctx context.Context, repo config.Repo, name string) error {
+				if repo.Path == "" {
+					results <- StatusResult{RepoName: name, Err: errRepoNotFound}
 
-		for _, name := range names {
-			repo, ok := repos[name]
-			if !ok {
-				results <- StatusResult{RepoName: name, Err: errRepoNotFound}
+					return nil
+				}
 
-				continue
-			}
+				be, err := backend.ByName(repo.ActiveBackend())
+				if err != nil {
+					results <- StatusResult{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
 
-			errGroup.Go(func() error {
-				return gatherStatusCore(ctx, sem, results, repo, name)
-			})
-		}
+					return nil
+				}
 
-		_ = errGroup.Wait()
+				st, err := be.Status(ctx, repo.Path)
+				results <- StatusResult{
+					RepoName: name,
+					RepoPath: repo.Path,
+					VCS:      repo.ActiveBackend(),
+					Status:   st,
+					Err:      err,
+				}
+
+				return nil
+			},
+		)
 	}()
 
 	return results
-}
-
-// gatherStatusCore fetches VCS status for a single repo.
-func gatherStatusCore(
-	ctx context.Context,
-	sem *semaphore.Weighted,
-	results chan<- StatusResult,
-	repo config.Repo,
-	name string,
-) error {
-	if err := sem.Acquire(ctx, 1); err != nil {
-		return fmt.Errorf("acquiring semaphore: %w", err)
-	}
-	defer sem.Release(1)
-
-	backend, err := backend.ByName(repo.ActiveBackend())
-	if err != nil {
-		results <- StatusResult{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
-
-		return nil
-	}
-
-	st, err := backend.Status(ctx, repo.Path)
-	results <- StatusResult{
-		RepoName: name,
-		RepoPath: repo.Path,
-		VCS:      repo.ActiveBackend(),
-		Status:   st,
-		Err:      err,
-	}
-
-	return nil
 }

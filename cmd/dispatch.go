@@ -54,6 +54,26 @@ var dispatchFlags = []cli.Flag{
 
 const cmdReposFlag = "repos"
 
+// loadAndResolve loads the config, resolves the CLI scope, and returns
+// both. It returns errNoReposMatched when no repos match.
+func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string, error) {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("loading config: %w", err)
+	}
+
+	names, err := resolveScope(cmd, &cfg)
+	if err != nil {
+		return config.Config{}, nil, fmt.Errorf("resolving scope: %w", err)
+	}
+
+	if len(names) == 0 {
+		return config.Config{}, nil, errNoReposMatched
+	}
+
+	return cfg, names, nil
+}
+
 func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 	var names []string
 
@@ -162,18 +182,9 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, err := config.Load(*cfgPath)
+			cfg, names, err := loadAndResolve(cfgPath, cmd)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-
-			names, err := resolveScope(cmd, &cfg)
-			if err != nil {
-				return fmt.Errorf("resolving scope: %w", err)
-			}
-
-			if len(names) == 0 {
-				return errNoReposMatched
+				return err
 			}
 
 			if cmd.Bool("interactive") {
@@ -203,18 +214,9 @@ func shellCmd(cfgPath *string) *cli.Command {
 }
 
 func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) error {
-	cfg, err := config.Load(*cfgPath)
+	cfg, names, err := loadAndResolve(cfgPath, cmd)
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	names, err := resolveScope(cmd, &cfg)
-	if err != nil {
-		return fmt.Errorf("resolving scope: %w", err)
-	}
-
-	if len(names) == 0 {
-		return errNoReposMatched
+		return err
 	}
 
 	shellArgs := vcsArgs(cmd, &cfg)
@@ -395,18 +397,9 @@ func filterMatching(names []string, repos map[string]config.Repo, backendName st
 }
 
 func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backendName string) error {
-	cfg, err := config.Load(*cfgPath)
+	cfg, names, err := loadAndResolve(cfgPath, cmd)
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	names, err := resolveScope(cmd, &cfg)
-	if err != nil {
-		return fmt.Errorf("resolving scope: %w", err)
-	}
-
-	if len(names) == 0 {
-		return errNoReposMatched
+		return err
 	}
 
 	vcsArgs := vcsArgs(cmd, &cfg)

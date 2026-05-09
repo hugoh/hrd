@@ -41,18 +41,28 @@ func TestShellCmdWithCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestShellCmdNoReposMatched(t *testing.T) {
+func TestNoReposMatched(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	app := newTestApp()
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "status", args: []string{"hrd", "--config", cfgPath, "status"}},
+		{name: "diff", args: []string{"hrd", "--config", cfgPath, "diff"}},
+		{name: "shell", args: []string{"hrd", "--config", cfgPath, "shell", "--", "echo test"}},
+	}
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"},
-	)
-	assert.ErrorIs(t, err, errNoReposMatched)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newTestApp()
+
+			err := app.Run(context.Background(), tt.args)
+			assert.ErrorIs(t, err, errNoReposMatched)
+		})
+	}
 }
 
 func TestLsCmdNoRepos(t *testing.T) {
@@ -844,42 +854,6 @@ func TestGatherStatus_DetailsTimeOnly(t *testing.T) {
 		}}
 	})
 	assert.NoError(t, err)
-}
-
-func TestStatusCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "status"})
-	assert.ErrorIs(t, err, errNoReposMatched)
-}
-
-func TestDiffCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "diff"})
-	assert.ErrorIs(t, err, errNoReposMatched)
-}
-
-func TestShellCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo test"},
-	)
-	assert.ErrorIs(t, err, errNoReposMatched)
 }
 
 func TestJjCmd(t *testing.T) {
