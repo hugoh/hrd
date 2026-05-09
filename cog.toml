@@ -1,3 +1,8 @@
 tag_prefix = "v"
 disable_changelog = true
 disable_bump_commit = true
+
+[git]
+post_bump_hooks = [
+    "git push origin {{version}}",
+]

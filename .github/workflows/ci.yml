@@ -77,30 +77,25 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: false
+          persist-credentials: true
           fetch-depth: 0
       - *go-version
       - *go-cache
       - *mise
-      - name: Bump version
-        id: version
-        continue-on-error: true
-        run: cog bump --auto
-      - name: Check tag at HEAD
-        id: check-tag
-        if: steps.version.outcome == 'success'
+      - name: Semver release
+        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
+        with:
+          command: bump
+          args: --auto
+      - name: Release
         run: |
           TAG=$(git tag --points-at HEAD | head -1)
           if [ -z "$TAG" ]; then
-            echo "tag_created=false" >> "$GITHUB_OUTPUT"
             echo "No tag at HEAD — skipping release"
           else
-            echo "tag_created=true" >> "$GITHUB_OUTPUT"
-            echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "Releasing ${TAG}"
+            goreleaser release --clean
           fi
-      - name: Release
-        if: steps.check-tag.outputs.tag_created == 'true'
-        run: goreleaser release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
