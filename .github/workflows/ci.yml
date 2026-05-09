@@ -77,7 +77,7 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          persist-credentials: true
+          persist-credentials: false
           fetch-depth: 0
       - *go-version
       - *go-cache
@@ -87,12 +87,15 @@ jobs:
         with:
           command: bump
           args: --auto
-      - name: Release
+      - name: Push tag and Release
         run: |
           TAG=$(git tag --points-at HEAD | head -1)
           if [ -z "$TAG" ]; then
             echo "No tag at HEAD — skipping release"
           else
+            echo "Pushing ${TAG}"
+            # Push the tag using a temporary header to avoid persist-credentials: true
+            git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(echo -n "x-access-token:${GITHUB_TOKEN}" | base64)" push origin "${TAG}"
             echo "Releasing ${TAG}"
             goreleaser release --clean
           fi
