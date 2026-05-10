@@ -94,7 +94,12 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 			}
 
 			if _, exists := cfg.Repos[name]; exists {
-				ui.Warn("repo %q already exists, updating path", name)
+				return fmt.Errorf(
+					"%w %q (path: %s). use --name/-n to specify a unique name",
+					errRepoExists,
+					name,
+					cfg.Repos[name].Path,
+				)
 			}
 
 			cfg.AddRepo(name, config.Repo{Path: abs, Backends: backends})
@@ -206,7 +211,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 
 			names := make([]string, 0, len(cfg.Repos))
 
-			if g := cmd.String("group"); g != "" {
+			if g := stripGroupPrefix(cmd.String("group")); g != "" {
 				grp, ok := cfg.Groups[g]
 				if !ok {
 					return fmt.Errorf("%w %q", errUnknownGroup, g)
@@ -222,9 +227,9 @@ func repoListCmd(cfgPath *string) *cli.Command {
 			}
 
 			tbl := ui.NewTable()
-			tbl.AppendHeader(table.Row{"NAME", "VCS", "PATH"})
+			tbl.AppendHeader(table.Row{nameLabel, vcsLabel, "PATH"})
 			tbl.SetColumnConfigs([]table.ColumnConfig{
-				{Number: 1, AutoMerge: true},
+				{Number: colName, AutoMerge: true},
 				{Number: colVCS, AutoMerge: true},
 			})
 
@@ -247,7 +252,6 @@ func repoListCmd(cfgPath *string) *cli.Command {
 }
 
 const (
-	repoNameAndVCS = 2
 	cmdNameRepo    = "repo"
 	cmdNameRename  = "rename"
 	cmdNameRefresh = "refresh"
@@ -259,7 +263,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 		Usage:     "rename a repository",
 		ArgsUsage: "<old-name> <new-name>",
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != repoNameAndVCS {
+			if cmd.NArg() != 2 { //nolint:mnd
 				return errRepoRenameUsage
 			}
 

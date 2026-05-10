@@ -13,8 +13,8 @@ import (
 )
 
 const (
+	priorityGit  = 10
 	abPartsCount = 2      // number of parts in "branch.ab +<ahead> -<behind>"
-	gitBin       = "git"  // git binary name
 	headRef      = "HEAD" // HEAD reference name
 	logCmd       = "log"  // log command name
 )
@@ -25,10 +25,13 @@ type Backend struct{}
 var _ backend.Backend = (*Backend)(nil)
 
 // Name returns the backend identifier "git".
-func (b *Backend) Name() string { return "git" }
+func (*Backend) Name() string { return "git" }
+
+// Priority returns the git detection priority.
+func (*Backend) Priority() int { return priorityGit }
 
 // Detect returns true if path contains a .git directory.
-func (b *Backend) Detect(path string) (bool, error) {
+func (*Backend) Detect(path string) (bool, error) {
 	ok, err := backend.DetectDir(path, ".git")
 	if err != nil {
 		return false, fmt.Errorf("detect git: %w", err)
@@ -39,7 +42,7 @@ func (b *Backend) Detect(path string) (bool, error) {
 
 // Status queries git for the current branch/remote relationship and working
 // tree cleanliness using a single `git status --porcelain=v2 --branch` call.
-func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
+func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
 	out, err := runGit(ctx, path, []string{"status", "--porcelain=v2", "--branch"})
 	if err != nil {
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
@@ -60,13 +63,13 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 }
 
 // Run executes arbitrary git args in path.
-func (b *Backend) Run(
+func (*Backend) Run(
 	ctx context.Context,
 	path string,
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	res, err := backend.RunCommand(ctx, gitBin, path, args, interactive)
+	res, err := backend.RunCommand(ctx, "git", path, args, interactive)
 	if err != nil {
 		return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
 	}
@@ -143,7 +146,7 @@ func parseStatus(raw string, remotes []string) backend.RepoStatus {
 			continue
 		}
 
-		if len(line) == 0 || line[0] == '#' {
+		if line == "" || line[0] == '#' {
 			continue
 		}
 

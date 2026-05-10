@@ -14,7 +14,7 @@ ghalint = "1.5.6"
 gitleaks = "8.30.1"
 actionlint = "1.7.12"
 jj = "0.41.0"
-"npm:jscpd" = "4.0.9"
+"npm:jscpd" = "4.1.0"
 
 [env]
 COVEROUT = "cover.out"
@@ -73,6 +73,10 @@ run = "go build -o dist/hrd ."
 [tasks.dev]
 description = "Development mode"
 run = "go run ."
+
+[tasks.sample-output]
+description = "Generate the sample hrd ls output for the README"
+run = "go test -v ./cmd -run TestSimulateLsOutput"
 
 [tasks.depup]
 description = "Upgrade dependencies"

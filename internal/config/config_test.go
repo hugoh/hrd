@@ -29,7 +29,6 @@ func TestRepo_ActiveBackend(t *testing.T) {
 func TestDefaultConfig(t *testing.T) {
 	cfg := defaultConfig()
 	assert.Equal(t, defaultConcurrency, cfg.Settings.Concurrency)
-	assert.Nil(t, cfg.Settings.InteractiveCommands)
 	assert.NotNil(t, cfg.Repos)
 	assert.NotNil(t, cfg.Groups)
 }
@@ -69,7 +68,6 @@ current = "work"
 
 [settings]
 concurrency = 4
-interactive_commands = ["log", "diff"]
 `
 	err := os.WriteFile(path, []byte(content), 0o644)
 	require.NoError(t, err)
@@ -275,6 +273,35 @@ func TestAddGroup(t *testing.T) {
 	err = cfg.AddGroup("work", []string{"r1"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"r1"}, cfg.Groups["work"].Repos)
+}
+
+func TestAddGroup_Dedup(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1"},
+			"r2": {Path: "/2"},
+			"r3": {Path: "/3"},
+		},
+		Groups: map[string]Group{},
+	}
+
+	err := cfg.AddGroup("work", []string{"r1", "r2", "r1", "r3", "r2"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"r1", "r2", "r3"}, cfg.Groups["work"].Repos)
+}
+
+func TestAddGroup_DedupNoDuplicates(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1"},
+			"r2": {Path: "/2"},
+		},
+		Groups: map[string]Group{},
+	}
+
+	err := cfg.AddGroup("work", []string{"r1", "r2"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
 }
 
 func TestAddGroup_UnknownRepo(t *testing.T) {

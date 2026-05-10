@@ -23,30 +23,20 @@ func TestMain(m *testing.M) {
 
 type gitBackend struct{}
 
-func (g *gitBackend) Name() string                  { return "git" }
-func (g *gitBackend) Detect(_ string) (bool, error) { return false, nil }
-func (g *gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
+func (*gitBackend) Name() string                  { return "git" }
+func (*gitBackend) Priority() int                 { return 10 }
+func (*gitBackend) Detect(_ string) (bool, error) { return false, nil }
+func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
 
-func (g *gitBackend) Run(
+func (*gitBackend) Run(
 	_ context.Context,
 	_ string,
 	_ []string,
 	_ bool,
 ) (backend.RunResult, error) {
 	return backend.RunResult{}, nil
-}
-
-func TestResultFields(t *testing.T) {
-	r := Result{RepoName: "test", RepoPath: "/test", VCS: "git", Output: "ok", ExitCode: 0}
-	assert.Equal(t, "test", r.RepoName)
-	assert.Equal(t, "/test", r.RepoPath)
-}
-
-func TestStatusResultFields(t *testing.T) {
-	sr := StatusResult{RepoName: "test", RepoPath: "/test", VCS: "git"}
-	assert.Equal(t, "test", sr.RepoName)
 }
 
 func TestDispatch(t *testing.T) {

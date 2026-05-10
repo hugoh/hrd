@@ -14,9 +14,6 @@ import (
 )
 
 const (
-	groupWidth     = 20 // width for group column
-	reposMinWidth  = 20 // minimum width for repos column
-	groupColNumber = 2  // column number for repos
 	cmdNameGroup   = "group"
 	cmdNameAdd     = "add"
 	cmdNameContext = "context"
@@ -31,14 +28,32 @@ var (
 	errUnknownGroup    = errors.New("unknown group")
 )
 
+// stripGroupPrefix removes a leading '@' from a group name if present.
+// This lets users type @work or work interchangeably on the CLI.
+func stripGroupPrefix(name string) string {
+	return strings.TrimPrefix(name, "@")
+}
+
+// displayGroup adds a '@' prefix for display purposes so group names
+// are visually distinguishable from repo names in output.
+func displayGroup(name string) string {
+	if !strings.HasPrefix(name, "@") {
+		return "@" + name
+	}
+
+	return name
+}
+
 func loadGroupAndCheck(cfgPath, name string) (config.Config, error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("loading config: %w", err)
 	}
 
+	name = stripGroupPrefix(name)
+
 	if _, ok := cfg.Groups[name]; !ok {
-		return config.Config{}, fmt.Errorf("%w %q", errUnknownGroup, name)
+		return config.Config{}, fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))
 	}
 
 	return cfg, nil
@@ -69,8 +84,12 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 				return errGroupAddUsage
 			}
 
-			name := cmd.Args().Get(0)
+			name := stripGroupPrefix(cmd.Args().Get(0))
 			repos := cmd.Args().Slice()[1:]
+
+			if hasDupes := hasDuplicateRepos(repos); hasDupes {
+				ui.Warn("duplicate repo names in group, ignoring extras")
+			}
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
@@ -81,7 +100,7 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 				return fmt.Errorf("adding group: %w", err)
 			}
 
-			ui.Info("group %q: %s", name, strings.Join(repos, ", "))
+			ui.Info("group %q: %s", displayGroup(name), strings.Join(repos, ", "))
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -98,7 +117,7 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 				return errGroupRmUsage
 			}
 
-			name := cmd.Args().Get(0)
+			name := stripGroupPrefix(cmd.Args().Get(0))
 
 			cfg, err := loadGroupAndCheck(*cfgPath, name)
 			if err != nil {
@@ -111,7 +130,7 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 			}
 
 			delete(cfg.Groups, name)
-			ui.Success("removed group %q", name)
+			ui.Success("removed group %q", displayGroup(name))
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -134,10 +153,10 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 			return fmt.Errorf("loading config: %w", err)
 		}
 
-		if name := cmd.Args().First(); name != "" {
+		if name := stripGroupPrefix(cmd.Args().First()); name != "" {
 			group, ok := cfg.Groups[name]
 			if !ok {
-				return fmt.Errorf("%w %q", errUnknownGroup, name)
+				return fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))
 			}
 
 			for _, repo := range group.Repos {
@@ -158,6 +177,11 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 }
 
 func renderGroupTable(cfg config.Config) error {
+	const (
+		groupWidth    = 20 // width for group column
+		reposMinWidth = 20 // minimum width for repos column
+	)
+
 	tbl := ui.NewTable()
 	tbl.AppendHeader(table.Row{"GROUP", "REPOS", ""})
 
@@ -167,7 +191,7 @@ func renderGroupTable(cfg config.Config) error {
 
 	tbl.SetColumnConfigs([]table.ColumnConfig{
 		{Number: 1, AutoMerge: true, WidthMax: groupWidth},
-		{Number: groupColNumber, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap},
+		{Number: 2, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap}, //nolint:mnd
 	})
 
 	for name, group := range cfg.Groups {
@@ -176,12 +200,27 @@ func renderGroupTable(cfg config.Config) error {
 			active = text.Colors{text.FgGreen}.Sprint("●")
 		}
 
-		tbl.AppendRow(table.Row{name, strings.Join(group.Repos, ", "), active})
+		tbl.AppendRow(table.Row{displayGroup(name), strings.Join(group.Repos, ", "), active})
 	}
 
 	tbl.Render()
 
 	return nil
+}
+
+// hasDuplicateRepos reports whether the slice contains any duplicate entries.
+func hasDuplicateRepos(repos []string) bool {
+	seen := make(map[string]bool, len(repos))
+
+	for _, r := range repos {
+		if seen[r] {
+			return true
+		}
+
+		seen[r] = true
+	}
+
+	return false
 }
 
 // contextCommands returns the `context` subcommand.
@@ -207,7 +246,7 @@ func contextSetCmd(cfgPath *string) *cli.Command {
 				return errContextSetUsage
 			}
 
-			name := cmd.Args().Get(0)
+			name := stripGroupPrefix(cmd.Args().Get(0))
 
 			cfg, err := loadGroupAndCheck(*cfgPath, name)
 			if err != nil {
@@ -215,7 +254,7 @@ func contextSetCmd(cfgPath *string) *cli.Command {
 			}
 
 			cfg.Context.Current = name
-			ui.Success("context set to %q", name)
+			ui.Success("context set to %q", displayGroup(name))
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -254,7 +293,7 @@ func contextShowCmd(cfgPath *string) *cli.Command {
 			if cfg.Context.Current == "" {
 				ui.Outf("all repos")
 			} else {
-				ui.Outf("context: %s", cfg.Context.Current)
+				ui.Outf("context: %s", displayGroup(cfg.Context.Current))
 			}
 
 			return nil

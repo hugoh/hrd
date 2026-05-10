@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -57,11 +58,6 @@ type Context struct {
 type Settings struct {
 	// Concurrency caps the number of parallel subprocess invocations.
 	Concurrency int `toml:"concurrency"`
-
-	// InteractiveCommands lists subcommand names that must run sequentially
-	// with a real terminal (e.g. "log", "difftool"). Matched by exact prefix
-	// of the args slice passed to Run.
-	InteractiveCommands []string `toml:"interactive_commands"`
 }
 
 // Config is the top-level config structure that maps directly to the TOML file.
@@ -148,44 +144,24 @@ func Save(path string, cfg Config) (err error) {
 	return nil
 }
 
+func stripGroupPrefix(name string) string {
+	return strings.TrimPrefix(name, "@")
+}
+
 // ResolveScope returns the list of repo names to operate on given an explicit
 // set of names/group passed on the CLI.
 func (c *Config) ResolveScope(names []string) ([]string, error) {
 	if len(names) == 0 {
-		if c.Context.Current != "" {
-			g, ok := c.Groups[c.Context.Current]
-			if !ok {
-				return nil, fmt.Errorf("%w %q", errActiveContextNotFound, c.Context.Current)
-			}
-
-			return g.Repos, nil
-		}
-		// All repos in deterministic order.
-		out := make([]string, 0, len(c.Repos))
-		for name := range c.Repos {
-			out = append(out, name)
-		}
-
-		slices.Sort(out)
-
-		return out, nil
+		return c.allRepos()
 	}
 
-	// Single name that is a group name → expand.
 	if len(names) == 1 {
-		if g, ok := c.Groups[names[0]]; ok {
-			return g.Repos, nil
+		if repos, ok := c.groupRepos(names[0]); ok {
+			return repos, nil
 		}
 	}
 
-	// Validate every name is a known repo.
-	for _, name := range names {
-		if _, ok := c.Repos[name]; !ok {
-			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
-		}
-	}
-
-	return names, nil
+	return c.validatedRepos(names)
 }
 
 // AddRepo adds or updates a repo entry. The name is derived from the
@@ -207,13 +183,70 @@ func (c *Config) RemoveRepo(name string) {
 
 // AddGroup creates or replaces a group.
 func (c *Config) AddGroup(name string, repos []string) error {
-	for _, r := range repos {
-		if _, ok := c.Repos[r]; !ok {
-			return fmt.Errorf("%w %q", errUnknownRepo, r)
+	seen := make(map[string]bool, len(repos))
+	unique := make([]string, 0, len(repos))
+
+	for _, repo := range repos {
+		if seen[repo] {
+			continue
+		}
+
+		seen[repo] = true
+
+		if _, ok := c.Repos[repo]; !ok {
+			return fmt.Errorf("%w %q", errUnknownRepo, repo)
+		}
+
+		unique = append(unique, repo)
+	}
+
+	c.Groups[name] = Group{Repos: unique}
+
+	return nil
+}
+
+func (c *Config) allRepos() ([]string, error) {
+	if c.Context.Current != "" {
+		g, ok := c.Groups[c.Context.Current]
+		if !ok {
+			return nil, fmt.Errorf("%w %q", errActiveContextNotFound, c.Context.Current)
+		}
+
+		return g.Repos, nil
+	}
+
+	out := make([]string, 0, len(c.Repos))
+	for name := range c.Repos {
+		out = append(out, name)
+	}
+
+	slices.Sort(out)
+
+	return out, nil
+}
+
+func (c *Config) groupRepos(name string) ([]string, bool) {
+	if g, ok := c.Groups[name]; ok {
+		return g.Repos, true
+	}
+
+	stripped := stripGroupPrefix(name)
+	if stripped != name {
+		if g, ok := c.Groups[stripped]; ok {
+			return g.Repos, true
 		}
 	}
 
-	c.Groups[name] = Group{Repos: repos}
+	return nil, false
+}
 
-	return nil
+func (c *Config) validatedRepos(names []string) ([]string, error) {
+	for _, name := range names {
+		lookupName := stripGroupPrefix(name)
+		if _, ok := c.Repos[lookupName]; !ok {
+			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
+		}
+	}
+
+	return names, nil
 }

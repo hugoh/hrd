@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBackend_Priority(t *testing.T) {
+	b := &Backend{}
+	assert.Positive(t, b.Priority())
+}
+
 func TestParseStatus_Empty(t *testing.T) {
 	st := parseStatus("", nil)
 	assert.Empty(t, st.Ref)
@@ -183,7 +188,7 @@ func TestBackend_Name(t *testing.T) {
 
 func TestBackend_Detect_WithGitDir(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 
 	b := &Backend{}

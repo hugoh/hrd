@@ -104,17 +104,19 @@ func TestWorstState(t *testing.T) {
 }
 
 type mockBackend struct {
-	name   string
-	detect func(path string) (bool, error)
+	name     string
+	priority int
+	detect   func(path string) (bool, error)
 }
 
 func (m *mockBackend) Name() string                     { return m.name }
+func (m *mockBackend) Priority() int                    { return m.priority }
 func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
-func (m *mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
+func (*mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
 	return RepoStatus{}, nil
 }
 
-func (m *mockBackend) Run(
+func (*mockBackend) Run(
 	_ context.Context,
 	_ string,
 	_ []string,
@@ -129,17 +131,26 @@ func TestRegister(t *testing.T) {
 
 	registry = nil
 
-	b1 := &mockBackend{name: "test1"}
+	b1 := &mockBackend{name: "low", priority: 10}
 	Register(b1)
 	assert.Len(t, registry, 1)
-	assert.Equal(t, "test1", registry[0].Name())
+	assert.Equal(t, "low", registry[0].Name())
 
-	b2 := &mockBackend{name: "test2"}
+	b2 := &mockBackend{name: "high", priority: 20}
 	Register(b2)
 	assert.Len(t, registry, 2)
+	assert.Equal(t, "high", registry[0].Name())
+	assert.Equal(t, "low", registry[1].Name())
+
+	b3 := &mockBackend{name: "mid", priority: 15}
+	Register(b3)
+	assert.Len(t, registry, 3)
+	assert.Equal(t, "high", registry[0].Name())
+	assert.Equal(t, "mid", registry[1].Name())
+	assert.Equal(t, "low", registry[2].Name())
 
 	assert.Panics(t, func() {
-		Register(&mockBackend{name: "test1"})
+		Register(&mockBackend{name: "low"})
 	})
 }
 
@@ -149,8 +160,8 @@ func TestAll(t *testing.T) {
 
 	registry = nil
 
-	b1 := &mockBackend{name: "a"}
-	b2 := &mockBackend{name: "b"}
+	b1 := &mockBackend{name: "a", priority: 20}
+	b2 := &mockBackend{name: "b", priority: 10}
 
 	Register(b1)
 	Register(b2)
@@ -160,7 +171,7 @@ func TestAll(t *testing.T) {
 	assert.Equal(t, "a", all[0].Name())
 	assert.Equal(t, "b", all[1].Name())
 
-	all[0] = &mockBackend{name: "hacked"}
+	all[0] = &mockBackend{name: "hacked", priority: 99}
 
 	assert.Equal(t, "a", registry[0].Name())
 }
@@ -290,14 +301,16 @@ func TestDetectAll_MultipleMatches_JjFirst(t *testing.T) {
 
 	Register(
 		&mockBackend{
-			name:   "git",
-			detect: func(path string) (bool, error) { return path == dir, nil },
+			name:     "git",
+			priority: 10,
+			detect:   func(path string) (bool, error) { return path == dir, nil },
 		},
 	)
 	Register(
 		&mockBackend{
-			name:   "jj",
-			detect: func(path string) (bool, error) { return path == dir, nil },
+			name:     "jj",
+			priority: 20,
+			detect:   func(path string) (bool, error) { return path == dir, nil },
 		},
 	)
 
@@ -362,7 +375,7 @@ func TestDetectWithRealGitRepo(t *testing.T) {
 	registry = nil
 
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".git", "config"), []byte("[core]\n"), 0o644)
 	require.NoError(t, err)

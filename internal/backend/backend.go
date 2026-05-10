@@ -56,6 +56,41 @@ func (s RefState) String() string {
 	}
 }
 
+const (
+	// PriorityJj is the detection priority for the jj backend.
+	PriorityJj = 20
+	// PriorityGit is the detection priority for the git backend.
+	PriorityGit = 10
+
+	// Severity ranks for RefState.
+	rankDiverged = 4
+	rankBehind   = 3
+	rankAhead    = 2
+	rankNoRemote = 1
+	rankSynced   = 0
+)
+
+// Severity returns the relative severity of the state (higher is worse).
+// Severity order: Conflict > Diverged > Behind > Ahead > NoRemote > Synced.
+func (s RefState) Severity() int {
+	switch s {
+	case RefStateDiverged, RefStateGone:
+		return rankDiverged
+	case RefStateBehind:
+		return rankBehind
+	case RefStateAhead:
+		return rankAhead
+	case RefStateNoRemote:
+		return rankNoRemote
+	case RefStateSynced:
+		return rankSynced
+	case RefStateUnknown:
+		return rankSynced
+	default:
+		return rankSynced
+	}
+}
+
 // BookmarkStatus holds tracking information for a single bookmark (jj) or
 // the current branch (git). Both backends populate this struct so the UI
 // can render them identically.
@@ -139,40 +174,18 @@ func WorstState(bookmarks []BookmarkStatus, hasConflict bool) RefState {
 		return RefStateDiverged // surface conflict as diverged at repo level
 	}
 
-	const (
-		rankSynced   = 0
-		rankNoRemote = 1
-		rankAhead    = 2
-		rankBehind   = 3
-		rankDiverged = 4
-		rankGone     = 4
-		rankUnknown  = 0
-	)
-
-	rank := map[RefState]int{
-		RefStateSynced:   rankSynced,
-		RefStateNoRemote: rankNoRemote,
-		RefStateAhead:    rankAhead,
-		RefStateBehind:   rankBehind,
-		RefStateDiverged: rankDiverged,
-		RefStateGone:     rankGone,
-		RefStateUnknown:  rankUnknown,
-	}
-
-	var best RefState
-
 	if len(bookmarks) == 0 {
 		return RefStateNoRemote
 	}
 
-	best = bookmarks[0].State
+	worst := bookmarks[0].State
 	for _, bm := range bookmarks[1:] {
-		if rank[bm.State] > rank[best] {
-			best = bm.State
+		if bm.State.Severity() > worst.Severity() {
+			worst = bm.State
 		}
 	}
 
-	return best
+	return worst
 }
 
 // RunResult holds the outcome of a single repo dispatch.
@@ -188,6 +201,10 @@ type RunResult struct {
 type Backend interface {
 	// Name returns the canonical backend identifier, e.g. "git" or "jj".
 	Name() string
+
+	// Priority returns the detection priority. Higher values are checked first.
+	// For colocated repos, the backend with the highest priority wins.
+	Priority() int
 
 	// Detect returns true if the directory at path is managed by this VCS.
 	// It must not return an error for non-matching dirs; only real I/O
@@ -210,6 +227,7 @@ type Backend interface {
 var registry []Backend
 
 // Register adds a backend to the global registry.
+// Detection priority follows Backend.Priority() order (higher first).
 // It panics on duplicate names to catch wiring mistakes at startup.
 func Register(backend Backend) {
 	for _, existing := range registry {
@@ -218,7 +236,19 @@ func Register(backend Backend) {
 		}
 	}
 
-	registry = append(registry, backend)
+	// Insert in priority order (descending)
+	idx := len(registry)
+	for i, existing := range registry {
+		if backend.Priority() > existing.Priority() {
+			idx = i
+
+			break
+		}
+	}
+
+	registry = append(registry, nil)
+	copy(registry[idx+1:], registry[idx:])
+	registry[idx] = backend
 }
 
 // All returns a copy of all registered backends in priority order.
@@ -282,16 +312,6 @@ func DetectAll(path string) ([]Backend, error) {
 
 	if len(matched) == 0 {
 		return nil, fmt.Errorf("no known VCS detected at %q: %w", abs, errNoKnownVCS)
-	}
-
-	if len(matched) > 1 {
-		for i, b := range matched {
-			if b.Name() == "jj" {
-				matched[0], matched[i] = matched[i], matched[0]
-
-				break
-			}
-		}
 	}
 
 	return matched, nil

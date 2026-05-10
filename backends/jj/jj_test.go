@@ -13,6 +13,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestBackend_Priority(t *testing.T) {
+	b := &Backend{}
+	assert.Positive(t, b.Priority())
+}
+
 func TestParseWorkingCopy_Empty(t *testing.T) {
 	st := parseWorkingCopy("")
 	assert.Empty(t, st.Ref)
@@ -255,7 +260,7 @@ func TestBackend_Name_JJ(t *testing.T) {
 
 func TestBackend_Detect_WithJJDir(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 
 	b := &Backend{}
@@ -310,7 +315,7 @@ func TestBackend_Detect_NonColocated(t *testing.T) {
 
 func TestBackend_Run_Interactive(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
 	require.NoError(t, err)
@@ -322,7 +327,7 @@ func TestBackend_Run_Interactive(t *testing.T) {
 
 func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
 	require.NoError(t, err)
@@ -425,7 +430,7 @@ func TestBackend_Status_NotAJJRepo(t *testing.T) {
 
 func TestBackend_Run(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
 	require.NoError(t, err)
@@ -438,7 +443,7 @@ func TestBackend_Run(t *testing.T) {
 
 func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
 	require.NoError(t, err)
@@ -451,7 +456,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 
 func TestBackend_Run_NoExecutable(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 
 	b := &Backend{}
@@ -464,7 +469,7 @@ func TestBackend_Run_NoExecutable(t *testing.T) {
 
 func TestRunJJ_Failure(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 
 	_, err = runJJ(
@@ -478,7 +483,7 @@ func TestRunJJ_Failure(t *testing.T) {
 
 func TestBackend_Status_JjLogFailure(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
 	require.NoError(t, err)
 
 	b := &Backend{}

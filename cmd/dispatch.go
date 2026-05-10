@@ -18,15 +18,14 @@ import (
 )
 
 const (
-	percentDivisor = 100 // divisor for percentage calculations
-	minStatusWidth = 20  // minimum width for status column
-	colName        = 1   // column number for repo name
-	colVCS         = 2   // column number for VCS type
-	colStatus      = 3   // column number for status
-	colMsg         = 4   // column number for message
-	minNameWidth   = 15  // minimum width for name column
-	cmdNameGit     = "git"
-	cmdNameShell   = "shell"
+	cmdNameGit   = "git"
+	cmdNameShell = "shell"
+
+	colName = iota + 1
+	colVCS
+	colStatus
+	colMsg
+
 	fmtSuccess     = "%d/%d repos completed successfully"
 	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
 )
@@ -83,6 +82,8 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 			names = append(names, arg)
 		} else if _, ok := cfg.Groups[arg]; ok {
 			names = append(names, arg)
+		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
+			names = append(names, stripGroupPrefix(arg))
 		}
 	}
 
@@ -94,9 +95,9 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 	return names, nil
 }
 
-// vcsArgsFilter returns the subset of args that are not repo/group names.
+// cmdArgsFilter returns the subset of args that are not repo/group names.
 // It skips "--" separator.
-func vcsArgsFilter(
+func cmdArgsFilter(
 	args []string,
 	repos map[string]config.Repo,
 	groups map[string]config.Group,
@@ -110,7 +111,9 @@ func vcsArgsFilter(
 
 		if _, ok := repos[arg]; !ok {
 			if _, ok := groups[arg]; !ok {
-				filtered = append(filtered, arg)
+				if _, ok := groups[stripGroupPrefix(arg)]; !ok {
+					filtered = append(filtered, arg)
+				}
 			}
 		}
 	}
@@ -118,8 +121,8 @@ func vcsArgsFilter(
 	return filtered
 }
 
-func vcsArgs(cmd *cli.Command, cfg *config.Config) []string {
-	return vcsArgsFilter(cmd.Args().Slice(), cfg.Repos, cfg.Groups)
+func cmdArgs(cmd *cli.Command, cfg *config.Config) []string {
+	return cmdArgsFilter(cmd.Args().Slice(), cfg.Repos, cfg.Groups)
 }
 
 func gitCmd(cfgPath *string) *cli.Command {
@@ -219,7 +222,7 @@ func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) erro
 		return err
 	}
 
-	shellArgs := vcsArgs(cmd, &cfg)
+	shellArgs := cmdArgs(cmd, &cfg)
 	if len(shellArgs) == 0 {
 		return errNoShellCommand
 	}
@@ -402,16 +405,16 @@ func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backend
 		return err
 	}
 
-	vcsArgs := vcsArgs(cmd, &cfg)
-	if len(vcsArgs) == 0 {
+	cmdArgs := cmdArgs(cmd, &cfg)
+	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
 	if cmd.Bool("interactive") {
-		return dispatchInteractive(ctx, cfg.Repos, names, backendName, vcsArgs)
+		return dispatchInteractive(ctx, cfg.Repos, names, backendName, cmdArgs)
 	}
 
-	return dispatchNonInteractive(ctx, &cfg, names, backendName, vcsArgs)
+	return dispatchNonInteractive(ctx, &cfg, names, backendName, cmdArgs)
 }
 
 func runInteractive(ctx context.Context, dir, bin string, args []string) error {
@@ -465,7 +468,7 @@ func dispatchInteractive(
 	repos map[string]config.Repo,
 	names []string,
 	backendName string,
-	vcsArgs []string,
+	cmdArgs []string,
 ) error {
 	names = filterMatching(names, repos, backendName)
 	if len(names) == 0 {
@@ -477,7 +480,7 @@ func dispatchInteractive(
 	for _, name := range names {
 		repo := repos[name]
 
-		if err := runInteractive(ctx, repo.Path, backendName, vcsArgs); err != nil {
+		if err := runInteractive(ctx, repo.Path, backendName, cmdArgs); err != nil {
 			ui.Errf("%s: %v", name, err)
 			failed = append(failed, name)
 		}
@@ -493,9 +496,9 @@ func dispatchNonInteractive(
 	cfg *config.Config,
 	names []string,
 	backendName string,
-	vcsArgs []string,
+	cmdArgs []string,
 ) error {
-	label := backendName + " " + strings.Join(vcsArgs, " ")
+	label := backendName + " " + strings.Join(cmdArgs, " ")
 
 	names = filterMatching(names, cfg.Repos, backendName)
 	if len(names) == 0 {
@@ -508,7 +511,7 @@ func dispatchNonInteractive(
 			cfg.Repos,
 			names,
 			backendName,
-			vcsArgs,
+			cmdArgs,
 			int64(cfg.Settings.Concurrency),
 		)
 		if err != nil {
@@ -616,29 +619,31 @@ func gatherStatus(
 }
 
 func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
-	const vcsWidth = 3
+	const (
+		minNameWidth   = 15
+		minStatusWidth = 20
+		vcsWidth       = 3
+	)
 
-	var namePercent, statusPercent int
+	type layoutWeights struct{ name, status int }
 
-	if !details {
-		namePercent = 25
-		statusPercent = 75
-	} else {
-		namePercent = 20
-		statusPercent = 37
+	weights := layoutWeights{name: 25, status: 75} //nolint:mnd
+	if details {
+		weights = layoutWeights{name: 20, status: 37} //nolint:mnd
 	}
 
 	termWidth := ui.GetTermWidth()
-	nameWidth := max(termWidth*namePercent/percentDivisor, minNameWidth)
-	namePlusStatusWidth := termWidth * (namePercent + statusPercent) / percentDivisor
+	pct := func(p int) int { return termWidth * p / 100 } //nolint:mnd
+
+	nameWidth := max(pct(weights.name), minNameWidth)
 	statusWidth := ui.ComputeRemainderWidth(
-		namePlusStatusWidth,
+		pct(weights.name+weights.status),
 		minStatusWidth,
 		nameWidth,
 		vcsWidth,
 	)
 
-	header := table.Row{"NAME", "VCS", "REF"}
+	header := table.Row{nameLabel, vcsLabel, refLabel}
 
 	colConfigs := []table.ColumnConfig{
 		{Number: colName, WidthMax: nameWidth, WidthMaxEnforcer: ui.Truncate},
@@ -647,7 +652,7 @@ func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
 	}
 
 	if details {
-		header = append(header, "MSG")
+		header = append(header, msgLabel)
 
 		msgWidth := ui.ComputeRemainderWidth(
 			termWidth,
