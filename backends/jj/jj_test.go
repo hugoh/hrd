@@ -3,7 +3,9 @@ package jj
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -219,6 +221,17 @@ func TestExtractCount(t *testing.T) {
 	}
 }
 
+func TestExtractCommitMsg(t *testing.T) {
+	assert.Equal(t, "msg", extractCommitMsg("msg"))
+	assert.Equal(t, "", extractCommitMsg(""))
+}
+
+func TestExtractCommitTime(t *testing.T) {
+	assert.Equal(t, "time", extractCommitTime("msg\x1ftime"))
+	assert.Equal(t, "", extractCommitTime("msg"))
+	assert.Equal(t, "", extractCommitTime(""))
+}
+
 func TestBackend_Name_JJ(t *testing.T) {
 	b := &Backend{}
 	assert.Equal(t, "jj", b.Name())
@@ -284,14 +297,75 @@ func TestRegister_JJ(t *testing.T) {
 
 func TestBackend_Status(t *testing.T) {
 	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
-	require.NoError(t, err)
-	// Write a minimal jj repo state
-	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-	require.NoError(t, err)
+	cmd := exec.Command("jj", "init", "--git")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
+		t.Skip("jj init --git did not create a .jj directory, skipping")
+	}
 
 	b := &Backend{}
 	st, err := b.Status(context.Background(), dir)
+	require.NoError(t, err)
+	assert.NotEmpty(t, st.Ref)
+}
+
+func TestBackend_Status_AncestorWithDescription(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("jj", "init", "--git")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
+		t.Skip("jj init --git did not create a .jj directory, skipping")
+	}
+
+	setup := func(args ...string) {
+		c := exec.Command("jj", args...)
+		c.Dir = dir
+		_ = c.Run()
+	}
+	setup("describe", "-m", "feat: initial")
+	setup("bookmark", "set", "main")
+	setup("new")
+
+	b := &Backend{}
+	st, err := b.Status(context.Background(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "feat: initial", st.CommitMsg)
+	assert.Len(t, st.Bookmarks, 1)
+	assert.Equal(t, "main", st.Bookmarks[0].Name)
+}
+
+func TestBackend_Status_AncestorWalkError(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("jj", "init", "--git")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
+		t.Skip("jj init --git did not create a .jj directory, skipping")
+	}
+
+	// Make the working copy have no description so the ancestor walk runs,
+	// then cause runJJ to fail on ancestor revs.
+	origRunJJ := runJJ
+
+	runJJ = func(ctx context.Context, _ string, args []string) (string, error) {
+		// Let the working copy query (@) succeed, fail on ancestor queries (@- etc).
+		if slices.Contains(args, "@") {
+			return origRunJJ(ctx, dir, args)
+		}
+
+		return "", assert.AnError
+	}
+	defer func() { runJJ = origRunJJ }()
+
+	b := &Backend{}
+	st, err := b.Status(context.Background(), dir)
+	// The ancestor walk should not hard-error — it breaks on first failure
+	// and returns whatever the working copy gave us.
 	require.NoError(t, err)
 	assert.NotEmpty(t, st.Ref)
 }
@@ -337,6 +411,7 @@ func TestBackend_Run_NoExecutable(t *testing.T) {
 	require.NoError(t, err)
 
 	b := &Backend{}
+
 	t.Setenv("PATH", "")
 
 	_, err = b.Run(context.Background(), dir, []string{"log"}, false)
@@ -348,7 +423,11 @@ func TestRunJJ_Failure(t *testing.T) {
 	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o755)
 	require.NoError(t, err)
 
-	_, err = runJJ(context.Background(), dir, []string{"log", "-r", "@", "--template", "invalid_template"})
+	_, err = runJJ(
+		context.Background(),
+		dir,
+		[]string{"log", "-r", "@", "--template", "invalid_template"},
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
 }
@@ -359,6 +438,7 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	b := &Backend{}
+
 	t.Setenv("PATH", "")
 
 	_, err = b.Status(context.Background(), dir)

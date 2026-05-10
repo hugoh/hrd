@@ -2,10 +2,72 @@ version: 2
 builds:
   - env:
       - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+      - arm
+    goarm:
+      - 6
+      - 7
+    ignore:
+      - goos: darwin
+        goarch: "386"
+      - goos: darwin
+        goarch: arm
+      - goos: freebsd
+        goarch: arm
+      - goos: freebsd
+        goarch: "386"
     flags:
       - -trimpath
       - -mod=readonly
     ldflags:
-      - -extldflags '-static'
       - -s -w
       - -X github.com/hugoh/hrd/cmd.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+
+nfpms:
+  - maintainer: "Hugo Haas <hugoh@hugoh.net>"
+    description: "Multi-repo manager for git and jj with parallel execution and live status"
+    homepage: "https://github.com/hugoh/hrd"
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: ./hrd
+        dst: /usr/bin/hrd
+
+brews:
+  - name: hrd
+    repository:
+      owner: hugoh
+      name: homebrew-tap
+    description: "Multi-repo manager for git and jj with parallel execution and live status"
+    homepage: "https://github.com/hugoh/hrd"
+    directory: Formula
+    install: |
+      bin.install "hrd"
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:

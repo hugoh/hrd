@@ -6,6 +6,8 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
+const cmdNameHRD = "hrd"
+
 var version = "dev"
 
 // NewApp builds and returns the root CLI application.
@@ -13,7 +15,7 @@ func NewApp() *cli.Command {
 	cfgPath := config.DefaultPath()
 
 	return &cli.Command{
-		Name:                  "hrd",
+		Name:                  cmdNameHRD,
 		Usage:                 "manage multiple git and jj repositories",
 		Version:               version,
 		EnableShellCompletion: true,

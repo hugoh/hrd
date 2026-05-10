@@ -11,7 +11,8 @@ import (
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
-	"github.com/pterm/pterm"
+	"github.com/hugoh/hrd/internal/ui"
+	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/urfave/cli/v3"
 )
 
@@ -29,7 +30,7 @@ var (
 // repoCommands returns the `repo` subcommand with its children.
 func repoCommands(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:  "repo",
+		Name:  cmdNameRepo,
 		Usage: "manage tracked repositories",
 		Commands: []*cli.Command{
 			repoAddCmd(cfgPath),
@@ -43,7 +44,7 @@ func repoCommands(cfgPath *string) *cli.Command {
 
 func repoAddCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "add",
+		Name:      cmdNameAdd,
 		Usage:     "add one or more repositories",
 		ArgsUsage: "<path>...",
 		Flags: []cli.Flag{
@@ -93,11 +94,11 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 			}
 
 			if _, exists := cfg.Repos[name]; exists {
-				pterm.Warning.Printf("repo %q already exists, updating path\n", name)
+				ui.Warn("repo %q already exists, updating path", name)
 			}
 
 			cfg.AddRepo(name, config.Repo{Path: abs, Backends: backends})
-			pterm.Success.Printf("added %s (%s) as %q\n", abs, backends[0], name)
+			ui.Success("added %s (%s) as %q", abs, backends[0], name)
 		}
 
 		return config.Save(*cfgPath, cfg)
@@ -105,35 +106,46 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 }
 
 func detectBackends(vcsName, abs string) ([]string, error) {
-	var backends []string
-
 	if vcsName == "" {
-		bs, err := backend.DetectAll(abs)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errNoVCSDetected, err)
-		}
-
-		for _, b := range bs {
-			backends = append(backends, b.Name())
-		}
-	} else {
-		if _, err := backend.ByName(vcsName); err != nil {
-			return nil, fmt.Errorf("checking backend %q: %w", vcsName, err)
-		}
-
-		bs, err := backend.DetectAll(abs)
-		if err == nil {
-			for _, b := range bs {
-				backends = append(backends, b.Name())
-			}
-		}
-
-		if len(backends) == 0 {
-			return nil, fmt.Errorf("%s: %w", abs, errNoVCSDetected)
-		}
+		return detectAllBackends(abs)
 	}
 
-	return backends, nil
+	return detectExplicitBackend(vcsName, abs)
+}
+
+func detectAllBackends(abs string) ([]string, error) {
+	bList, err := backend.DetectAll(abs)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errNoVCSDetected, err)
+	}
+
+	names := make([]string, len(bList))
+
+	for i, b := range bList {
+		names[i] = b.Name()
+	}
+
+	return names, nil
+}
+
+func detectExplicitBackend(vcsName, abs string) ([]string, error) {
+	if _, err := backend.ByName(vcsName); err != nil {
+		return nil, fmt.Errorf("checking backend %q: %w", vcsName, err)
+	}
+
+	bList, _ := backend.DetectAll(abs)
+
+	if len(bList) == 0 {
+		return nil, fmt.Errorf("%s: %w", abs, errNoVCSDetected)
+	}
+
+	names := make([]string, len(bList))
+
+	for i, b := range bList {
+		names[i] = b.Name()
+	}
+
+	return names, nil
 }
 
 func repoRemoveCmd(cfgPath *string) *cli.Command {
@@ -157,7 +169,7 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 				}
 
 				cfg.RemoveRepo(name)
-				pterm.Success.Printf("removed %q\n", name)
+				ui.Success("removed %q", name)
 			}
 
 			return config.Save(*cfgPath, cfg)
@@ -171,7 +183,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 		Usage: "list tracked repositories",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:    "group",
+				Name:    cmdNameGroup,
 				Aliases: []string{"g"},
 				Usage:   "filter to repos in a group",
 			},
@@ -199,9 +211,12 @@ func repoListCmd(cfgPath *string) *cli.Command {
 				sort.Strings(names)
 			}
 
-			tableData := pterm.TableData{
-				{"NAME", "VCS", "PATH"},
-			}
+			tbl := ui.NewTable()
+			tbl.AppendHeader(table.Row{"NAME", "VCS", "PATH"})
+			tbl.SetColumnConfigs([]table.ColumnConfig{
+				{Number: 1, AutoMerge: true},
+				{Number: colVCS, AutoMerge: true},
+			})
 
 			for _, name := range names {
 				repo := cfg.Repos[name]
@@ -211,21 +226,26 @@ func repoListCmd(cfgPath *string) *cli.Command {
 					vcsLabel = strings.Join(repo.Backends, ",")
 				}
 
-				tableData = append(tableData, []string{name, vcsLabel, repo.Path})
+				tbl.AppendRow(table.Row{name, vcsLabel, repo.Path})
 			}
 
-			_ = pterm.DefaultTable.WithHasHeader(true).WithData(tableData).Render()
+			tbl.Render()
 
 			return nil
 		},
 	}
 }
 
-const repoNameAndVCS = 2
+const (
+	repoNameAndVCS = 2
+	cmdNameRepo    = "repo"
+	cmdNameRename  = "rename"
+	cmdNameRefresh = "refresh"
+)
 
 func repoRenameCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "rename",
+		Name:      cmdNameRename,
 		Usage:     "rename a repository",
 		ArgsUsage: "<old-name> <new-name>",
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -262,7 +282,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 				cfg.Groups[gname] = group
 			}
 
-			pterm.Success.Printf("renamed %q → %q\n", oldName, newName)
+			ui.Success("renamed %q → %q", oldName, newName)
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -271,7 +291,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 
 func repoRefreshCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "refresh",
+		Name:      cmdNameRefresh,
 		Usage:     "re-detect VCS for one or more repos",
 		ArgsUsage: "<name>...",
 		Flags: []cli.Flag{
@@ -314,32 +334,36 @@ func repoRefreshAction(cfgPath *string) func(_ context.Context, cmd *cli.Command
 		}
 
 		for _, name := range names {
-			repo := cfg.Repos[name]
-
-			backends, err := backend.DetectAll(repo.Path)
-			if err != nil {
-				pterm.FgLightRed.Printf("%s: %v\n", name, err)
-
-				continue
-			}
-
-			var newBackends []string
-			for _, b := range backends {
-				newBackends = append(newBackends, b.Name())
-			}
-
-			if !slices.Equal(newBackends, repo.Backends) {
-				var note string
-				if newBackends[0] != repo.ActiveBackend() {
-					note = fmt.Sprintf(" %s → %s", repo.ActiveBackend(), newBackends[0])
-				}
-
-				pterm.Printf("%s:%s (%s)\n", name, note, strings.Join(newBackends, ", "))
-			}
-
-			cfg.AddRepo(name, config.Repo{Path: repo.Path, Backends: newBackends})
+			refreshRepo(name, &cfg)
 		}
 
 		return config.Save(*cfgPath, cfg)
 	}
+}
+
+func refreshRepo(name string, cfg *config.Config) {
+	repo := cfg.Repos[name]
+
+	backends, err := backend.DetectAll(repo.Path)
+	if err != nil {
+		ui.Fail("%s: %v", name, err)
+
+		return
+	}
+
+	var newBackends []string
+	for _, b := range backends {
+		newBackends = append(newBackends, b.Name())
+	}
+
+	if !slices.Equal(newBackends, repo.Backends) {
+		var note string
+		if newBackends[0] != repo.ActiveBackend() {
+			note = fmt.Sprintf(" %s → %s", repo.ActiveBackend(), newBackends[0])
+		}
+
+		ui.Outf("%s:%s (%s)", name, note, strings.Join(newBackends, ", "))
+	}
+
+	cfg.AddRepo(name, config.Repo{Path: repo.Path, Backends: newBackends})
 }

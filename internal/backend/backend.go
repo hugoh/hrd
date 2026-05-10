@@ -15,19 +15,30 @@ type RefState int
 
 const (
 	// RefStateUnknown means the bookmark has no tracking remote.
-	RefStateUnknown  RefState = iota
-	RefStateSynced            // local == remote
-	RefStateAhead             // local ahead of remote
-	RefStateBehind            // local behind remote
-	RefStateDiverged          // local and remote have diverged
-	RefStateNoRemote          // no remote configured
-	RefStateGone              // remote ref deleted; local bookmark orphaned
+	RefStateUnknown RefState = iota
+	// RefStateSynced means local matches remote.
+	RefStateSynced
+	// RefStateAhead means local is ahead of remote.
+	RefStateAhead
+	// RefStateBehind means local is behind remote.
+	RefStateBehind
+	// RefStateDiverged means local and remote have diverged.
+	RefStateDiverged
+	// RefStateNoRemote means no remote is configured.
+	RefStateNoRemote
+	// RefStateGone means remote ref was deleted.
+	RefStateGone
+)
+
+const (
+	stateStrSynced  = "synced"
+	stateStrUnknown = "unknown"
 )
 
 func (s RefState) String() string {
 	switch s {
 	case RefStateSynced:
-		return "synced"
+		return stateStrSynced
 	case RefStateAhead:
 		return "ahead"
 	case RefStateBehind:
@@ -39,9 +50,9 @@ func (s RefState) String() string {
 	case RefStateGone:
 		return "gone"
 	case RefStateUnknown:
-		return "unknown"
+		return stateStrUnknown
 	default:
-		return "unknown"
+		return stateStrUnknown
 	}
 }
 
@@ -222,9 +233,9 @@ func All() []Backend {
 //
 //nolint:ireturn // returning interface is intentional for plugin architecture
 func ByName(name string) (Backend, error) {
-	for _, b := range registry {
-		if b.Name() == name {
-			return b, nil
+	for _, be := range registry {
+		if be.Name() == name {
+			return be, nil
 		}
 	}
 
@@ -269,14 +280,14 @@ func DetectAll(path string) ([]Backend, error) {
 
 	var matched []Backend
 
-	for _, b := range registry {
-		ok, err := b.Detect(abs)
+	for _, backendEntry := range registry {
+		ok, err := backendEntry.Detect(abs)
 		if err != nil {
-			return nil, fmt.Errorf("backend %q detect: %w", b.Name(), err)
+			return nil, fmt.Errorf("backend %q detect: %w", backendEntry.Name(), err)
 		}
 
 		if ok {
-			matched = append(matched, b)
+			matched = append(matched, backendEntry)
 		}
 	}
 

@@ -35,14 +35,17 @@ func setupTestConfig(t *testing.T, cfg config.Config) string {
 
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
+
 	old := os.Stdout
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
+
 	os.Stdout = w
 
 	pterm.SetDefaultOutput(w)
 
 	fn()
+
 	_ = w.Close()
 
 	pterm.SetDefaultOutput(old)
@@ -115,7 +118,7 @@ func TestVcsArgs(t *testing.T) {
 		{"no special args", []string{"status", "-s"}, []string{"status", "-s"}},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run(tt.name, func(_ *testing.T) {
 			// These tests document expected vcsArgs behavior.
 			// The actual vcsArgs function is tested through integration tests.
 			_ = tt.want // suppress unused warning
@@ -136,8 +139,18 @@ func TestFilterMatching(t *testing.T) {
 		backend   string
 		wantNames []string
 	}{
-		{"git backend", []string{"gitrepo", "jjrepo", "bothrepo"}, "git", []string{"gitrepo", "bothrepo"}},
-		{"jj backend", []string{"gitrepo", "jjrepo", "bothrepo"}, "jj", []string{"jjrepo", "bothrepo"}},
+		{
+			"git backend",
+			[]string{"gitrepo", "jjrepo", "bothrepo"},
+			"git",
+			[]string{"gitrepo", "bothrepo"},
+		},
+		{
+			"jj backend",
+			[]string{"gitrepo", "jjrepo", "bothrepo"},
+			"jj",
+			[]string{"jjrepo", "bothrepo"},
+		},
 		{"nonexistent repo", []string{"gitrepo", "unknown"}, "git", []string{"gitrepo"}},
 		{"empty names", nil, "git", nil},
 		{"no match", []string{"jjrepo"}, "git", nil},
@@ -159,7 +172,10 @@ func TestRepoAddAndList(t *testing.T) {
 	app := NewApp()
 
 	// Add a repo
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "add", "--name", "mygit", gitDir})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "add", "--name", "mygit", gitDir},
+	)
 	require.NoError(t, err)
 
 	// List repos
@@ -172,6 +188,7 @@ func TestRepoAddAndList(t *testing.T) {
 	// Verify the repo was added with the custom name
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
+
 	_, ok := cfg.Repos["mygit"]
 	assert.True(t, ok)
 }
@@ -185,7 +202,10 @@ func TestRepoAddMultiple(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "add", gitDir, jjDir})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "add", gitDir, jjDir},
+	)
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -231,7 +251,10 @@ func TestRepoRemove(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	// Remove the repo
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rm", "myrepo"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rm", "myrepo"},
+	)
 	require.NoError(t, err)
 
 	// Verify it's gone
@@ -266,7 +289,10 @@ func TestRepoRemoveUnknown(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rm", "unknown"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rm", "unknown"},
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUnknownRepo)
 }
@@ -283,11 +309,15 @@ func TestRepoRename(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename", "oldname", "newname"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rename", "oldname", "newname"},
+	)
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
+
 	_, ok := cfg.Repos["newname"]
 	assert.True(t, ok)
 	_, ok = cfg.Repos["oldname"]
@@ -306,7 +336,10 @@ func TestRepoRenameUsageError(t *testing.T) {
 	require.ErrorIs(t, err, errRepoRenameUsage)
 
 	// One arg
-	err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename", "onlyone"})
+	err = app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rename", "onlyone"},
+	)
 	require.ErrorIs(t, err, errRepoRenameUsage)
 }
 
@@ -317,7 +350,10 @@ func TestRepoRenameUnknown(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename", "unknown", "new"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rename", "unknown", "new"},
+	)
 	assert.Error(t, err)
 }
 
@@ -334,7 +370,10 @@ func TestRepoRenameExists(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename", "repo1", "repo2"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "rename", "repo1", "repo2"},
+	)
 	assert.ErrorIs(t, err, errRepoExists)
 }
 
@@ -349,7 +388,10 @@ func TestGroupAddAndList(t *testing.T) {
 	app := NewApp()
 
 	// Add a group
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "add", "work", "repo1", "repo2"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "add", "work", "repo1", "repo2"},
+	)
 	require.NoError(t, err)
 
 	// List groups
@@ -375,11 +417,15 @@ func TestGroupRemove(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "rm", "work"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "rm", "work"},
+	)
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
+
 	_, ok := cfg.Groups["work"]
 	assert.False(t, ok)
 }
@@ -397,7 +443,10 @@ func TestContextSetAndShow(t *testing.T) {
 	app := NewApp()
 
 	// Set context
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "set", "work"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "context", "set", "work"},
+	)
 	require.NoError(t, err)
 
 	// Show context
@@ -443,6 +492,7 @@ func TestDetectBackends(t *testing.T) {
 	if err != nil {
 		t.Skip("git backend not registered in test context")
 	}
+
 	assert.NotEmpty(t, backends)
 	assert.Equal(t, "git", backends[0])
 }
@@ -548,7 +598,10 @@ func TestRepoRefreshAll(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "refresh", "--all"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "refresh", "--all"},
+	)
 	assert.NoError(t, err)
 }
 
@@ -564,7 +617,10 @@ func TestRepoRefreshSpecific(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "refresh", "myrepo"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "refresh", "myrepo"},
+	)
 	assert.NoError(t, err)
 }
 
@@ -597,7 +653,10 @@ func TestRepoLsWithGroupFilter(t *testing.T) {
 	app := NewApp()
 	stdout := captureStdout(t, func() {
 		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "work"})
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "work"},
+		)
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "repo1")
@@ -611,6 +670,9 @@ func TestRepoLsUnknownGroup(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "unknown"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "unknown"},
+	)
 	assert.Error(t, err)
 }

@@ -12,8 +12,23 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/pterm/pterm"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/urfave/cli/v3"
+)
+
+const (
+	percentDivisor     = 100 // divisor for percentage calculations
+	minStatusWidth     = 20  // minimum width for status column
+	separatorsBasic    = 2   // number of separators in basic view
+	separatorsDetailed = 3   // number of separators in detailed view
+	colName            = 1   // column number for repo name
+	colVCS             = 2   // column number for VCS type
+	colStatus          = 3   // column number for status
+	colMsg             = 4   // column number for message
+	minNameWidth       = 15  // minimum width for name column
+	cmdNameGit         = "git"
+	cmdNameShell       = "shell"
 )
 
 var (
@@ -47,7 +62,12 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 		}
 	}
 
-	return cfg.ResolveScope(names) //nolint:wrapcheck
+	names, err := cfg.ResolveScope(names)
+	if err != nil {
+		return nil, fmt.Errorf("resolving scope: %w", err)
+	}
+
+	return names, nil
 }
 
 func vcsArgs(cmd *cli.Command, cfg *config.Config) []string {
@@ -78,13 +98,13 @@ func isInteractive(vcsArgs []string, interactive []string) bool {
 
 func gitCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:            "git",
+		Name:            cmdNameGit,
 		Usage:           "run a git command across repos",
 		ArgsUsage:       "[repo|group...] -- <git args>",
 		SkipFlagParsing: false,
 		Flags:           dispatchFlags,
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runDispatch(ctx, cmd, cfgPath, "git")
+			return runDispatch(ctx, cmd, cfgPath, cmdNameGit)
 		},
 	}
 }
@@ -153,7 +173,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 
 func shellCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "shell",
+		Name:      cmdNameShell,
 		Usage:     "run an arbitrary shell command across repos",
 		ArgsUsage: "[repo|group...] -- <shell command>",
 		Flags:     dispatchFlags,
@@ -228,7 +248,7 @@ func llCmd(cfgPath *string) *cli.Command {
 			}
 
 			if len(names) == 0 {
-				pterm.Println("no repos tracked")
+				ui.Outf("no repos tracked")
 
 				return nil
 			}
@@ -337,7 +357,7 @@ func progressiveDispatch(
 	cmdLabel string,
 	dispatch func(resultCh chan<- runner.Result),
 ) error {
-	pterm.DefaultHeader.Println(cmdLabel)
+	ui.Outf(cmdLabel)
 
 	resultCh := make(chan runner.Result, len(names))
 	go dispatch(resultCh)
@@ -352,17 +372,7 @@ func progressiveDispatch(
 	done := 0
 
 	for res := range resultCh {
-		pterm.Println(ui.RenderDispatchResult(res))
-
-		if res.Err != nil {
-			pterm.FgLightRed.Println("  " + res.Err.Error())
-		} else if res.Output != "" {
-			for line := range strings.SplitSeq(strings.TrimRight(res.Output, "\n"), "\n") {
-				pterm.Println("  " + line)
-			}
-		}
-
-		pterm.Println()
+		printDispatchResult(res)
 
 		results[resultIdx[res.RepoName]] = res
 
@@ -381,13 +391,27 @@ func progressiveDispatch(
 	}
 
 	if len(errs) > 0 {
-		pterm.Error.Printf("failed: %s\n", strings.Join(errs, ", "))
+		ui.Fail("failed: %s", strings.Join(errs, ", "))
 	}
 
 	success := len(names) - len(errs)
-	pterm.Success.Printf("%d/%d repos completed successfully\n", success, len(names))
+	ui.Success("%d/%d repos completed successfully", success, len(names))
 
 	return nil
+}
+
+func printDispatchResult(res runner.Result) {
+	ui.Outf(ui.RenderDispatchResult(res))
+
+	if res.Err != nil {
+		ui.Errf("%s", res.Err)
+	} else if res.Output != "" {
+		for line := range strings.SplitSeq(strings.TrimRight(res.Output, "\n"), "\n") {
+			ui.Outf("  " + line)
+		}
+	}
+
+	ui.Outf("")
 }
 
 func progressiveStatus(
@@ -424,19 +448,82 @@ func progressiveStatus(
 		return idxI < idxJ
 	})
 
-	tableData := pterm.TableData{
-		{"NAME", "VCS", "STATUS"},
-	}
-	if details {
-		tableData[0] = append(tableData[0], "DETAILS")
+	tbl := ui.NewTable()
+
+	colConfigs, header := statusTableConfig(details)
+	tbl.AppendHeader(header)
+	tbl.SetColumnConfigs(colConfigs)
+
+	appendStatusRows(tbl, results, vcsByName, details)
+
+	tbl.Render()
+
+	return nil
+}
+
+func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
+	const vcsWidth = 3
+
+	var namePercent, statusPercent int
+
+	if !details {
+		namePercent = 25
+		statusPercent = 75
+	} else {
+		namePercent = 20
+		statusPercent = 37
 	}
 
+	termWidth := ui.GetTermWidth()
+	nameWidth := max(termWidth*namePercent/percentDivisor, minNameWidth)
+	namePlusStatusWidth := termWidth * (namePercent + statusPercent) / percentDivisor
+	statusWidth := ui.ComputeRemainderWidth(
+		namePlusStatusWidth,
+		minStatusWidth,
+		separatorsBasic,
+		nameWidth,
+		vcsWidth,
+	)
+
+	header := table.Row{"NAME", "VCS", "STATUS"}
+
+	colConfigs := []table.ColumnConfig{
+		{Number: colName, WidthMax: nameWidth, WidthMaxEnforcer: ui.Truncate},
+		{Number: colVCS, WidthMax: vcsWidth, WidthMaxEnforcer: ui.Truncate},
+		{Number: colStatus, WidthMax: statusWidth},
+	}
+
+	if details {
+		header = append(header, "MSG")
+
+		msgWidth := ui.ComputeRemainderWidth(
+			termWidth,
+			minStatusWidth,
+			separatorsDetailed,
+			nameWidth,
+			vcsWidth,
+			statusWidth,
+		)
+		colConfigs = append(colConfigs, table.ColumnConfig{
+			Number: colMsg, WidthMax: msgWidth, WidthMaxEnforcer: ui.Wrap,
+		})
+	}
+
+	return colConfigs, header
+}
+
+func appendStatusRows(
+	tbl table.Writer,
+	results []runner.StatusResult,
+	vcsByName map[string]string,
+	details bool,
+) {
 	for _, res := range results {
 		if res.Err != nil {
-			tableData = append(tableData, []string{
+			tbl.AppendRow(table.Row{
 				res.RepoName,
 				vcsByName[res.RepoName],
-				pterm.FgLightRed.Sprintf("error: %s", res.Err),
+				ui.ColorSprint(text.Colors{text.FgRed}, fmt.Sprintf("%v", res.Err)),
 			})
 
 			continue
@@ -457,86 +544,96 @@ func progressiveStatus(
 		var symbols []string
 
 		for _, bookmark := range status.Bookmarks {
-			switch bookmark.State {
-			case backend.RefStateSynced:
-				symbols = append(symbols, "✓")
-			case backend.RefStateAhead:
-				symbols = append(symbols, pterm.FgLightBlue.Sprintf("↑%d", bookmark.Ahead))
-			case backend.RefStateBehind:
-				symbols = append(symbols, pterm.FgYellow.Sprintf("↓%d", bookmark.Behind))
-			case backend.RefStateDiverged:
-				symbols = append(
-					symbols,
-					pterm.FgLightRed.Sprintf("↑%d↓%d", bookmark.Ahead, bookmark.Behind),
-				)
-			case backend.RefStateGone:
-				symbols = append(symbols, "✗")
-			case backend.RefStateNoRemote:
-				symbols = append(symbols, "∅")
-			case backend.RefStateUnknown:
-				symbols = append(symbols, "?")
-			}
-
-			if bookmark.Conflict {
-				symbols = append(symbols, pterm.FgLightRed.Sprint("!"))
-			}
+			symbols = append(symbols, bookmarkSymbols(bookmark)...)
 		}
 
 		if status.Dirty {
-			symbols = append(symbols, pterm.FgYellow.Sprint("*"))
+			symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgYellow}, "*"))
 		}
 
 		symStr := strings.Join(symbols, "")
 
-		var situColor func(a ...any) string
+		situColor := statusColor(status.OverallState)
 
-		switch status.OverallState {
-		case backend.RefStateSynced:
-			situColor = pterm.FgGreen.Sprint
-		case backend.RefStateAhead:
-			situColor = pterm.FgLightBlue.Sprint
-		case backend.RefStateBehind:
-			situColor = pterm.FgYellow.Sprint
-		case backend.RefStateDiverged:
-			situColor = pterm.FgLightRed.Sprint
-		case backend.RefStateGone:
-			situColor = pterm.FgGray.Sprint
-		case backend.RefStateNoRemote:
-			situColor = pterm.FgGray.Sprint
-		case backend.RefStateUnknown:
-			situColor = pterm.FgGray.Sprint
-		default:
-			situColor = pterm.FgGray.Sprint
-		}
-
-		combined := situColor(fmt.Sprintf("%s %s", statusStr, symStr))
-		row := []string{
+		combined := situColor.Sprintf("%s %s", statusStr, symStr)
+		row := []any{
 			res.RepoName,
 			vcs,
 			combined,
 		}
 
 		if details {
-			detail := ""
-			if res.Status.CommitMsg != "" {
-				detail = res.Status.CommitMsg
-			}
-
-			if res.Status.CommitTime != "" {
-				if detail != "" {
-					detail += " " + res.Status.CommitTime
-				} else {
-					detail = res.Status.CommitTime
-				}
-			}
-
-			row = append(row, detail)
+			row = append(row, formatDetail(res.Status.CommitMsg, res.Status.CommitTime))
 		}
 
-		tableData = append(tableData, row)
+		tbl.AppendRow(row)
+	}
+}
+
+func bookmarkSymbols(bookmark backend.BookmarkStatus) []string {
+	var symbols []string
+
+	switch bookmark.State {
+	case backend.RefStateSynced:
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgGreen}, "✓"))
+	case backend.RefStateAhead:
+		symbols = append(
+			symbols,
+			ui.ColorSprint(text.Colors{text.FgBlue}, fmt.Sprintf("↑%d", bookmark.Ahead)),
+		)
+	case backend.RefStateBehind:
+		symbols = append(
+			symbols,
+			ui.ColorSprint(text.Colors{text.FgYellow}, fmt.Sprintf("↓%d", bookmark.Behind)),
+		)
+	case backend.RefStateDiverged:
+		symbols = append(
+			symbols,
+			ui.ColorSprint(
+				text.Colors{text.FgRed},
+				fmt.Sprintf("↑%d↓%d", bookmark.Ahead, bookmark.Behind),
+			),
+		)
+	case backend.RefStateGone:
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "✗"))
+	case backend.RefStateNoRemote:
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "∅"))
+	case backend.RefStateUnknown:
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgHiBlack}, "?"))
 	}
 
-	_ = pterm.DefaultTable.WithHasHeader(true).WithData(tableData).Render()
+	if bookmark.Conflict {
+		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgRed}, "!"))
+	}
 
-	return nil
+	return symbols
+}
+
+func statusColor(state backend.RefState) text.Colors {
+	switch state {
+	case backend.RefStateSynced:
+		return text.Colors{text.FgGreen}
+	case backend.RefStateAhead:
+		return text.Colors{text.FgBlue}
+	case backend.RefStateBehind:
+		return text.Colors{text.FgYellow}
+	case backend.RefStateDiverged:
+		return text.Colors{text.FgRed}
+	case backend.RefStateGone, backend.RefStateNoRemote, backend.RefStateUnknown:
+		return text.Colors{text.FgHiBlack}
+	default:
+		return text.Colors{text.FgHiBlack}
+	}
+}
+
+func formatDetail(msg, time string) string {
+	if msg == "" {
+		return time
+	}
+
+	if time == "" {
+		return msg
+	}
+
+	return msg + " " + time
 }

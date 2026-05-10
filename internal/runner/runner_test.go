@@ -5,28 +5,34 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	if len(backend.All()) == 0 {
 		backend.Register(&gitBackend{})
 	}
+
 	os.Exit(m.Run())
 }
 
 type gitBackend struct{}
 
-func (g *gitBackend) Name() string                     { return "git" }
-func (g *gitBackend) Detect(path string) (bool, error) { return false, nil }
-func (g *gitBackend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
+func (g *gitBackend) Name() string                  { return "git" }
+func (g *gitBackend) Detect(_ string) (bool, error) { return false, nil }
+func (g *gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
-func (g *gitBackend) Run(ctx context.Context, path string, args []string, interactive bool) (backend.RunResult, error) {
+
+func (g *gitBackend) Run(
+	_ context.Context,
+	_ string,
+	_ []string,
+	_ bool,
+) (backend.RunResult, error) {
 	return backend.RunResult{}, nil
 }
 
@@ -53,6 +59,7 @@ func TestDispatch(t *testing.T) {
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -61,7 +68,14 @@ func TestDispatch_UnknownBackend(t *testing.T) {
 		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
 	}
 
-	_, err := Dispatch(context.Background(), repos, []string{"r1"}, "unknown", []string{"status"}, 1)
+	_, err := Dispatch(
+		context.Background(),
+		repos,
+		[]string{"r1"},
+		"unknown",
+		[]string{"status"},
+		1,
+	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown backend")
 }
@@ -69,7 +83,14 @@ func TestDispatch_UnknownBackend(t *testing.T) {
 func TestDispatch_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch, err := Dispatch(context.Background(), repos, []string{"nonexistent"}, "git", []string{"status"}, 1)
+	ch, err := Dispatch(
+		context.Background(),
+		repos,
+		[]string{"nonexistent"},
+		"git",
+		[]string{"status"},
+		1,
+	)
 	require.NoError(t, err)
 
 	results := collectResults(ch)
@@ -84,10 +105,12 @@ func TestVCS(t *testing.T) {
 	}
 
 	ch := VCS(context.Background(), repos, []string{"r1"}, "status", 1)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -107,10 +130,12 @@ func TestVCSArgs(t *testing.T) {
 	}
 
 	ch := VCSArgs(context.Background(), repos, []string{"r1"}, "log", []string{"--oneline"}, 1)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -120,10 +145,12 @@ func TestStatus(t *testing.T) {
 	}
 
 	ch := Status(context.Background(), repos, []string{"r1"}, 1)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -133,10 +160,12 @@ func TestDiff(t *testing.T) {
 	}
 
 	ch := Diff(context.Background(), repos, []string{"r1"}, 1)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -179,10 +208,12 @@ func TestGatherStatus(t *testing.T) {
 	}
 
 	ch := GatherStatus(context.Background(), repos, []string{"r1"}, 1)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 1, count)
 }
 
@@ -208,13 +239,21 @@ func TestDispatch_MultipleRepos(t *testing.T) {
 		"r2": {Path: "/tmp/r2", Backends: []string{"git"}},
 	}
 
-	ch, err := Dispatch(context.Background(), repos, []string{"r1", "r2"}, "git", []string{"status"}, 2)
+	ch, err := Dispatch(
+		context.Background(),
+		repos,
+		[]string{"r1", "r2"},
+		"git",
+		[]string{"status"},
+		2,
+	)
 	require.NoError(t, err)
 
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 2, count)
 }
 
@@ -225,10 +264,12 @@ func TestVCS_MultipleRepos(t *testing.T) {
 	}
 
 	ch := VCS(context.Background(), repos, []string{"r1", "r2"}, "status", 2)
+
 	count := 0
 	for range ch {
 		count++
 	}
+
 	assert.Equal(t, 2, count)
 }
 

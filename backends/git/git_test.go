@@ -278,6 +278,7 @@ func TestBackend_Run_NonExecutablePath(t *testing.T) {
 
 func runGitCmd(t *testing.T, dir string, args []string) {
 	t.Helper()
+
 	_, err := runGit(context.Background(), dir, args)
 	require.NoError(t, err)
 }

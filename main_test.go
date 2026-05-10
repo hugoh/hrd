@@ -14,6 +14,7 @@ func TestMainRun(t *testing.T) {
 	assert.NotNil(t, app)
 
 	var stdout, stderr bytes.Buffer
+
 	app.Writer = &stdout
 	app.ErrWriter = &stderr
 

@@ -16,11 +16,31 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 
 ## Install
 
+### Homebrew (macOS/Linux)
+
+```sh
+brew install hugoh/tap/hrd
+```
+
+### Linux (deb/rpm)
+
+Download the `.deb` or `.rpm` from the [releases page](https://github.com/hugoh/hrd/releases) and install with your package manager:
+
+```sh
+# Debian/Ubuntu
+sudo apt install ./hrd_*.deb
+
+# RHEL/Fedora
+sudo dnf install ./hrd_*.rpm
+```
+
+### Go install
+
 ```sh
 go install github.com/hugoh/hrd@latest
 ```
 
-Or build from source:
+### From source
 
 ```sh
 git clone https://github.com/hugoh/hrd

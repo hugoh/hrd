@@ -178,6 +178,7 @@ func runVCSCore(
 
 	var buf bytes.Buffer
 
+	//nolint:gosec // controlled command execution, args from user input
 	execCmd := exec.CommandContext(
 		ctx,
 		bin,
@@ -285,12 +286,13 @@ func runShellCore(
 
 	var buf bytes.Buffer
 
+	//nolint:gosec // shell command execution, intentionally runs user shell commands
 	cmd := exec.CommandContext(
 		ctx,
 		"sh",
 		"-c",
 		shellCmd,
-	) //nolint:gosec // shell command from trusted config
+	)
 	cmd.Dir = repo.Path
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf

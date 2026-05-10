@@ -15,6 +15,13 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 )
 
+const (
+	abPartsCount = 2      // number of parts in "branch.ab +<ahead> -<behind>"
+	gitBin       = "git"  // git binary name
+	headRef      = "HEAD" // HEAD reference name
+	logCmd       = "log"  // log command name
+)
+
 // Backend implements backend.Backend for git repositories.
 type Backend struct{}
 
@@ -45,17 +52,17 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
 	}
 
-	st := parseStatus(out)
+	status := parseStatus(out)
 
-	msgOut, _ := runGit(ctx, path, []string{"show-branch", "--no-name", "HEAD"})
-	st.CommitMsg = strings.TrimSpace(msgOut)
+	msgOut, _ := runGit(ctx, path, []string{"show-branch", "--no-name", headRef})
+	status.CommitMsg = strings.TrimSpace(msgOut)
 
-	timeOut, _ := runGit(ctx, path, []string{"log", "-1", "--format=%cd", "--date=relative"})
+	timeOut, _ := runGit(ctx, path, []string{logCmd, "-1", "--format=%cd", "--date=relative"})
 	if t := strings.TrimSpace(timeOut); t != "" {
-		st.CommitTime = "(" + t + ")"
+		status.CommitTime = "(" + t + ")"
 	}
 
-	return st, nil
+	return status, nil
 }
 
 // Run executes arbitrary git args in path.
@@ -66,7 +73,11 @@ func (b *Backend) Run(
 	interactive bool,
 ) (backend.RunResult, error) {
 	if interactive {
-		cmd := exec.CommandContext(ctx, "git", args...) //nolint:gosec // git binary from trusted config
+		//nolint:gosec // controlled command execution, args from user input
+		cmd := exec.CommandContext(
+			ctx,
+			gitBin,
+			args...)
 		cmd.Dir = path
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -87,6 +98,7 @@ func (b *Backend) Run(
 
 	var buf bytes.Buffer
 
+	//nolint:gosec // controlled command execution, args from user input
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = path
 	cmd.Stdout = &buf
@@ -111,6 +123,7 @@ func (b *Backend) Run(
 func runGit(ctx context.Context, path string, args []string) (string, error) {
 	var buf bytes.Buffer
 
+	//nolint:gosec // internal git command execution
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = path
 	cmd.Stdout = &buf
@@ -134,57 +147,76 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 //	# branch.upstream <remote/branch>  remote tracking ref
 //	# branch.ab +<ahead> -<behind>     commit delta
 func parseStatus(raw string) backend.RepoStatus {
-	var st backend.RepoStatus
+	var status backend.RepoStatus
 
-	bm := backend.BookmarkStatus{}
+	bookmark := backend.BookmarkStatus{}
 
 	var ahead, behind int
 
 	hasUpstream := false
 
 	for line := range strings.SplitSeq(raw, "\n") {
-		switch {
-		case strings.HasPrefix(line, "# branch.head "):
-			name := strings.TrimPrefix(line, "# branch.head ")
-			st.Ref = name
-			bm.Name = name
+		if name, ok := strings.CutPrefix(line, "# branch.head "); ok {
+			status.Ref = name
+			bookmark.Name = name
 
-		case strings.HasPrefix(line, "# branch.upstream "):
-			upstream := strings.TrimPrefix(line, "# branch.upstream ")
-			// upstream is "origin/main" — split on first "/"
-			if before, _, ok := strings.Cut(upstream, "/"); ok {
-				bm.Remote = before
-			} else {
-				bm.Remote = upstream
-			}
+			continue
+		}
+
+		if upstream, ok := strings.CutPrefix(line, "# branch.upstream "); ok {
+			handleUpstream(&bookmark, upstream)
 
 			hasUpstream = true
 
-		case strings.HasPrefix(line, "# branch.ab "):
-			// Format: +<ahead> -<behind>
-			parts := strings.Fields(strings.TrimPrefix(line, "# branch.ab "))
-			if len(parts) == 2 {
-				ahead, _ = strconv.Atoi(strings.TrimPrefix(parts[0], "+"))
-				behind, _ = strconv.Atoi(strings.TrimPrefix(parts[1], "-"))
-			}
+			continue
+		}
 
-		case len(line) > 0 && line[0] != '#':
-			st.Dirty = true
+		if ab, ok := strings.CutPrefix(line, "# branch.ab "); ok {
+			ahead, behind = handleAheadBehind(ab)
+
+			continue
+		}
+
+		if len(line) > 0 && line[0] != '#' {
+			status.Dirty = true
 		}
 	}
 
 	if hasUpstream {
-		bm.Ahead = ahead
-		bm.Behind = behind
+		bookmark.Ahead = ahead
+		bookmark.Behind = behind
 	}
 
-	if bm.Name != "" {
-		backend.ComputeBookmarkState(&bm)
-		st.Bookmarks = []backend.BookmarkStatus{bm}
+	if bookmark.Name != "" {
+		backend.ComputeBookmarkState(&bookmark)
+		status.Bookmarks = []backend.BookmarkStatus{bookmark}
 	}
-	st.OverallState = backend.WorstState(st.Bookmarks, st.Conflict)
 
-	return st
+	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
+
+	return status
+}
+
+func handleUpstream(bookmark *backend.BookmarkStatus, upstream string) {
+	// upstream is "origin/main" — split on first "/"
+	if before, _, ok := strings.Cut(upstream, "/"); ok {
+		bookmark.Remote = before
+	} else {
+		bookmark.Remote = upstream
+	}
+}
+
+func handleAheadBehind(ab string) (int, int) {
+	// Format: +<ahead> -<behind>
+	var ahead, behind int
+
+	parts := strings.Fields(ab)
+	if len(parts) == abPartsCount {
+		ahead, _ = strconv.Atoi(strings.TrimPrefix(parts[0], "+"))
+		behind, _ = strconv.Atoi(strings.TrimPrefix(parts[1], "-"))
+	}
+
+	return ahead, behind
 }
 
 // Register registers the git backend with the backend registry.

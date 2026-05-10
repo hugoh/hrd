@@ -39,7 +39,11 @@ func TestComputeBookmarkState(t *testing.T) {
 	}{
 		{"no remote", BookmarkStatus{Remote: ""}, RefStateNoRemote},
 		{"conflict overrides", BookmarkStatus{Conflict: true, Remote: "origin"}, RefStateDiverged},
-		{"ahead and behind", BookmarkStatus{Remote: "origin", Ahead: 2, Behind: 1}, RefStateDiverged},
+		{
+			"ahead and behind",
+			BookmarkStatus{Remote: "origin", Ahead: 2, Behind: 1},
+			RefStateDiverged,
+		},
 		{"ahead only", BookmarkStatus{Remote: "origin", Ahead: 3, Behind: 0}, RefStateAhead},
 		{"behind only", BookmarkStatus{Remote: "origin", Ahead: 0, Behind: 5}, RefStateBehind},
 		{"synced", BookmarkStatus{Remote: "origin", Ahead: 0, Behind: 0}, RefStateSynced},
@@ -62,12 +66,34 @@ func TestWorstState(t *testing.T) {
 	}{
 		{"empty bookmarks", nil, false, RefStateNoRemote},
 		{"single synced", []BookmarkStatus{{State: RefStateSynced}}, false, RefStateSynced},
-		{"conflict overrides all", []BookmarkStatus{{State: RefStateSynced}}, true, RefStateDiverged},
-		{"multiple picks worst",
-			[]BookmarkStatus{{State: RefStateSynced}, {State: RefStateAhead}, {State: RefStateBehind}},
-			false, RefStateBehind},
-		{"diverged is worst", []BookmarkStatus{{State: RefStateSynced}, {State: RefStateDiverged}}, false, RefStateDiverged},
-		{"gone equals diverged rank", []BookmarkStatus{{State: RefStateGone}, {State: RefStateSynced}}, false, RefStateGone},
+		{
+			"conflict overrides all",
+			[]BookmarkStatus{{State: RefStateSynced}},
+			true,
+			RefStateDiverged,
+		},
+		{
+			"multiple picks worst",
+			[]BookmarkStatus{
+				{State: RefStateSynced},
+				{State: RefStateAhead},
+				{State: RefStateBehind},
+			},
+			false,
+			RefStateBehind,
+		},
+		{
+			"diverged is worst",
+			[]BookmarkStatus{{State: RefStateSynced}, {State: RefStateDiverged}},
+			false,
+			RefStateDiverged,
+		},
+		{
+			"gone equals diverged rank",
+			[]BookmarkStatus{{State: RefStateGone}, {State: RefStateSynced}},
+			false,
+			RefStateGone,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -84,10 +110,16 @@ type mockBackend struct {
 
 func (m *mockBackend) Name() string                     { return m.name }
 func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
-func (m *mockBackend) Status(ctx context.Context, path string) (RepoStatus, error) {
+func (m *mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
 	return RepoStatus{}, nil
 }
-func (m *mockBackend) Run(ctx context.Context, path string, args []string, interactive bool) (RunResult, error) {
+
+func (m *mockBackend) Run(
+	_ context.Context,
+	_ string,
+	_ []string,
+	_ bool,
+) (RunResult, error) {
 	return RunResult{}, nil
 }
 
@@ -119,6 +151,7 @@ func TestAll(t *testing.T) {
 
 	b1 := &mockBackend{name: "a"}
 	b2 := &mockBackend{name: "b"}
+
 	Register(b1)
 	Register(b2)
 
@@ -128,6 +161,7 @@ func TestAll(t *testing.T) {
 	assert.Equal(t, "b", all[1].Name())
 
 	all[0] = &mockBackend{name: "hacked"}
+
 	assert.Equal(t, "a", registry[0].Name())
 }
 
@@ -154,8 +188,13 @@ func TestDetectAll_NoMatch(t *testing.T) {
 	defer func() { registry = orig }()
 
 	registry = nil
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, nil }})
-	Register(&mockBackend{name: "jj", detect: func(path string) (bool, error) { return false, nil }})
+
+	Register(
+		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
+	)
+	Register(
+		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	_, err := DetectAll("/nonexistent")
 	assert.Error(t, err)
@@ -168,8 +207,16 @@ func TestDetect_Match(t *testing.T) {
 	registry = nil
 
 	dir := t.TempDir()
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return path == dir, nil }})
-	Register(&mockBackend{name: "jj", detect: func(path string) (bool, error) { return false, nil }})
+
+	Register(
+		&mockBackend{
+			name:   "git",
+			detect: func(path string) (bool, error) { return path == dir, nil },
+		},
+	)
+	Register(
+		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	b, err := Detect(dir)
 	require.NoError(t, err)
@@ -182,7 +229,9 @@ func TestDetect_NoMatch(t *testing.T) {
 
 	registry = nil
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, nil }})
+	Register(
+		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	_, err := Detect("/nonexistent")
 	require.Error(t, err)
@@ -195,7 +244,12 @@ func TestDetect_ErrorFromDetect(t *testing.T) {
 
 	registry = nil
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, assert.AnError }})
+	Register(
+		&mockBackend{
+			name:   "git",
+			detect: func(_ string) (bool, error) { return false, assert.AnError },
+		},
+	)
 
 	_, err := Detect("/tmp")
 	require.Error(t, err)
@@ -209,8 +263,16 @@ func TestDetectAll_Match(t *testing.T) {
 	registry = nil
 
 	dir := t.TempDir()
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return path == dir, nil }})
-	Register(&mockBackend{name: "jj", detect: func(path string) (bool, error) { return false, nil }})
+
+	Register(
+		&mockBackend{
+			name:   "git",
+			detect: func(path string) (bool, error) { return path == dir, nil },
+		},
+	)
+	Register(
+		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	matched, err := DetectAll(dir)
 	require.NoError(t, err)
@@ -225,8 +287,19 @@ func TestDetectAll_MultipleMatches_JjFirst(t *testing.T) {
 	registry = nil
 
 	dir := t.TempDir()
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return path == dir, nil }})
-	Register(&mockBackend{name: "jj", detect: func(path string) (bool, error) { return path == dir, nil }})
+
+	Register(
+		&mockBackend{
+			name:   "git",
+			detect: func(path string) (bool, error) { return path == dir, nil },
+		},
+	)
+	Register(
+		&mockBackend{
+			name:   "jj",
+			detect: func(path string) (bool, error) { return path == dir, nil },
+		},
+	)
 
 	matched, err := DetectAll(dir)
 	require.NoError(t, err)
@@ -240,7 +313,12 @@ func TestDetectAll_ErrorFromDetect(t *testing.T) {
 
 	registry = nil
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, assert.AnError }})
+	Register(
+		&mockBackend{
+			name:   "git",
+			detect: func(_ string) (bool, error) { return false, assert.AnError },
+		},
+	)
 
 	_, err := DetectAll("/tmp")
 	require.Error(t, err)
@@ -253,7 +331,9 @@ func TestDetect_PathResolution(t *testing.T) {
 
 	registry = nil
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, nil }})
+	Register(
+		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	_, err := Detect("nonexistent")
 	require.Error(t, err)
@@ -266,7 +346,9 @@ func TestDetectAll_PathResolution(t *testing.T) {
 
 	registry = nil
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) { return false, nil }})
+	Register(
+		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
+	)
 
 	_, err := DetectAll("nonexistent")
 	require.Error(t, err)
@@ -286,6 +368,7 @@ func TestDetectWithRealGitRepo(t *testing.T) {
 	require.NoError(t, err)
 
 	var gitDetected bool
+
 	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) {
 		gitDetected = true
 

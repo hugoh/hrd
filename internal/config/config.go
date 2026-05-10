@@ -17,7 +17,10 @@ var (
 	errUnknownRepo           = errors.New("unknown repo")
 )
 
-const defaultConcurrency = 8
+const (
+	defaultConcurrency = 8
+	defaultDirPerm     = 0o750
+)
 
 // Repo represents a single tracked repository.
 type Repo struct {
@@ -123,22 +126,22 @@ func Load(path string) (Config, error) {
 func Save(path string, cfg Config) (err error) {
 	if err := os.MkdirAll(
 		filepath.Dir(path),
-		0o750, //nolint:mnd // standard dir permission
+		defaultDirPerm,
 	); err != nil {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	f, err := os.Create(path) //nolint:gosec // trusted config path
+	file, err := os.Create(path) //nolint:gosec // trusted config path
 	if err != nil {
 		return fmt.Errorf("creating config file: %w", err)
 	}
 	defer func() {
-		if cerr := f.Close(); err == nil {
+		if cerr := file.Close(); err == nil {
 			err = cerr
 		}
 	}()
 
-	enc := toml.NewEncoder(f)
+	enc := toml.NewEncoder(file)
 	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("encoding config: %w", err)
 	}

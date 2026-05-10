@@ -4,12 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
-	"github.com/pterm/pterm"
+	"github.com/hugoh/hrd/internal/ui"
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/urfave/cli/v3"
+)
+
+const (
+	groupWidth     = 20 // width for group column
+	reposMinWidth  = 20 // minimum width for repos column
+	groupColNumber = 2  // column number for repos
+	cmdNameGroup   = "group"
+	cmdNameAdd     = "add"
+	cmdNameContext = "context"
+	cmdNameSet     = "set"
+	cmdNameShow    = "show"
 )
 
 var (
@@ -22,7 +34,7 @@ var (
 // groupCommands returns the `group` subcommand with its children.
 func groupCommands(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:  "group",
+		Name:  cmdNameGroup,
 		Usage: "manage repo groups",
 		Commands: []*cli.Command{
 			groupAddCmd(cfgPath),
@@ -36,7 +48,7 @@ const minGroupAddArgs = 2
 
 func groupAddCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "add",
+		Name:      cmdNameAdd,
 		Usage:     "create or replace a group",
 		ArgsUsage: "<name> <repo>...",
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -56,7 +68,7 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 				return fmt.Errorf("adding group: %w", err)
 			}
 
-			pterm.Info.Printf("group %q: %s\n", name, strings.Join(repos, ", "))
+			ui.Info("group %q: %s", name, strings.Join(repos, ", "))
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -89,7 +101,7 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 			}
 
 			delete(cfg.Groups, name)
-			pterm.Success.Printf("removed group %q\n", name)
+			ui.Success("removed group %q", name)
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -98,82 +110,52 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 
 func groupListCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:  "ls",
-		Usage: "list groups",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "panel",
-				Aliases: []string{"p"},
-				Usage:   "render groups as panels",
-			},
-		},
+		Name:   "ls",
+		Usage:  "list groups",
 		Action: listGroupsAction(cfgPath),
 	}
 }
 
-func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
+func listGroupsAction(cfgPath *string) func(_ context.Context, _ *cli.Command) error {
+	return func(_ context.Context, _ *cli.Command) error {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
 			return fmt.Errorf("loading config: %w", err)
 		}
 
 		if len(cfg.Groups) == 0 {
-			pterm.Println("no groups defined")
+			ui.Outf("no groups defined")
 
 			return nil
-		}
-
-		if cmd.Bool("panel") {
-			return renderGroupPanels(cfg)
 		}
 
 		return renderGroupTable(cfg)
 	}
 }
 
-func renderGroupPanels(cfg config.Config) error {
-	names := make([]string, 0, len(cfg.Groups))
-	for name := range cfg.Groups {
-		names = append(names, name)
-	}
-
-	sort.Strings(names)
-
-	panels := make(pterm.Panels, 0, len(names))
-
-	for _, name := range names {
-		group := cfg.Groups[name]
-		content := strings.Join(group.Repos, "\n")
-
-		label := name
-		if cfg.Context.Current == name {
-			label += " ●"
-		}
-
-		box := pterm.DefaultBox.WithTitle(label).Sprint(content)
-		panels = append(panels, []pterm.Panel{{Data: box}})
-	}
-
-	_ = pterm.DefaultPanel.WithPanels(panels).Render()
-
-	return nil
-}
-
 func renderGroupTable(cfg config.Config) error {
-	tableData := make(pterm.TableData, 0, 1+len(cfg.Groups))
-	tableData = append(tableData, []string{"GROUP", "REPOS", ""})
+	tbl := ui.NewTable()
+	tbl.AppendHeader(table.Row{"GROUP", "REPOS", ""})
+
+	termWidth := ui.GetTermWidth()
+
+	reposWidth := ui.ComputeRemainderWidth(termWidth, reposMinWidth, 1, groupWidth)
+
+	tbl.SetColumnConfigs([]table.ColumnConfig{
+		{Number: 1, AutoMerge: true, WidthMax: groupWidth},
+		{Number: groupColNumber, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap},
+	})
 
 	for name, group := range cfg.Groups {
 		active := ""
 		if cfg.Context.Current == name {
-			active = "●"
+			active = text.Colors{text.FgGreen}.Sprint("●")
 		}
 
-		tableData = append(tableData, []string{name, strings.Join(group.Repos, ", "), active})
+		tbl.AppendRow(table.Row{name, strings.Join(group.Repos, ", "), active})
 	}
 
-	_ = pterm.DefaultTable.WithHasHeader(true).WithData(tableData).Render()
+	tbl.Render()
 
 	return nil
 }
@@ -181,7 +163,7 @@ func renderGroupTable(cfg config.Config) error {
 // contextCommands returns the `context` subcommand.
 func contextCommands(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:  "context",
+		Name:  cmdNameContext,
 		Usage: "set or clear the active group scope",
 		Commands: []*cli.Command{
 			contextSetCmd(cfgPath),
@@ -193,7 +175,7 @@ func contextCommands(cfgPath *string) *cli.Command {
 
 func contextSetCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      "set",
+		Name:      cmdNameSet,
 		Usage:     "set active context to a group",
 		ArgsUsage: "<group>",
 		Action: func(_ context.Context, cmd *cli.Command) error {
@@ -213,7 +195,7 @@ func contextSetCmd(cfgPath *string) *cli.Command {
 			}
 
 			cfg.Context.Current = name
-			pterm.Success.Printf("context set to %q\n", name)
+			ui.Success("context set to %q", name)
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -232,7 +214,7 @@ func contextClearCmd(cfgPath *string) *cli.Command {
 
 			cfg.Context.Current = ""
 
-			pterm.Println("context cleared")
+			ui.Outf("context cleared")
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -241,7 +223,7 @@ func contextClearCmd(cfgPath *string) *cli.Command {
 
 func contextShowCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:  "show",
+		Name:  cmdNameShow,
 		Usage: "show active context",
 		Action: func(_ context.Context, _ *cli.Command) error {
 			cfg, err := config.Load(*cfgPath)
@@ -250,9 +232,9 @@ func contextShowCmd(cfgPath *string) *cli.Command {
 			}
 
 			if cfg.Context.Current == "" {
-				pterm.Println("context: (all repos)")
+				ui.Outf("all repos")
 			} else {
-				pterm.Printf("context: %s\n", cfg.Context.Current)
+				ui.Outf("context: %s", cfg.Context.Current)
 			}
 
 			return nil

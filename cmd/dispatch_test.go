@@ -38,7 +38,10 @@ func TestShellCmdWithCommand(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"},
+	)
 	assert.NoError(t, err)
 }
 
@@ -51,7 +54,10 @@ func TestShellCmdNoReposMatched(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"},
+	)
 	assert.ErrorIs(t, err, errNoReposMatched)
 }
 
@@ -103,7 +109,10 @@ func TestLlCmdWithDetails(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ll", "--details"})
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ll", "--details"},
+		)
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "repo1")
@@ -123,7 +132,10 @@ func TestLlCmdWithReposFlag(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ll", "--repos", "repo1"})
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "ll", "--repos", "repo1"},
+		)
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "repo1")
@@ -179,7 +191,10 @@ func TestGitCmdNoReposWithBackend(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "--", "status"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "git", "--", "status"},
+	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errNoReposWithBackend)
 }
@@ -196,7 +211,10 @@ func TestGitCmdWithRepos(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "--", "status"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "git", "--", "status"},
+	)
 	assert.NoError(t, err)
 }
 
@@ -213,7 +231,10 @@ func TestGitCmdWithReposFlag(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "--repos", "repo1", "--", "status"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "git", "--repos", "repo1", "--", "status"},
+	)
 	assert.NoError(t, err)
 }
 
@@ -234,7 +255,10 @@ func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "repo1", "repo2", "--", "log"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "git", "repo1", "repo2", "--", "log"},
+	)
 	assert.ErrorIs(t, err, errInteractiveSingle)
 }
 
@@ -271,7 +295,7 @@ func TestGroupListWithPanel(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls", "--panel"})
+		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "work")
@@ -304,7 +328,10 @@ func TestGroupAddTooFewArgs(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "add", "work"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "add", "work"},
+	)
 	assert.ErrorIs(t, err, errGroupAddUsage)
 }
 
@@ -317,7 +344,10 @@ func TestGroupAddUnknownRepo(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "add", "work", "unknown"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "add", "work", "unknown"},
+	)
 	assert.Error(t, err)
 }
 
@@ -349,7 +379,10 @@ func TestGroupRemoveClearsContext(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "rm", "work"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "group", "rm", "work"},
+	)
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -379,7 +412,10 @@ func TestContextSetUnknownGroup(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "set", "unknown"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "context", "set", "unknown"},
+	)
 	assert.ErrorIs(t, err, errUnknownGroup)
 }
 
@@ -391,7 +427,10 @@ func TestContextShowEmpty(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "show"})
+		err := app.Run(
+			context.Background(),
+			[]string{"hrd", "--config", cfgPath, "context", "show"},
+		)
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "all repos")
@@ -444,6 +483,7 @@ func TestProgressiveDispatchMultipleRepos(t *testing.T) {
 	names := []string{"repo1", "repo2"}
 	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
+
 		resultCh <- runner.Result{RepoName: "repo2", Output: "ok", ExitCode: 0}
 	})
 	assert.NoError(t, err)
@@ -453,7 +493,9 @@ func TestProgressiveDispatchMixedResults(t *testing.T) {
 	names := []string{"repo1", "repo2", "repo3"}
 	err := progressiveDispatch(names, "test", func(resultCh chan<- runner.Result) {
 		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
+
 		resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
+
 		resultCh <- runner.Result{RepoName: "repo3", Output: "ok", ExitCode: 0}
 	})
 	assert.NoError(t, err)
@@ -496,10 +538,12 @@ func TestVcsArgs_HandlesDoubleDash(t *testing.T) {
 
 func vcsArgsForTest(cfg config.Config, args []string) []string {
 	var out []string
+
 	for _, arg := range args {
 		if arg == "--" {
 			continue
 		}
+
 		if _, ok := cfg.Repos[arg]; !ok {
 			if _, ok := cfg.Groups[arg]; !ok {
 				out = append(out, arg)
@@ -739,7 +783,10 @@ func TestShellCmdNoRepos(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "shell", "--", "echo test"})
+	err := app.Run(
+		context.Background(),
+		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo test"},
+	)
 	assert.ErrorIs(t, err, errNoReposMatched)
 }
 

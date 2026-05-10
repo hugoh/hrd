@@ -20,10 +20,19 @@ const (
 	ignoreWorkingCopyArg = "--ignore-working-copy"
 	noGraphFlag          = "--no-graph"
 	templateFlag         = "--template"
+	separator            = "\x1f"
+	partsCountMin        = 2 // minimum parts for working copy parsing
+	partsCountSecond     = 2 // index for second part check
+	workingCopyPartCount = 5 // number of parts in working copy output
+	idxDirty             = 2 // index for dirty flag in working copy
+	idxConflict          = 3 // index for conflict flag in working copy
+	idxDescription       = 4 // index for description in working copy
+	idxTimeAgo           = 5 // index for time ago in working copy
+	cmdNameLog           = "log"
 )
 
 //nolint:gochecknoglobals // common jj log flags shared across Status calls
-var logBaseArgs = []string{"log", noGraphFlag, colorNeverFlag}
+var logBaseArgs = []string{cmdNameLog, noGraphFlag, colorNeverFlag}
 
 // Backend implements backend.Backend for jj repositories.
 type Backend struct{}
@@ -71,30 +80,10 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
 	}
 
-	st := parseWorkingCopy(wcOut)
+	status := parseWorkingCopy(wcOut)
 
-	if st.CommitMsg == "" {
-		const parentTmpl = `description.first_line() ++ "` + sep + `" ++ committer.timestamp().ago()`
-
-		parentArgs := append([]string{}, logBaseArgs...)
-		parentArgs = append(parentArgs, "-r", "@-", ignoreWorkingCopyArg, templateFlag, parentTmpl)
-
-		parentOut, _ := runJJ(ctx, path, parentArgs)
-
-		parts := strings.SplitN(
-			strings.TrimRight(parentOut, "\n"),
-			sep,
-			2,
-		)
-		if len(parts) >= 1 {
-			st.CommitMsg = strings.TrimSpace(parts[0])
-		}
-
-		if len(parts) >= 2 { //nolint:mnd // optional second field
-			if t := strings.TrimSpace(parts[1]); t != "" {
-				st.CommitTime = "(" + t + ")"
-			}
-		}
+	if status.CommitMsg == "" {
+		fillCommitMsgFromAncestors(ctx, path, &status)
 	}
 
 	headArgs := append([]string{}, logBaseArgs...)
@@ -108,12 +97,12 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		bmOut, _ := runJJ(ctx, path, []string{
 			"bookmark", "list", "--all-remotes", headName,
 		})
-		st.Bookmarks = parseBookmarks(bmOut)
+		status.Bookmarks = parseBookmarks(bmOut)
 	}
 
-	st.OverallState = backend.WorstState(st.Bookmarks, st.Conflict)
+	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
 
-	return st, nil
+	return status, nil
 }
 
 // Run executes arbitrary jj args in path.
@@ -165,15 +154,17 @@ func (b *Backend) Run(
 	return backend.RunResult{Output: buf.String(), ExitCode: exitCode}, nil
 }
 
-// runJJ is a helper for internal jj queries.
-func runJJ(ctx context.Context, _ string, args []string) (string, error) {
+//nolint:gochecknoglobals // swapped in tests to simulate jj failures
+var runJJ = func(ctx context.Context, path string, args []string) (string, error) {
 	var buf bytes.Buffer
 
+	//nolint:gosec // controlled command execution, args from user input
 	cmd := exec.CommandContext(
 		ctx,
 		"jj",
 		args...,
 	)
+	cmd.Dir = path
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 
@@ -189,32 +180,80 @@ func runJJ(ctx context.Context, _ string, args []string) (string, error) {
 //
 // Fields: changeID \x1f "dirty"|"" \x1f "conflict"|"" \x1f description \x1f time_ago.
 func parseWorkingCopy(raw string) backend.RepoStatus {
-	parts := strings.SplitN(strings.TrimRight(raw, "\n"), "\x1f", 5) //nolint:mnd // 5 fields expected
+	parts := strings.SplitN(
+		strings.TrimRight(raw, "\n"),
+		separator,
+		workingCopyPartCount,
+	)
 
-	var st backend.RepoStatus
+	var status backend.RepoStatus
 	if len(parts) >= 1 {
-		st.Ref = strings.TrimSpace(parts[0])
+		status.Ref = strings.TrimSpace(parts[0])
 	}
 
-	if len(parts) >= 2 { //nolint:mnd // optional field
-		st.Dirty = strings.TrimSpace(parts[1]) == "dirty"
+	if len(parts) >= idxDirty {
+		status.Dirty = strings.TrimSpace(parts[1]) == "dirty"
 	}
 
-	if len(parts) >= 3 { //nolint:mnd // optional field
-		st.Conflict = strings.TrimSpace(parts[2]) == "conflict"
+	if len(parts) >= idxConflict {
+		status.Conflict = strings.TrimSpace(parts[2]) == "conflict"
 	}
 
-	if len(parts) >= 4 { //nolint:mnd // optional field
-		st.CommitMsg = strings.TrimSpace(parts[3])
+	if len(parts) >= idxDescription {
+		status.CommitMsg = strings.TrimSpace(parts[3])
 	}
 
-	if len(parts) >= 5 { //nolint:mnd // optional field
+	if len(parts) >= idxTimeAgo {
 		if t := strings.TrimSpace(parts[4]); t != "" {
-			st.CommitTime = "(" + t + ")"
+			status.CommitTime = "(" + t + ")"
 		}
 	}
 
-	return st
+	return status
+}
+
+// fillCommitMsgFromAncestors walks back through ancestors to find first commit with description.
+func fillCommitMsgFromAncestors(ctx context.Context, path string, status *backend.RepoStatus) {
+	const maxAncestors = 10
+
+	for i := 1; i <= maxAncestors; i++ {
+		rev := "@" + strings.Repeat("-", i)
+
+		const tmpl = `description.first_line() ++ "` + separator + `" ++ committer.timestamp().ago()`
+
+		args := append([]string{}, logBaseArgs...)
+		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, tmpl)
+
+		out, err := runJJ(ctx, path, args)
+		if err != nil {
+			break
+		}
+
+		if msg := extractCommitMsg(out); msg != "" {
+			status.CommitMsg = msg
+
+			if time := extractCommitTime(out); time != "" {
+				status.CommitTime = "(" + time + ")"
+			}
+
+			break
+		}
+	}
+}
+
+func extractCommitMsg(out string) string {
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+	return strings.TrimSpace(parts[0])
+}
+
+func extractCommitTime(out string) string {
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+
+	if len(parts) >= partsCountSecond {
+		return strings.TrimSpace(parts[1])
+	}
+
+	return ""
 }
 
 // parseBookmarks parses `jj bookmark list --all-remotes` output.
@@ -263,31 +302,10 @@ func parseBookmarks(
 			continue
 		}
 
-		isIndented := line[0] == ' ' || line[0] == '\t'
-
-		if !isIndented {
+		if line[0] != ' ' && line[0] != '\t' {
 			flush()
 
-			// Name is everything before the first ":"
-			name := line
-			if before, _, ok := strings.Cut(line, ":"); ok {
-				name = before
-			}
-
-			name = strings.TrimSpace(name)
-
-			if strings.Contains(name, "@") {
-				current = nil
-
-				continue
-			}
-
-			current = &backend.BookmarkStatus{Name: name}
-
-			if strings.Contains(line, "(conflicted)") {
-				current.Conflict = true
-				current.State = backend.RefStateDiverged
-			}
+			current = handleBookmarkLine(line)
 
 			continue
 		}
@@ -296,42 +314,69 @@ func parseBookmarks(
 			continue
 		}
 
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, "@") {
-			continue
-		}
-
-		// "@origin (ahead by 2 commits, behind by 1 commit)"
-		remotePart := strings.TrimPrefix(trimmed, "@")
-
-		remote := remotePart
-		if idx := strings.IndexAny(remotePart, " ("); idx >= 0 {
-			remote = remotePart[:idx]
-		}
-
-		remote = strings.TrimSuffix(remote, ":")
-
-		// Use the first tracking remote only.
-		if current.Remote != "" {
-			continue
-		}
-
-		current.Remote = remote
-
-		if strings.Contains(trimmed, "(gone)") {
-			current.State = backend.RefStateGone
-
-			continue
-		}
-
-		current.Ahead = extractCount(trimmed, "ahead by")
-		current.Behind = extractCount(trimmed, "behind by")
-		backend.ComputeBookmarkState(current)
+		handleRemoteLine(current, line)
 	}
 
 	flush()
 
 	return bookmarks
+}
+
+func handleBookmarkLine(line string) *backend.BookmarkStatus {
+	// Name is everything before the first ":"
+	name := line
+	if before, _, ok := strings.Cut(line, ":"); ok {
+		name = before
+	}
+
+	name = strings.TrimSpace(name)
+
+	if strings.Contains(name, "@") {
+		return nil
+	}
+
+	current := &backend.BookmarkStatus{Name: name}
+
+	if strings.Contains(line, "(conflicted)") {
+		current.Conflict = true
+		current.State = backend.RefStateDiverged
+	}
+
+	return current
+}
+
+func handleRemoteLine(current *backend.BookmarkStatus, line string) {
+	trimmed := strings.TrimSpace(line)
+	if !strings.HasPrefix(trimmed, "@") {
+		return
+	}
+
+	// "@origin (ahead by 2 commits, behind by 1 commit)"
+	remotePart := strings.TrimPrefix(trimmed, "@")
+
+	remote := remotePart
+	if idx := strings.IndexAny(remotePart, " ("); idx >= 0 {
+		remote = remotePart[:idx]
+	}
+
+	remote = strings.TrimSuffix(remote, ":")
+
+	// Use the first tracking remote only.
+	if current.Remote != "" {
+		return
+	}
+
+	current.Remote = remote
+
+	if strings.Contains(trimmed, "(gone)") {
+		current.State = backend.RefStateGone
+
+		return
+	}
+
+	current.Ahead = extractCount(trimmed, "ahead by")
+	current.Behind = extractCount(trimmed, "behind by")
+	backend.ComputeBookmarkState(current)
 }
 
 // extractCount finds "keyword N" in s and returns N.

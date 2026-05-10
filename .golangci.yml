@@ -9,18 +9,7 @@ linters:
     - noinlineerr
     - paralleltest
     - testpackage
-    - varnamelen
-    - gochecknoglobals
-    - cyclop
-    - gocognit
-    - nestif
     - wsl
-    - wsl_v5
-    - funlen
-    - gosec
-    - mnd
-    - revive
-    - goconst
   exclusions:
     rules:
       - path: _test\.go$
@@ -28,9 +17,11 @@ linters:
           - err113
           - noctx
           - varnamelen
-  formatters:
-    enable:
-      - gci
-      - gofumpt
-      - goimports
-      - golines
+          - goconst
+          - gosec
+formatters:
+  enable:
+    - gci
+    - gofumpt
+    - goimports
+    - golines
