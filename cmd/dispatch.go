@@ -21,13 +21,15 @@ const (
 	cmdNameGit   = "git"
 	cmdNameShell = "shell"
 
+	fmtSuccess     = "%d/%d repos completed successfully"
+	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
+)
+
+const (
 	colName = iota + 1
 	colVCS
 	colStatus
 	colMsg
-
-	fmtSuccess     = "%d/%d repos completed successfully"
-	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
 )
 
 var (
