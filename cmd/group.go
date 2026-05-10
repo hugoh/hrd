@@ -87,7 +87,7 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 			name := stripGroupPrefix(cmd.Args().Get(0))
 			repos := cmd.Args().Slice()[1:]
 
-			if hasDupes := hasDuplicateRepos(repos); hasDupes {
+			if hasDuplicateRepos(repos) {
 				ui.Warn("duplicate repo names in group, ignoring extras")
 			}
 
