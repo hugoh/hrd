@@ -1,0 +1,9 @@
+profile: cover.out
+
+threshold:
+  total: 80
+
+# Ignore CLI entry points and cmd layer (hard to unit test)
+ignore:
+  - "main.go"
+  - "cmd/.*.go"

@@ -1,0 +1,11 @@
+version: 2
+builds:
+  - env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+      - -mod=readonly
+    ldflags:
+      - -extldflags '-static'
+      - -s -w
+      - -X github.com/hugoh/hrd/cmd.version={{.Version}}

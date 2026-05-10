@@ -1,0 +1,71 @@
+[tools]
+go = "1.26.2"
+"go:github.com/vladopajic/go-test-coverage/v2" = "2.18.7"
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
+golangci-lint = "2.12.1"
+goreleaser = "2.15.4"
+gotestsum = "1.13.0"
+hk = "1.44.3"
+rumdl = "0.1.87"
+zizmor = "1.24.1"
+dprint = "0.54.0"
+ghalint = "1.5.6"
+gitleaks = "8.30.1"
+actionlint = "1.7.12"
+
+[env]
+COVEROUT = "cover.out"
+HK_PKL_BACKEND = "pklr"
+
+[tasks.lint]
+description = "Lint code"
+run = ["go mod tidy -diff", "golangci-lint run ./...", "goreleaser check"]
+
+[tasks.test]
+description = "Run tests"
+run = "gotestsum -- -race ./..."
+
+[tasks.test-int]
+description = "Run integration tests"
+run = "gotestsum -- -race -tags=integration ./internal/..."
+
+[tasks.coverage]
+description = "Generate test coverage"
+run = "go test ./... -coverprofile=${COVEROUT} -covermode=atomic"
+
+[tasks.covercheck]
+description = "Check test coverage"
+depends = ["coverage"]
+run = "go-test-coverage -config .testcoverage.yml"
+
+[tasks.ci]
+description = "Run CI checks (lint, test, coverage)"
+depends = ["lint", "test", "test-int", "covercheck"]
+
+[tasks.clean]
+description = "Clean the project"
+run = ["go clean", "rm -f ${COVEROUT}"]
+
+[tasks.fix]
+description = "Fix lint issues"
+run = "golangci-lint run --fix ./..."
+
+[tasks.format]
+description = "Format the code"
+run = "golangci-lint fmt ./..."
+
+[tasks.tidy]
+description = "Tidy the module"
+run = "go mod tidy -v"
+
+[tasks.build]
+description = "Build application"
+run = "go build -o dist/hrd ."
+
+[tasks.dev]
+description = "Development mode"
+run = "go run ."
+
+[tasks.depup]
+description = "Upgrade dependencies"
+run = ["go get -u -t ./...", "go mod tidy -v"]
