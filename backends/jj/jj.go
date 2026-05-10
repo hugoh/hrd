@@ -243,6 +243,7 @@ func fillCommitMsgFromAncestors(ctx context.Context, path string, status *backen
 
 func extractCommitMsg(out string) string {
 	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, partsCountMin)
+
 	return strings.TrimSpace(parts[0])
 }
 
@@ -360,6 +361,11 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 	}
 
 	remote = strings.TrimSuffix(remote, ":")
+
+	// Skip synthetic @git remote (internal colocation bookmark, not a real remote).
+	if remote == "git" {
+		return
+	}
 
 	// Use the first tracking remote only.
 	if current.Remote != "" {

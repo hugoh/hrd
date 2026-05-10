@@ -52,7 +52,8 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
 	}
 
-	status := parseStatus(out)
+	remotes := knownRemotes(ctx, path)
+	status := parseStatus(out, remotes)
 
 	msgOut, _ := runGit(ctx, path, []string{"show-branch", "--no-name", headRef})
 	status.CommitMsg = strings.TrimSpace(msgOut)
@@ -138,6 +139,17 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 	return buf.String(), nil
 }
 
+// knownRemotes returns configured remote names for the repo at path.
+// Returns nil if the query fails (no remotes, or not a git repo).
+func knownRemotes(ctx context.Context, path string) []string {
+	out, err := runGit(ctx, path, []string{"remote"})
+	if err != nil {
+		return nil
+	}
+
+	return strings.Fields(strings.TrimSpace(out))
+}
+
 // parseStatus parses `git status --porcelain=v2 --branch` output into a
 // RepoStatus. The porcelain v2 format is stable across git versions.
 //
@@ -146,7 +158,7 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 //	# branch.head <name>          current branch (or "(detached)")
 //	# branch.upstream <remote/branch>  remote tracking ref
 //	# branch.ab +<ahead> -<behind>     commit delta
-func parseStatus(raw string) backend.RepoStatus {
+func parseStatus(raw string, remotes []string) backend.RepoStatus {
 	var status backend.RepoStatus
 
 	bookmark := backend.BookmarkStatus{}
@@ -164,7 +176,7 @@ func parseStatus(raw string) backend.RepoStatus {
 		}
 
 		if upstream, ok := strings.CutPrefix(line, "# branch.upstream "); ok {
-			handleUpstream(&bookmark, upstream)
+			handleUpstream(&bookmark, upstream, remotes)
 
 			hasUpstream = true
 
@@ -177,9 +189,16 @@ func parseStatus(raw string) backend.RepoStatus {
 			continue
 		}
 
-		if len(line) > 0 && line[0] != '#' {
-			status.Dirty = true
+		if len(line) == 0 || line[0] == '#' {
+			continue
 		}
+
+		// Porcelain v2 unmerged entries start with 'u'.
+		if line[0] == 'u' {
+			status.Conflict = true
+		}
+
+		status.Dirty = true
 	}
 
 	if hasUpstream {
@@ -197,8 +216,22 @@ func parseStatus(raw string) backend.RepoStatus {
 	return status
 }
 
-func handleUpstream(bookmark *backend.BookmarkStatus, upstream string) {
-	// upstream is "origin/main" — split on first "/"
+func handleUpstream(bookmark *backend.BookmarkStatus, upstream string, remotes []string) {
+	// Match longest known remote prefix first (handles remote names with "/").
+	var match string
+
+	for _, r := range remotes {
+		if strings.HasPrefix(upstream, r+"/") && len(r) > len(match) {
+			match = r
+		}
+	}
+
+	if match != "" {
+		bookmark.Remote = match
+
+		return
+	}
+	// Fallback: first segment before "/" (covers "origin/main").
 	if before, _, ok := strings.Cut(upstream, "/"); ok {
 		bookmark.Remote = before
 	} else {

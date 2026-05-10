@@ -8,6 +8,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hugoh/hrd/backends/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -194,6 +195,21 @@ func TestParseBookmarks_EmptyBookmarkName(t *testing.T) {
 	assert.Empty(t, result[0].Name)
 }
 
+func TestParseBookmarks_SkipGitRemote(t *testing.T) {
+	// Colocated jj+git repos have a synthetic @git remote that always
+	// appears before @origin in the output. We must skip @git and
+	// use @origin as the true remote.
+	input := "main: lolyspwl 5d874311 lint fix\n" +
+		"  @git: lolyspwl 5d874311 lint fix\n" +
+		"  @origin (ahead by 1 commits, behind by 1 commits): lolyspwl/1 6f42490f (hidden) lint fix\n"
+	result := parseBookmarks(input)
+	require.Len(t, result, 1)
+	assert.Equal(t, "origin", result[0].Remote)
+	assert.Equal(t, 1, result[0].Ahead)
+	assert.Equal(t, 1, result[0].Behind)
+	assert.Equal(t, "diverged", result[0].State.String())
+}
+
 func TestParseBookmarks_BlankLines(t *testing.T) {
 	input := "\nmain: rlkvwrto 9f3a1b2c\n\n  @origin (tracking)\n\n"
 	result := parseBookmarks(input)
@@ -223,13 +239,13 @@ func TestExtractCount(t *testing.T) {
 
 func TestExtractCommitMsg(t *testing.T) {
 	assert.Equal(t, "msg", extractCommitMsg("msg"))
-	assert.Equal(t, "", extractCommitMsg(""))
+	assert.Empty(t, extractCommitMsg(""))
 }
 
 func TestExtractCommitTime(t *testing.T) {
 	assert.Equal(t, "time", extractCommitTime("msg\x1ftime"))
-	assert.Equal(t, "", extractCommitTime("msg"))
-	assert.Equal(t, "", extractCommitTime(""))
+	assert.Empty(t, extractCommitTime("msg"))
+	assert.Empty(t, extractCommitTime(""))
 }
 
 func TestBackend_Name_JJ(t *testing.T) {
@@ -262,6 +278,34 @@ func TestBackend_Detect_ErrorOnPath(t *testing.T) {
 	ok, err := b.Detect("\x00invalid")
 	assert.False(t, ok)
 	assert.Error(t, err)
+}
+
+func TestBackend_Detect_NonColocated(t *testing.T) {
+	dir := t.TempDir()
+	cmd := exec.Command("jj", "git", "init", "--no-colocate")
+	cmd.Dir = dir
+	out, _ := cmd.CombinedOutput()
+
+	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
+		t.Skipf("jj git init --no-colocate did not create a .jj directory: %s", string(out))
+	}
+
+	t.Run("jj detects non-colocated repo", func(t *testing.T) {
+		b := &Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
+
+	t.Run("git does not detect non-colocated repo", func(t *testing.T) {
+		b := &git.Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
+
+	_, err := os.Stat(filepath.Join(dir, ".git"))
+	assert.True(t, os.IsNotExist(err), "non-colocated jj repo should not have a .git directory")
 }
 
 func TestBackend_Run_Interactive(t *testing.T) {
@@ -297,12 +341,12 @@ func TestRegister_JJ(t *testing.T) {
 
 func TestBackend_Status(t *testing.T) {
 	dir := t.TempDir()
-	cmd := exec.Command("jj", "init", "--git")
+	cmd := exec.Command("jj", "git", "init")
 	cmd.Dir = dir
 	_ = cmd.Run()
 
 	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj init --git did not create a .jj directory, skipping")
+		t.Skip("jj git init did not create a .jj directory, skipping")
 	}
 
 	b := &Backend{}
@@ -313,12 +357,12 @@ func TestBackend_Status(t *testing.T) {
 
 func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 	dir := t.TempDir()
-	cmd := exec.Command("jj", "init", "--git")
+	cmd := exec.Command("jj", "git", "init")
 	cmd.Dir = dir
 	_ = cmd.Run()
 
 	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj init --git did not create a .jj directory, skipping")
+		t.Skip("jj git init did not create a .jj directory, skipping")
 	}
 
 	setup := func(args ...string) {
@@ -340,12 +384,12 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 
 func TestBackend_Status_AncestorWalkError(t *testing.T) {
 	dir := t.TempDir()
-	cmd := exec.Command("jj", "init", "--git")
+	cmd := exec.Command("jj", "git", "init")
 	cmd.Dir = dir
 	_ = cmd.Run()
 
 	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj init --git did not create a .jj directory, skipping")
+		t.Skip("jj git init did not create a .jj directory, skipping")
 	}
 
 	// Make the working copy have no description so the ancestor walk runs,

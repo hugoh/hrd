@@ -57,6 +57,27 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stderr = w
+
+	fn()
+
+	_ = w.Close()
+
+	os.Stderr = old
+
+	out, err := io.ReadAll(r)
+	require.NoError(t, err)
+
+	return string(out)
+}
+
 // Helper to create a temporary directory that looks like a git repo.
 func setupFakeGitRepo(t *testing.T) string {
 	t.Helper()
@@ -82,28 +103,6 @@ func setupFakeJJRepo(t *testing.T) string {
 }
 
 // ─── Pure function tests ──────────────────────────────────────────────────────────
-
-func TestIsInteractive(t *testing.T) {
-	tests := []struct {
-		name        string
-		vcsArgs     []string
-		interactive []string
-		want        bool
-	}{
-		{"empty args", nil, []string{"log"}, false},
-		{"nil interactive list", []string{"log"}, nil, false},
-		{"match first arg", []string{"log", "--oneline"}, []string{"log", "diff"}, true},
-		{"no match", []string{"fetch", "--all"}, []string{"log", "diff"}, false},
-		{"match second not checked", []string{"fetch", "log"}, []string{"log"}, false},
-		{"empty interactive list", []string{"log"}, []string{}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := isInteractive(tt.vcsArgs, tt.interactive)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
 
 func TestVcsArgs(t *testing.T) {
 	tests := []struct {
@@ -500,9 +499,12 @@ func TestDetectBackends(t *testing.T) {
 func TestDetectBackendsWithOverride(t *testing.T) {
 	gitDir := setupFakeGitRepo(t)
 
-	backends, err := detectBackends("jj", gitDir)
+	_, err := detectBackends("jj", gitDir)
+	require.ErrorIs(t, err, errNoVCSDetected)
+
+	backends, err := detectBackends("git", gitDir)
 	require.NoError(t, err)
-	assert.Contains(t, backends, "git")
+	assert.Equal(t, "git", backends[0])
 }
 
 func TestDetectBackendsNoVCS(t *testing.T) {

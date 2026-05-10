@@ -52,20 +52,35 @@ nfpms:
     formats:
       - deb
       - rpm
-    contents:
-      - src: ./hrd
-        dst: /usr/bin/hrd
+    bindir: /usr/bin
 
-brews:
+homebrew_casks:
   - name: hrd
     repository:
       owner: hugoh
       name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     description: "Multi-repo manager for git and jj with parallel execution and live status"
     homepage: "https://github.com/hugoh/hrd"
-    directory: Formula
-    install: |
-      bin.install "hrd"
+    binaries:
+      - hrd
+
+changelog:
+  use: git
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+  filters:
+    exclude:
+      - "^chore\\(release\\): prepare for"
+      - "^chore\\(deps"
 
 checksum:
   name_template: "checksums.txt"

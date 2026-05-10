@@ -1,17 +1,19 @@
 [tools]
-go = "1.26.2"
+go = "1.26.3"
 "go:github.com/vladopajic/go-test-coverage/v2" = "2.18.8"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.3.0"
-golangci-lint = "2.12.1"
+golangci-lint = "2.12.2"
 goreleaser = "2.15.4"
+cocogitto = "7.0.0"
 gotestsum = "1.13.0"
 hk = "1.45.0"
-rumdl = "0.1.89"
+rumdl = "0.1.91"
 zizmor = "1.24.1"
 dprint = "0.54.0"
 ghalint = "1.5.6"
 gitleaks = "8.30.1"
 actionlint = "1.7.12"
+jj = "0.41.0"
 
 [env]
 COVEROUT = "cover.out"
@@ -19,7 +21,12 @@ HK_PKL_BACKEND = "pklr"
 
 [tasks.lint]
 description = "Lint code"
-run = ["go mod tidy -diff", "golangci-lint run ./...", "goreleaser check"]
+run = [
+  "go mod tidy -diff",
+  "golangci-lint run --enable-only unused --tests=false ./...",
+  "golangci-lint run ./...",
+  "goreleaser check",
+]
 
 [tasks.test]
 description = "Run tests"

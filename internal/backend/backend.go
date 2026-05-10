@@ -244,28 +244,17 @@ func ByName(name string) (Backend, error) {
 
 var errUnknownBackend = errors.New("unknown backend")
 
-// Detect walks the registry in order and returns the first backend that
-// claims the directory.
+// Detect returns the highest-priority backend that claims the directory.
+// Priority follows DetectAll semantics — jj wins over git for colocated repos.
 //
 //nolint:ireturn // returning interface is intentional for plugin architecture
 func Detect(path string) (Backend, error) {
-	abs, err := filepath.Abs(path)
-	if err != nil { // coverage-ignore — only fails on nil, caller controls input
-		return nil, fmt.Errorf("resolving path %q: %w", path, err)
+	matched, err := DetectAll(path)
+	if err != nil {
+		return nil, err
 	}
 
-	for _, backend := range registry {
-		ok, err := backend.Detect(abs)
-		if err != nil {
-			return nil, fmt.Errorf("backend %q detect: %w", backend.Name(), err)
-		}
-
-		if ok {
-			return backend, nil
-		}
-	}
-
-	return nil, fmt.Errorf("no known VCS detected at %q: %w", abs, errNoKnownVCS)
+	return matched[0], nil
 }
 
 var errNoKnownVCS = errors.New("no known VCS detected")

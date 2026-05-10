@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	// Import backends to trigger their registration.
-	// jj must be imported before git so it wins detection on colocated repos.
-	git "github.com/hugoh/hrd/backends/git"
+	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/cmd"
 )

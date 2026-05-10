@@ -11,7 +11,7 @@ import (
 )
 
 func TestParseStatus_Empty(t *testing.T) {
-	st := parseStatus("")
+	st := parseStatus("", nil)
 	assert.Empty(t, st.Ref)
 	assert.False(t, st.Dirty)
 	assert.Empty(t, st.Bookmarks)
@@ -19,7 +19,7 @@ func TestParseStatus_Empty(t *testing.T) {
 
 func TestParseStatus_BranchOnly(t *testing.T) {
 	input := "# branch.head main\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.Equal(t, "main", st.Ref)
 	assert.Equal(t, "main", st.Bookmarks[0].Name)
 	assert.False(t, st.Dirty)
@@ -27,26 +27,26 @@ func TestParseStatus_BranchOnly(t *testing.T) {
 
 func TestParseStatus_DetachedHEAD(t *testing.T) {
 	input := "# branch.head (detached)\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.Equal(t, "(detached)", st.Ref)
 	assert.Equal(t, "(detached)", st.Bookmarks[0].Name)
 }
 
 func TestParseStatus_WithUpstream(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.Equal(t, "origin", st.Bookmarks[0].Remote)
 }
 
 func TestParseStatus_UpstreamNoSlash(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream myremote\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.Equal(t, "myremote", st.Bookmarks[0].Remote)
 }
 
 func TestParseStatus_WithAheadBehind(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +3 -1\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Equal(t, 3, bm.Ahead)
 	assert.Equal(t, 1, bm.Behind)
@@ -55,19 +55,19 @@ func TestParseStatus_WithAheadBehind(t *testing.T) {
 
 func TestParseStatus_Dirty(t *testing.T) {
 	input := "# branch.head main\nM  README.md\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.True(t, st.Dirty)
 }
 
 func TestParseStatus_MultipleDirtyLines(t *testing.T) {
 	input := "# branch.head main\nM  file1.go\nA  file2.go\n?? file3.go\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.True(t, st.Dirty)
 }
 
 func TestParseStatus_Combined(t *testing.T) {
 	input := "# branch.head feature/foo\n# branch.upstream origin/feature/foo\n# branch.ab +2 -0\nM  somefile.go\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.Equal(t, "feature/foo", st.Ref)
 	assert.True(t, st.Dirty)
 	bm := st.Bookmarks[0]
@@ -79,7 +79,7 @@ func TestParseStatus_Combined(t *testing.T) {
 
 func TestParseStatus_Synced(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Equal(t, 0, bm.Ahead)
 	assert.Equal(t, 0, bm.Behind)
@@ -88,7 +88,7 @@ func TestParseStatus_Synced(t *testing.T) {
 
 func TestParseStatus_BehindOnly(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -5\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Equal(t, 5, bm.Behind)
 	assert.Equal(t, "behind", bm.State.String())
@@ -96,14 +96,14 @@ func TestParseStatus_BehindOnly(t *testing.T) {
 
 func TestParseStatus_Diverged(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +2 -3\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Equal(t, "diverged", bm.State.String())
 }
 
 func TestParseStatus_AheadOnly(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +4 -0\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Equal(t, 4, bm.Ahead)
 	assert.Equal(t, "ahead", bm.State.String())
@@ -111,7 +111,7 @@ func TestParseStatus_AheadOnly(t *testing.T) {
 
 func TestParseStatus_NoUpstream(t *testing.T) {
 	input := "# branch.head main\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	bm := st.Bookmarks[0]
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, "local", bm.State.String())
@@ -119,8 +119,61 @@ func TestParseStatus_NoUpstream(t *testing.T) {
 
 func TestParseStatus_CleanWorkingTree(t *testing.T) {
 	input := "# branch.head main\n# branch.upstream origin/main\n# branch.ab +0 -0\n"
-	st := parseStatus(input)
+	st := parseStatus(input, nil)
 	assert.False(t, st.Dirty)
+}
+
+func TestParseStatus_WithConflict(t *testing.T) {
+	input := "# branch.head main\n" +
+		"# branch.upstream origin/main\n" +
+		"# branch.ab +0 -0\n" +
+		"u UU N... 100644 100644 100644 abc def file.txt\n"
+
+	st := parseStatus(input, nil)
+	assert.True(t, st.Dirty)
+	assert.True(t, st.Conflict, "porcelain v2 'u' lines should mark conflict")
+}
+
+func TestParseStatus_ConflictAndChanges(t *testing.T) {
+	input := "# branch.head main\n" +
+		"# branch.upstream origin/main\n" +
+		"# branch.ab +0 -0\n" +
+		"u UU N... 100644 100644 100644 abc def conflicted.txt\n" +
+		"1 M. N... 100644 100644 100644 abc modified.txt\n"
+	st := parseStatus(input, nil)
+	assert.True(t, st.Dirty)
+	assert.True(t, st.Conflict)
+}
+
+func TestParseStatus_SlashInRemoteName(t *testing.T) {
+	input := "# branch.head main\n# branch.upstream upstream/team/main\n# branch.ab +0 -0\n"
+	remotes := []string{"origin", "upstream/team"}
+	st := parseStatus(input, remotes)
+	bm := st.Bookmarks[0]
+	assert.Equal(t, "upstream/team", bm.Remote, "should match longest known remote prefix")
+}
+
+func TestParseStatus_SlashInRemoteName_FirstMatchFallback(t *testing.T) {
+	// When both "upstream" and "upstream/team" are remotes,
+	// the longest prefix ("upstream/team") must win.
+	input := "# branch.head main\n# branch.upstream upstream/team/main\n# branch.ab +0 -0\n"
+	remotes := []string{"upstream", "upstream/team"}
+	st := parseStatus(input, remotes)
+	bm := st.Bookmarks[0]
+	assert.Equal(
+		t,
+		"upstream/team",
+		bm.Remote,
+		"should match longest remote even if shorter one appears first",
+	)
+}
+
+func TestParseStatus_SlashInRemoteName_NoRemotesProvided(t *testing.T) {
+	// When no known remotes are provided, fall back to first-segment split.
+	input := "# branch.head main\n# branch.upstream upstream/team/main\n# branch.ab +0 -0\n"
+	st := parseStatus(input, nil)
+	bm := st.Bookmarks[0]
+	assert.Equal(t, "upstream", bm.Remote, "without remotes, falls back to first-segment split")
 }
 
 func TestBackend_Name(t *testing.T) {
@@ -263,6 +316,12 @@ func TestBackend_Run_OutputCapture(t *testing.T) {
 	res, err := b.Run(context.Background(), dir, []string{"log", "--oneline", "-1"}, false)
 	require.NoError(t, err)
 	assert.Contains(t, res.Output, "initial")
+}
+
+func TestKnownRemotes_NotAGitRepo(t *testing.T) {
+	dir := t.TempDir()
+	remotes := knownRemotes(context.Background(), dir)
+	assert.Nil(t, remotes, "knownRemotes in non-git dir should return nil")
 }
 
 func TestBackend_Run_NonExecutablePath(t *testing.T) {

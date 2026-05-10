@@ -4,11 +4,15 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 
 `hrd` is a multi-repo manager for developers who work across many repositories and use both **git** and **jj** (Jujutsu). It keeps your repos organized into groups, runs VCS commands across all of them at once, and shows a live unified status dashboard — with full awareness of branches, bookmarks, remote tracking, ahead/behind counts, and conflicts.
 
+[![CI](https://github.com/hugoh/hrd/actions/workflows/ci.yml/badge.svg)](https://github.com/hugoh/hrd/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/github/hugoh/hrd/graph/badge.svg?token=91HAIC8SER)](https://codecov.io/github/hugoh/hrd)
+[![Go Report Card](https://goreportcard.com/badge/github.com/hugoh/hrd)](https://goreportcard.com/report/github.com/hugoh/hrd)
+
 ## Features
 
 - **git and jj as first-class citizens** — both backends are fully supported with native status parsing. Colocated repos (jj on top of git) are handled correctly.
 - **Parallel execution** — commands run concurrently across all matched repos, with results streaming in as each one completes.
-- **Live status dashboard** — `hrd ll` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
+- **Live status dashboard** — `hrd ls` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
 - **Repo groups and context** — organize repos into named groups and set an active context so commands default to a focused scope.
 - **Three dispatch commands** — `git`, `jj`, and `shell`. Clean and composable.
 - **Extensible backend system** — new VCS backends implement a single interface and self-register. Zero changes to core code.
@@ -59,7 +63,7 @@ hrd group add work myproject infra
 hrd context set work
 
 # Live status across all repos in context
-hrd ll
+hrd ls
 
 # Run a command across all repos
 hrd git -- fetch --all
@@ -106,11 +110,12 @@ hrd repo add <path>... [--vcs git|jj] [--name <n>]
 hrd repo rm  <name>...
 hrd repo ls  [--group <g>]
 hrd repo rename <old> <new>
+hrd repo refresh <name>... | --all
 
 # Group management
 hrd group add <name> <repo>...
 hrd group rm  <name>
-hrd group ls
+hrd group ls [<name>]
 
 # Context (default scope)
 hrd context set   <group>
@@ -118,12 +123,18 @@ hrd context clear
 hrd context show
 
 # Status
-hrd ll [--repos <name,...>]
+hrd ls [--repos <name,...>] [--names] [--dirs] [--message]
+hrd ll [--repos <name,...>]   # detailed view (alias for ls --message)
 
 # Dispatch
-hrd git   [--repos <r>] [--strict] -- <git args>
-hrd jj    [--repos <r>] [--strict] -- <jj args>
-hrd shell [--repos <r>] -- <shell command>
+hrd git   [--repos <r>] [--interactive] -- <git args>
+hrd jj    [--repos <r>] [--interactive] -- <jj args>
+hrd shell [--repos <r>] [--interactive] -- <shell command>
+
+# VCS subcommands (use each repo's active backend)
+hrd status [--repos <name,...>]
+hrd diff   [--repos <name,...>]
+hrd log    [--repos <name,...>]
 
 # Shell completion
 eval "$(hrd completion bash)"   # add to .bashrc
@@ -152,14 +163,13 @@ current = "oss"
 
 [settings]
 concurrency = 8
-interactive_commands = ["log", "diff", "difftool", "mergetool", "show"]
 ```
 
-`interactive_commands` lists VCS subcommands that require a real terminal (pagers, interactive diffs). These always run sequentially on a single repo rather than in parallel.
+Use the `--interactive` / `-i` flag on dispatch commands to run with a real terminal (pagers, interactive diffs). Interactive commands run sequentially on one repo at a time rather than in parallel.
 
 ## Adding a backend
 
-Implement the `Backend` interface in a new package, call `backend.Register()` in `init()`, and add a blank import to `main.go`. The interface is four methods: `Name`, `Detect`, `Status`, and `Run`.
+Implement the `Backend` interface in a new package, add a `Register()` function that calls `backend.Register()`, and call it from `main.go`'s `Run()` function. The interface is four methods: `Name`, `Detect`, `Status`, and `Run`.
 
 ---
 
