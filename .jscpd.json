@@ -1,5 +1,4 @@
 {
-  "ignore": ["**/*_test.go"],
-  "exitCode": 1,
-  "minLines": 8
+  "minLines": 8,
+  "threshold": 3
 }

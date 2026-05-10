@@ -57,27 +57,6 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stderr = w
-
-	fn()
-
-	_ = w.Close()
-
-	os.Stderr = old
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
-}
-
 // Helper to create a temporary directory that looks like a git repo.
 func setupFakeGitRepo(t *testing.T) string {
 	t.Helper()
@@ -141,338 +120,289 @@ func TestFilterMatching(t *testing.T) {
 
 // ─── Command-level tests via app.Run() ──────────────────────────────────────────
 
-func TestRepoAddAndList(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{})
+func TestRepoAdd(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) (string, []string)
+		wantErr error
+		check   func(t *testing.T, cfgPath string, appErr error)
+	}{
+		{
+			name: "TestRepoAddAndList",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
 
-	app := NewApp()
+				return setupTestConfig(
+						t,
+						config.Config{},
+					), []string{
+						"repo",
+						"add",
+						"--name",
+						"mygit",
+						gitDir,
+					}
+			},
+			check: func(t *testing.T, cfgPath string, _ error) {
+				t.Helper()
 
-	// Add a repo
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "add", "--name", "mygit", gitDir},
-	)
-	require.NoError(t, err)
+				app := NewApp()
 
-	// List repos
-	captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "ls"})
-	})
-	require.NoError(t, err)
+				var err error
 
-	// Verify the repo was added with the custom name
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
+				captureStdout(t, func() {
+					app.ErrWriter = &bytes.Buffer{}
+					err = app.Run(
+						context.Background(),
+						[]string{"hrd", "--config", cfgPath, "repo", "ls"},
+					)
+				})
+				require.NoError(t, err)
 
-	_, ok := cfg.Repos["mygit"]
-	assert.True(t, ok)
-}
+				cfg, err := config.Load(cfgPath)
+				require.NoError(t, err)
 
-func TestRepoAddMultiple(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	jjDir := setupFakeJJRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "add", gitDir, jjDir},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-	assert.Len(t, cfg.Repos, 2)
-}
-
-func TestRepoAddExplicitNameCollision(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+				_, ok := cfg.Repos["mygit"]
+				assert.True(t, ok)
+			},
 		},
-	})
+		{
+			name: "TestRepoAddMultiple",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
+				jjDir := setupFakeJJRepo(t)
 
-	app := newTestApp()
+				return setupTestConfig(t, config.Config{}), []string{"repo", "add", gitDir, jjDir}
+			},
+			check: func(t *testing.T, cfgPath string, _ error) {
+				t.Helper()
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "add", "--name", "repo", gitDir},
-	)
-	require.ErrorIs(t, err, errRepoExists)
-	assert.Contains(t, err.Error(), "--name/-n")
-}
-
-func TestRepoAddImplicitNameCollision(t *testing.T) {
-	dir := t.TempDir()
-	repoDir := filepath.Join(dir, "repo")
-	err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o750)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(repoDir, ".git", "config"), []byte("[core]\n"), 0o644)
-	require.NoError(t, err)
-
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+				cfg, err := config.Load(cfgPath)
+				require.NoError(t, err)
+				assert.Len(t, cfg.Repos, 2)
+			},
 		},
-	})
+		{
+			name: "TestRepoAddExplicitNameCollision",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
 
-	app := newTestApp()
+				return cfgPath, []string{"repo", "add", "--name", "repo", gitDir}
+			},
+			wantErr: errRepoExists,
+			check: func(t *testing.T, _ string, appErr error) {
+				t.Helper()
+				assert.Contains(t, appErr.Error(), "--name/-n")
+			},
+		},
+		{
+			name: "TestRepoAddImplicitNameCollision",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				dir := t.TempDir()
+				repoDir := filepath.Join(dir, "repo")
+				err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o750)
+				require.NoError(t, err)
+				err = os.WriteFile(
+					filepath.Join(repoDir, ".git", "config"),
+					[]byte("[core]\n"),
+					0o644,
+				)
+				require.NoError(t, err)
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
 
-	err = app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "add", repoDir},
-	)
-	require.ErrorIs(t, err, errRepoExists)
-	assert.Contains(t, err.Error(), "--name/-n")
-}
+				return cfgPath, []string{"repo", "add", repoDir}
+			},
+			wantErr: errRepoExists,
+			check: func(t *testing.T, _ string, appErr error) {
+				t.Helper()
+				assert.Contains(t, appErr.Error(), "--name/-n")
+			},
+		},
+		{
+			name: "TestRepoAddNoPath",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
 
-func TestRepoAddNoPath(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
+				return setupTestConfig(t, config.Config{}), []string{"repo", "add"}
+			},
+			wantErr: errAtLeastOnePath,
+		},
+		{
+			name: "TestRepoAddNameWithMultiple",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
+				jjDir := setupFakeJJRepo(t)
 
-	app := newTestApp()
+				return setupTestConfig(
+						t,
+						config.Config{},
+					), []string{
+						"repo",
+						"add",
+						"--name",
+						"mygit",
+						gitDir,
+						jjDir,
+					}
+			},
+			wantErr: errNameSingleRepo,
+		},
+	}
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "add"})
-	assert.ErrorIs(t, err, errAtLeastOnePath)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath, args := tt.setup(t)
 
-func TestRepoAddNameWithMultiple(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	jjDir := setupFakeJJRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{})
+			err := runApp(t, cfgPath, args)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
 
-	app := newTestApp()
-
-	err := app.Run(context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "add", "--name", "mygit", gitDir, jjDir})
-	assert.ErrorIs(t, err, errNameSingleRepo)
+			if tt.check != nil {
+				tt.check(t, cfgPath, err)
+			}
+		})
+	}
 }
 
 func TestRepoRemove(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: gitDir, Backends: []string{"git"}},
+	tests := []struct {
+		name    string
+		cfg     config.Config
+		args    []string
+		wantErr error
+		check   func(t *testing.T, cfgPath string)
+	}{
+		{
+			name: "TestRepoRemove",
+			cfg: config.Config{Repos: map[string]config.Repo{
+				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+			}},
+			args: []string{"repo", "rm", "myrepo"},
+			check: func(t *testing.T, cfgPath string) {
+				t.Helper()
+
+				cfg, err := config.Load(cfgPath)
+				require.NoError(t, err)
+				assert.Empty(t, cfg.Repos)
+			},
 		},
-	})
+		{
+			name: "TestRepoRemoveNoName",
+			cfg: config.Config{Repos: map[string]config.Repo{
+				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+			}},
+			args:    []string{"repo", "rm"},
+			wantErr: errAtLeastOneName,
+		},
+		{
+			name: "TestRepoRemoveUnknown",
+			cfg: config.Config{Repos: map[string]config.Repo{
+				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+			}},
+			args:    []string{"repo", "rm", "unknown"},
+			wantErr: errUnknownRepo,
+		},
+	}
 
-	app := newTestApp()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath := setupTestConfig(t, tt.cfg)
 
-	// Remove the repo
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rm", "myrepo"},
-	)
-	require.NoError(t, err)
+			err := runApp(t, cfgPath, tt.args)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
 
-	// Verify it's gone
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-	assert.Empty(t, cfg.Repos)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.check != nil {
+				tt.check(t, cfgPath)
+			}
+		})
+	}
 }
 
-func TestRepoRemoveNoName(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+func TestRepoRename(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name      string
+		cfg       config.Config
+		argGroups [][]string
+		wantErr   error
+		check     func(t *testing.T, cfgPath string)
+	}{
+		{
+			name: "TestRepoRename",
+			cfg: config.Config{Repos: map[string]config.Repo{
+				"oldname": {Path: "/tmp/oldname", Backends: []string{"git"}},
+			}},
+			argGroups: [][]string{{"repo", "rename", "oldname", "newname"}},
+			check: func(t *testing.T, cfgPath string) {
+				t.Helper()
+
+				cfg, err := config.Load(cfgPath)
+				require.NoError(t, err)
+
+				_, ok := cfg.Repos["newname"]
+				assert.True(t, ok)
+				_, ok = cfg.Repos["oldname"]
+				assert.False(t, ok)
+			},
 		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rm"})
-	assert.ErrorIs(t, err, errAtLeastOneName)
-}
-
-func TestRepoRemoveUnknown(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+		{
+			name:      "TestRepoRenameUsageError",
+			cfg:       config.Config{},
+			argGroups: [][]string{{"repo", "rename"}, {"repo", "rename", "onlyone"}},
+			wantErr:   errRepoRenameUsage,
 		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rm", "unknown"},
-	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUnknownRepo)
-}
-
-func TestRepoRename(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"oldname": {Path: gitDir, Backends: []string{"git"}},
+		{
+			name:      "TestRepoRenameUnknown",
+			cfg:       config.Config{},
+			argGroups: [][]string{{"repo", "rename", "unknown", "new"}},
+			wantErr:   errUnknownRepo,
 		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rename", "oldname", "newname"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Repos["newname"]
-	assert.True(t, ok)
-	_, ok = cfg.Repos["oldname"]
-	assert.False(t, ok)
-}
-
-func TestRepoRenameUsageError(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	// No args
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename"})
-	require.ErrorIs(t, err, errRepoRenameUsage)
-
-	// One arg
-	err = app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rename", "onlyone"},
-	)
-	require.ErrorIs(t, err, errRepoRenameUsage)
-}
-
-func TestRepoRenameUnknown(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rename", "unknown", "new"},
-	)
-	assert.Error(t, err)
-}
-
-func TestRepoRenameExists(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+		{
+			name: "TestRepoRenameExists",
+			cfg: config.Config{Repos: map[string]config.Repo{
+				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+				"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+			}},
+			argGroups: [][]string{{"repo", "rename", "repo1", "repo2"}},
+			wantErr:   errRepoExists,
 		},
-	})
+	}
 
-	app := newTestApp()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath := setupTestConfig(t, tt.cfg)
+			for _, args := range tt.argGroups {
+				err := runApp(t, cfgPath, args)
+				if tt.wantErr != nil {
+					require.ErrorIs(t, err, tt.wantErr)
+				} else {
+					require.NoError(t, err)
+				}
+			}
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "rename", "repo1", "repo2"},
-	)
-	assert.ErrorIs(t, err, errRepoExists)
-}
-
-func TestGroupAddAndList(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-	})
-
-	app := NewApp()
-
-	// Add a group
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "add", "work", "repo1", "repo2"},
-	)
-	require.NoError(t, err)
-
-	// List groups
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
-	})
-	require.NoError(t, err)
-	assert.Contains(t, stdout, "work")
-}
-
-func TestGroupRemove(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "rm", "work"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Groups["work"]
-	assert.False(t, ok)
-}
-
-func TestContextSetAndShow(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := NewApp()
-
-	// Set context
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "context", "set", "work"},
-	)
-	require.NoError(t, err)
-
-	// Show context
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "show"})
-	})
-	require.NoError(t, err)
-	assert.Contains(t, stdout, "work")
-}
-
-func TestContextClear(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-		Context: config.Context{Current: "work"},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "clear"})
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-	assert.Empty(t, cfg.Context.Current)
+			if tt.check != nil {
+				tt.check(t, cfgPath)
+			}
+		})
+	}
 }
 
 func TestDetectBackends(t *testing.T) {
@@ -533,37 +463,27 @@ func TestResolveScope(t *testing.T) {
 	assert.Equal(t, []string{"repo1"}, names)
 }
 
-func TestCompletionBash(t *testing.T) {
-	app := NewApp()
+func TestCompletion(t *testing.T) {
+	tests := []struct {
+		name  string
+		shell string
+	}{
+		{name: "TestCompletionBash", shell: "bash"},
+		{name: "TestCompletionZsh", shell: "zsh"},
+		{name: "TestCompletionFish", shell: "fish"},
+	}
 
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(context.Background(), []string{"hrd", "completion", "bash"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "hrd")
-}
-
-func TestCompletionZsh(t *testing.T) {
-	app := NewApp()
-
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(context.Background(), []string{"hrd", "completion", "zsh"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "hrd")
-}
-
-func TestCompletionFish(t *testing.T) {
-	app := NewApp()
-
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(context.Background(), []string{"hrd", "completion", "fish"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "hrd")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := NewApp()
+			stdout := captureStdout(t, func() {
+				app.ErrWriter = &bytes.Buffer{}
+				err := app.Run(context.Background(), []string{"hrd", "completion", tt.shell})
+				assert.NoError(t, err)
+			})
+			assert.Contains(t, stdout, "hrd")
+		})
+	}
 }
 
 // Test error cases for Git and JJ commands without args.
@@ -581,313 +501,128 @@ func TestGitCommandNoArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRepoRefreshAll(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: gitDir, Backends: []string{"git"}},
+func TestRepoRefresh(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T) (string, []string)
+		wantErr error
+	}{
+		{
+			name: "TestRepoRefreshAll",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"myrepo": {Path: gitDir, Backends: []string{"git"}},
+				}})
+
+				return cfgPath, []string{"repo", "refresh", "--all"}
+			},
 		},
-	})
+		{
+			name: "TestRepoRefreshSpecific",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				gitDir := setupFakeGitRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"myrepo": {Path: gitDir, Backends: []string{"git"}},
+				}})
 
-	app := newTestApp()
+				return cfgPath, []string{"repo", "refresh", "myrepo"}
+			},
+		},
+		{
+			name: "TestRepoRefreshNoArgs",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+				}})
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "refresh", "--all"},
-	)
-	assert.NoError(t, err)
+				return cfgPath, []string{"repo", "refresh"}
+			},
+			wantErr: errAtLeastOneOrAll,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath, args := tt.setup(t)
+
+			err := runApp(t, cfgPath, args)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+
+				return
+			}
+
+			assert.NoError(t, err)
+		})
+	}
 }
 
-func TestRepoRefreshSpecific(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: gitDir, Backends: []string{"git"}},
+func TestRepoList(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name         string
+		group        string
+		wantErr      bool
+		wantContains []string
+		wantExcludes []string
+	}{
+		{
+			name:         "TestRepoLsWithGroupFilter",
+			group:        "work",
+			wantContains: []string{"repo1"},
+			wantExcludes: []string{"repo2"},
 		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "refresh", "myrepo"},
-	)
-	assert.NoError(t, err)
-}
-
-func TestRepoRefreshNoArgs(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+		{name: "TestRepoLsUnknownGroup", group: "unknown", wantErr: true},
+		{
+			name:         "TestRepoListWithAtGroup",
+			group:        "@work",
+			wantContains: []string{"repo1"},
+			wantExcludes: []string{"repo2"},
 		},
-	})
+	}
 
-	app := newTestApp()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath := setupTestConfig(t, config.Config{
+				Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+				},
+				Groups: map[string]config.Group{
+					"work": {Repos: []string{"repo1"}},
+				},
+			})
+			app := NewApp()
 
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "refresh"})
-	assert.ErrorIs(t, err, errAtLeastOneOrAll)
-}
+			var err error
 
-func TestRepoLsWithGroupFilter(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
+			stdout := captureStdout(t, func() {
+				app.ErrWriter = &bytes.Buffer{}
+				err = app.Run(
+					context.Background(),
+					[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", tt.group},
+				)
+			})
+			if tt.wantErr {
+				assert.Error(t, err)
 
-	app := NewApp()
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "work"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-	assert.NotContains(t, stdout, "repo2")
-}
+				return
+			}
 
-func TestRepoLsUnknownGroup(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
+			require.NoError(t, err)
 
-	app := newTestApp()
+			for _, want := range tt.wantContains {
+				assert.Contains(t, stdout, want)
+			}
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "unknown"},
-	)
-	assert.Error(t, err)
-}
-
-// ─── @-prefix for group names ─────────────────────────────────────────────
-
-func TestGroupAddWithAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-	})
-
-	app := NewApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "add", "@work", "repo1", "repo2"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Groups["work"]
-	assert.True(t, ok, "group should be stored without @ prefix")
-	_, ok = cfg.Groups["@work"]
-	assert.False(t, ok, "group should NOT be stored with @ prefix")
-
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
-	})
-	require.NoError(t, err)
-	assert.Contains(t, stdout, "@work", "group table should show @ prefix")
-}
-
-func TestGroupRemoveWithAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "rm", "@work"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Groups["work"]
-	assert.False(t, ok, "group should be removed")
-}
-
-func TestGroupListWithNameAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1", "repo2"}},
-		},
-	})
-
-	app := newTestApp()
-
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "group", "ls", "@work"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, "repo1\nrepo2\n", stdout)
-}
-
-func TestGroupListUnknownAtName(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "ls", "@nonexistent"},
-	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "@nonexistent")
-}
-
-func TestContextSetWithAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := NewApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "context", "set", "@work"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-	assert.Equal(t, "work", cfg.Context.Current)
-
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "show"})
-	})
-	require.NoError(t, err)
-	assert.Contains(t, stdout, "@work", "context show should display @ prefix")
-}
-
-func TestContextSetUnknownAtGroup(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "context", "set", "@unknown"},
-	)
-	require.Error(t, err)
-	require.ErrorIs(t, err, errUnknownGroup)
-	assert.Contains(t, err.Error(), "@unknown")
-}
-
-func TestRepoListWithAtGroup(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := NewApp()
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", "@work"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-	assert.NotContains(t, stdout, "repo2")
-}
-
-func TestGroupAddWithoutAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-	})
-
-	app := NewApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "add", "work", "repo1"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Groups["work"]
-	assert.True(t, ok)
-
-	stdout := captureStdout(t, func() {
-		app.ErrWriter = &bytes.Buffer{}
-		err = app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
-	})
-	require.NoError(t, err)
-	assert.Contains(
-		t,
-		stdout,
-		"@work",
-		"group table should show @ prefix even for groups added without @",
-	)
-}
-
-func TestGroupRemoveWithoutAtPrefix(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "rm", "work"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-
-	_, ok := cfg.Groups["work"]
-	assert.False(t, ok)
+			for _, exclude := range tt.wantExcludes {
+				assert.NotContains(t, stdout, exclude)
+			}
+		})
+	}
 }
 
 func TestHelpersStripGroupPrefix(t *testing.T) {

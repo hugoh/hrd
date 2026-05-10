@@ -1,15 +1,13 @@
 package ui_test
 
 import (
-	"io"
-	"os"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
 	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/zenizh/go-capturer"
 )
 
 func TestRenderDispatchResult_Success(t *testing.T) {
@@ -71,85 +69,43 @@ func TestGetTermWidth(t *testing.T) {
 	assert.Positive(t, w)
 }
 
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stdout = w
-
-	fn()
-
-	_ = w.Close()
-
-	os.Stdout = old
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
-}
-
-func captureStderr(t *testing.T, fn func()) string {
-	t.Helper()
-
-	old := os.Stderr
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stderr = w
-
-	fn()
-
-	_ = w.Close()
-
-	os.Stderr = old
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
-}
-
 func TestOutf(t *testing.T) {
-	out := captureStdout(t, func() {
+	out := capturer.CaptureStdout(func() {
 		ui.Outf("test %d", 42)
 	})
 	assert.Contains(t, out, "test 42")
 }
 
 func TestErrf(t *testing.T) {
-	out := captureStderr(t, func() {
+	out := capturer.CaptureStderr(func() {
 		ui.Errf("error %s", "msg")
 	})
 	assert.Contains(t, out, "error msg")
 }
 
 func TestSuccess(t *testing.T) {
-	out := captureStderr(t, func() {
+	out := capturer.CaptureStderr(func() {
 		ui.Success("done %s", "ok")
 	})
 	assert.Contains(t, out, "done ok")
 }
 
 func TestWarn(t *testing.T) {
-	out := captureStderr(t, func() {
+	out := capturer.CaptureStderr(func() {
 		ui.Warn("warning %d", 1)
 	})
 	assert.Contains(t, out, "warning 1")
 }
 
 func TestInfo(t *testing.T) {
-	out := captureStderr(t, func() {
+	out := capturer.CaptureStderr(func() {
 		ui.Info("info %s", "test")
 	})
 	assert.Contains(t, out, "info test")
 }
 
 func TestFail(t *testing.T) {
-	out := captureStderr(t, func() {
+	out := capturer.CaptureStderr(func() {
 		ui.Fail("fail %s", "err")
 	})
 	assert.Contains(t, out, "fail err")

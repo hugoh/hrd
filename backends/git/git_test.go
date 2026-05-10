@@ -10,6 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// initGitRepoWithCommit creates a temp git repo with one commit and returns its path.
+func initGitRepoWithCommit(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	runGitCmd(t, dir, []string{"init"})
+	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
+	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
+	runGitCmd(t, dir, []string{"add", "test.txt"})
+	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+
+	return dir
+}
+
 func TestBackend_Priority(t *testing.T) {
 	b := &Backend{}
 	assert.Positive(t, b.Priority())
@@ -186,41 +200,37 @@ func TestBackend_Name(t *testing.T) {
 	assert.Equal(t, "git", b.Name())
 }
 
-func TestBackend_Detect_WithGitDir(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
-	require.NoError(t, err)
+func TestBackend_Detect(t *testing.T) {
+	t.Run("with git dir", func(t *testing.T) {
+		dir := t.TempDir()
+		err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
+		require.NoError(t, err)
 
-	b := &Backend{}
-	ok, err := b.Detect(dir)
-	require.NoError(t, err)
-	assert.True(t, ok)
-}
+		b := &Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
 
-func TestBackend_Detect_WithoutGitDir(t *testing.T) {
-	dir := t.TempDir()
+	t.Run("without git dir", func(t *testing.T) {
+		dir := t.TempDir()
 
-	b := &Backend{}
-	ok, err := b.Detect(dir)
-	require.NoError(t, err)
-	assert.False(t, ok)
-}
+		b := &Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
 
-func TestBackend_Detect_ErrorOnPath(t *testing.T) {
-	b := &Backend{}
-	ok, err := b.Detect("\x00invalid")
-	assert.False(t, ok)
-	assert.Error(t, err)
+	t.Run("error on invalid path", func(t *testing.T) {
+		b := &Backend{}
+		ok, err := b.Detect("\x00invalid")
+		assert.False(t, ok)
+		assert.Error(t, err)
+	})
 }
 
 func TestBackend_Run_Interactive(t *testing.T) {
-	dir := t.TempDir()
-	runGitCmd(t, dir, []string{"init"})
-	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
-	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
-	runGitCmd(t, dir, []string{"add", "test.txt"})
-	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"rev-parse", "HEAD"}, true)
@@ -245,13 +255,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestBackend_Status(t *testing.T) {
-	dir := t.TempDir()
-	runGitCmd(t, dir, []string{"init"})
-	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
-	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
-	runGitCmd(t, dir, []string{"add", "test.txt"})
-	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
 	st, err := b.Status(context.Background(), dir)
@@ -260,13 +264,7 @@ func TestBackend_Status(t *testing.T) {
 }
 
 func TestBackend_Status_Dirty(t *testing.T) {
-	dir := t.TempDir()
-	runGitCmd(t, dir, []string{"init"})
-	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
-	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
-	runGitCmd(t, dir, []string{"add", "test.txt"})
-	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+	dir := initGitRepoWithCommit(t)
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("modified"), 0o644))
 
@@ -284,13 +282,7 @@ func TestBackend_Status_NoRepo(t *testing.T) {
 }
 
 func TestBackend_Run(t *testing.T) {
-	dir := t.TempDir()
-	runGitCmd(t, dir, []string{"init"})
-	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
-	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
-	runGitCmd(t, dir, []string{"add", "test.txt"})
-	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"rev-parse", "HEAD"}, false)
@@ -309,13 +301,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 }
 
 func TestBackend_Run_OutputCapture(t *testing.T) {
-	dir := t.TempDir()
-	runGitCmd(t, dir, []string{"init"})
-	runGitCmd(t, dir, []string{"config", "user.email", "test@test.com"})
-	runGitCmd(t, dir, []string{"config", "user.name", "Test"})
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
-	runGitCmd(t, dir, []string{"add", "test.txt"})
-	runGitCmd(t, dir, []string{"commit", "-m", "initial"})
+	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"log", "--oneline", "-1"}, false)

@@ -112,6 +112,22 @@ type mockBackend struct {
 func (m *mockBackend) Name() string                     { return m.name }
 func (m *mockBackend) Priority() int                    { return m.priority }
 func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
+
+// withCleanRegistry resets the global registry to a clean state and restores it
+// on test cleanup. Registers the given backends on the clean registry.
+func withCleanRegistry(t *testing.T, backends ...*mockBackend) {
+	t.Helper()
+
+	orig := registry
+	registry = nil
+
+	for _, b := range backends {
+		Register(b)
+	}
+
+	t.Cleanup(func() { registry = orig })
+}
+
 func (*mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
 	return RepoStatus{}, nil
 }
@@ -126,10 +142,7 @@ func (*mockBackend) Run(
 }
 
 func TestRegister(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
+	withCleanRegistry(t)
 
 	b1 := &mockBackend{name: "low", priority: 10}
 	Register(b1)
@@ -155,10 +168,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestAll(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
+	withCleanRegistry(t)
 
 	b1 := &mockBackend{name: "a", priority: 20}
 	b2 := &mockBackend{name: "b", priority: 10}
@@ -177,10 +187,7 @@ func TestAll(t *testing.T) {
 }
 
 func TestByName(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
+	withCleanRegistry(t)
 
 	Register(&mockBackend{name: "git"})
 	Register(&mockBackend{name: "jj"})
@@ -195,15 +202,8 @@ func TestByName(t *testing.T) {
 }
 
 func TestDetectAll_NoMatch(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
-	)
-	Register(
 		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -212,20 +212,13 @@ func TestDetectAll_NoMatch(t *testing.T) {
 }
 
 func TestDetect_Match(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
 	dir := t.TempDir()
 
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{
 			name:   "git",
 			detect: func(path string) (bool, error) { return path == dir, nil },
 		},
-	)
-	Register(
 		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -235,12 +228,7 @@ func TestDetect_Match(t *testing.T) {
 }
 
 func TestDetect_NoMatch(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -250,12 +238,7 @@ func TestDetect_NoMatch(t *testing.T) {
 }
 
 func TestDetect_ErrorFromDetect(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{
 			name:   "git",
 			detect: func(_ string) (bool, error) { return false, assert.AnError },
@@ -268,20 +251,13 @@ func TestDetect_ErrorFromDetect(t *testing.T) {
 }
 
 func TestDetectAll_Match(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
 	dir := t.TempDir()
 
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{
 			name:   "git",
 			detect: func(path string) (bool, error) { return path == dir, nil },
 		},
-	)
-	Register(
 		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -292,21 +268,14 @@ func TestDetectAll_Match(t *testing.T) {
 }
 
 func TestDetectAll_MultipleMatches_JjFirst(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
 	dir := t.TempDir()
 
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{
 			name:     "git",
 			priority: 10,
 			detect:   func(path string) (bool, error) { return path == dir, nil },
 		},
-	)
-	Register(
 		&mockBackend{
 			name:     "jj",
 			priority: 20,
@@ -321,12 +290,7 @@ func TestDetectAll_MultipleMatches_JjFirst(t *testing.T) {
 }
 
 func TestDetectAll_ErrorFromDetect(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{
 			name:   "git",
 			detect: func(_ string) (bool, error) { return false, assert.AnError },
@@ -339,12 +303,7 @@ func TestDetectAll_ErrorFromDetect(t *testing.T) {
 }
 
 func TestDetect_PathResolution(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -354,12 +313,7 @@ func TestDetect_PathResolution(t *testing.T) {
 }
 
 func TestDetectAll_PathResolution(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
-
-	Register(
+	withCleanRegistry(t,
 		&mockBackend{name: "git", detect: func(_ string) (bool, error) { return false, nil }},
 	)
 
@@ -369,10 +323,7 @@ func TestDetectAll_PathResolution(t *testing.T) {
 }
 
 func TestDetectWithRealGitRepo(t *testing.T) {
-	orig := registry
-	defer func() { registry = orig }()
-
-	registry = nil
+	withCleanRegistry(t)
 
 	dir := t.TempDir()
 	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)

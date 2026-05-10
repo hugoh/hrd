@@ -10,35 +10,148 @@ import (
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zenizh/go-capturer"
 )
 
-func TestShellCmdNoArgs(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+func TestDispatchCommands(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name          string
+		setup         func(t *testing.T) string
+		args          []string
+		expectError   bool
+		expectErrorIs error
+	}{
+		{
+			name: "TestShellCmdNoArgs",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+				}})
+			},
+			args:        []string{"shell"},
+			expectError: true,
 		},
-	})
+		{
+			name: "TestShellCmdWithCommand",
+			setup: func(t *testing.T) string {
+				t.Helper()
 
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "shell"})
-	assert.Error(t, err)
-}
-
-func TestShellCmdWithCommand(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: t.TempDir(), Backends: []string{"git"}},
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: t.TempDir(), Backends: []string{"git"}},
+				}})
+			},
+			args: []string{"shell", "--", "echo hello"},
 		},
-	})
+		{
+			name: "TestGitCmdNoReposWithBackend",
+			setup: func(t *testing.T) string {
+				t.Helper()
 
-	app := newTestApp()
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/repo1", Backends: []string{"jj"}},
+				}})
+			},
+			args:          []string{"git", "--", "status"},
+			expectError:   true,
+			expectErrorIs: errNoReposWithBackend,
+		},
+		{
+			name: "TestGitCmdWithRepos",
+			setup: func(t *testing.T) string {
+				t.Helper()
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"},
-	)
-	assert.NoError(t, err)
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args: []string{"git", "--", "status"},
+		},
+		{
+			name: "TestGitCmdWithReposFlag",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				gitDir := setupFakeGitRepo(t)
+
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: gitDir, Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
+			},
+			args: []string{"git", "--repos", "repo1", "--", "status"},
+		},
+		{
+			name: "TestGitCmdInteractiveMultipleRepos",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				gitDir := setupFakeGitRepo(t)
+
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: gitDir, Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
+			},
+			args: []string{"git", "-i", "repo1", "repo2", "--", "log"},
+		},
+		{
+			name: "TestGitCmdNoArgsFmt",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args:          []string{"git", "--"},
+			expectError:   true,
+			expectErrorIs: errNoArgsFmt,
+		},
+		{
+			name: "TestJjCmd",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args:          []string{"jj", "--", "status"},
+			expectError:   true,
+			expectErrorIs: errNoReposWithBackend,
+		},
+		{
+			name: "TestJjCmdInteractiveMismatch",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args:          []string{"jj", "-i", "--", "diff"},
+			expectError:   true,
+			expectErrorIs: errNoReposWithBackend,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfgPath := tt.setup(t)
+			err := runApp(t, cfgPath, tt.args)
+
+			switch {
+			case tt.expectErrorIs != nil:
+				require.ErrorIs(t, err, tt.expectErrorIs)
+			case tt.expectError:
+				require.Error(t, err)
+			default:
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
 
 func TestNoReposMatched(t *testing.T) {
@@ -65,479 +178,224 @@ func TestNoReposMatched(t *testing.T) {
 	}
 }
 
-func TestLsCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
+func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
+	type setupResult struct {
+		cfgPath string
+		args    []string
+		assert  func(t *testing.T, stdout string)
+	}
 
-	app := newTestApp()
+	tests := []struct {
+		name  string
+		setup func(t *testing.T) setupResult
+	}{
+		{
+			name: "TestLsCmdNoRepos",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ls"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "no repos tracked")
-}
-
-func TestLsCmdWithRepos(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: setupTestConfig(t, config.Config{Repos: map[string]config.Repo{}}),
+					args:    []string{"ls"},
+					assert: func(t *testing.T, stdout string) {
+						t.Helper()
+						assert.Contains(t, stdout, "no repos tracked")
+					},
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdWithRepos",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := cfgSingleGitRepo(t)
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ls"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-}
-
-func TestLsCmdWithMessage(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls"},
+					assert:  assertContains("repo1"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdWithMessage",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := cfgSingleGitRepo(t)
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "-m"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-	assert.Contains(t, stdout, msgLabel)
-}
-
-func TestLlCmd(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "-m"},
+					assert: func(t *testing.T, stdout string) {
+						t.Helper()
+						assert.Contains(t, stdout, "repo1")
+						assert.Contains(t, stdout, msgLabel)
+					},
+				}
+			},
 		},
-	})
+		{
+			name: "TestLlCmd",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := cfgSingleGitRepo(t)
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ll"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-	assert.Contains(t, stdout, msgLabel)
-}
-
-func TestLsCmdWithReposFlag(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ll"},
+					assert: func(t *testing.T, stdout string) {
+						t.Helper()
+						assert.Contains(t, stdout, "repo1")
+						assert.Contains(t, stdout, msgLabel)
+					},
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdWithReposFlag",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				gitDir := setupFakeGitRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: gitDir, Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "--repos", "repo1"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-	assert.NotContains(t, stdout, "repo2")
-}
-
-func TestLsCmdNamesOnly(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/r2", Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "--repos", "repo1"},
+					assert: func(t *testing.T, stdout string) {
+						t.Helper()
+						assert.Contains(t, stdout, "repo1")
+						assert.NotContains(t, stdout, "repo2")
+					},
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdNamesOnly",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/r2", Backends: []string{"git"}},
+				}})
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "-n"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, "repo1\nrepo2\n", stdout)
-}
-
-func TestLsCmdNamesOnlyLongFlag(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "-n"},
+					assert:  assertEqualOutput("repo1\nrepo2\n"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdNamesOnlyLongFlag",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+				}})
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "--names"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, "repo1\n", stdout)
-}
-
-func TestLsCmdDirsOnly(t *testing.T) {
-	repo1Dir := t.TempDir()
-	repo2Dir := t.TempDir()
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: repo1Dir, Backends: []string{"git"}},
-			"repo2": {Path: repo2Dir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "--names"},
+					assert:  assertEqualOutput("repo1\n"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdDirsOnly",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				repo1Dir := t.TempDir()
+				repo2Dir := t.TempDir()
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+					"repo2": {Path: repo2Dir, Backends: []string{"git"}},
+				}})
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "-d"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, repo1Dir+"\n"+repo2Dir+"\n", stdout)
-}
-
-func TestLsCmdDirsOnlyLongFlag(t *testing.T) {
-	repo1Dir := t.TempDir()
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "-d"},
+					assert:  assertEqualOutput(repo1Dir + "\n" + repo2Dir + "\n"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestLsCmdDirsOnlyLongFlag",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				repo1Dir := t.TempDir()
+				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+				}})
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "ls", "--dirs"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, repo1Dir+"\n", stdout)
-}
-
-func TestStatusCmd(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"ls", "--dirs"},
+					assert:  assertEqualOutput(repo1Dir + "\n"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestStatusCmd",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := cfgSingleGitRepo(t)
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "status"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-}
-
-func TestDiffCmd(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"status"},
+					assert:  assertContains("repo1"),
+				}
+			},
 		},
-	})
+		{
+			name: "TestDiffCmd",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
 
-	app := newTestApp()
+				cfgPath := cfgSingleGitRepo(t)
 
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "diff"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "repo1")
-}
-
-func TestGitCmdNoReposWithBackend(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"jj"}},
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"diff"},
+					assert:  assertContains("repo1"),
+				}
+			},
 		},
-	})
+	}
 
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "git", "--", "status"},
-	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errNoReposWithBackend)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.setup(t)
+			stdout := runAppCapture(t, result.cfgPath, result.args)
+			result.assert(t, stdout)
+		})
+	}
 }
 
-func TestGitCmdWithRepos(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "git", "--", "status"},
-	)
-	assert.NoError(t, err)
+func assertContains(needle string) func(t *testing.T, stdout string) {
+	return func(t *testing.T, stdout string) {
+		t.Helper()
+		assert.Contains(t, stdout, needle)
+	}
 }
 
-func TestGitCmdWithReposFlag(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "git", "--repos", "repo1", "--", "status"},
-	)
-	assert.NoError(t, err)
-}
-
-func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "git", "-i", "repo1", "repo2", "--", "log"},
-	)
-	assert.NoError(t, err)
-}
-
-func TestGitCmdNoArgsFmt(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "--"})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errNoArgsFmt)
-}
-
-func TestGroupListWithPanel(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1", "repo2"}},
-		},
-	})
-
-	app := newTestApp()
-
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "work")
-}
-
-func TestGroupListNoGroups(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	stdout := captureStdout(t, func() {
-		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "no groups defined")
-}
-
-func TestGroupListWithName(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-			"repo3": {Path: "/tmp/repo3", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1", "repo2"}},
-		},
-	})
-
-	app := newTestApp()
-
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "group", "ls", "work"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Equal(t, "repo1\nrepo2\n", stdout)
-}
-
-func TestGroupListUnknownName(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "ls", "nonexistent"},
-	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUnknownGroup)
-}
-
-func TestGroupAddTooFewArgs(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "add", "work"},
-	)
-	assert.ErrorIs(t, err, errGroupAddUsage)
-}
-
-func TestGroupAddUnknownRepo(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "add", "work", "unknown"},
-	)
-	assert.Error(t, err)
-}
-
-func TestGroupRemoveTooFewArgs(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "rm"})
-	assert.ErrorIs(t, err, errGroupRmUsage)
-}
-
-func TestGroupRemoveClearsContext(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-		Context: config.Context{Current: "work"},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "group", "rm", "work"},
-	)
-	require.NoError(t, err)
-
-	cfg, err := config.Load(cfgPath)
-	require.NoError(t, err)
-	assert.Empty(t, cfg.Context.Current)
-}
-
-func TestContextSetTooFewArgs(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "set"})
-	assert.ErrorIs(t, err, errContextSetUsage)
-}
-
-func TestContextSetUnknownGroup(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "context", "set", "unknown"},
-	)
-	assert.ErrorIs(t, err, errUnknownGroup)
-}
-
-func TestContextShowEmpty(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{})
-
-	app := newTestApp()
-
-	stdout := captureStdout(t, func() {
-		err := app.Run(
-			context.Background(),
-			[]string{"hrd", "--config", cfgPath, "context", "show"},
-		)
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "all repos")
+func assertEqualOutput(expected string) func(t *testing.T, stdout string) {
+	return func(t *testing.T, stdout string) {
+		t.Helper()
+		assert.Equal(t, expected, stdout)
+	}
 }
 
 func TestDispatchWithFewerResultsThanNames(t *testing.T) {
@@ -559,395 +417,87 @@ func TestDispatchWithFewerResultsThanNames(t *testing.T) {
 	}
 }
 
-func TestDispatchEmptyOutput(t *testing.T) {
-	names := []string{"repo1"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Output: "", ExitCode: 0}
-	})
-	assert.NoError(t, err)
-}
+func TestDispatch(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name        string
+		names       []string
+		results     []runner.Result
+		checkStderr func(t *testing.T, stderr string)
+	}{
+		{
+			name:    "TestDispatchEmptyOutput",
+			names:   []string{"repo1"},
+			results: []runner.Result{makeDispatchResult("repo1", "", 0, nil)},
+		},
+		{
+			name:    "TestDispatchWithError",
+			names:   []string{"repo1"},
+			results: []runner.Result{makeDispatchResult("repo1", "", 0, assert.AnError)},
+		},
+		{
+			name:    "TestDispatchWithOutput",
+			names:   []string{"repo1"},
+			results: []runner.Result{makeDispatchResult("repo1", "line1\nline2\n", 0, nil)},
+		},
+		{
+			name:  "TestDispatchMultipleRepos",
+			names: []string{"repo1", "repo2"},
+			results: []runner.Result{
+				makeDispatchResult("repo1", "ok", 0, nil),
+				makeDispatchResult("repo2", "ok", 0, nil),
+			},
+		},
+		{
+			name:  "TestDispatchMixedResults",
+			names: []string{"repo1", "repo2", "repo3"},
+			results: []runner.Result{
+				makeDispatchResult("repo1", "ok", 0, nil),
+				makeDispatchResult("repo2", "", 0, assert.AnError),
+				makeDispatchResult("repo3", "ok", 0, nil),
+			},
+		},
+		{
+			name:    "TestDispatchNonZeroExitCode",
+			names:   []string{"repo1"},
+			results: []runner.Result{makeDispatchResult("repo1", "", 1, nil)},
+		},
+		{
+			name:  "TestDispatchSummaryListsFailedRepos",
+			names: []string{"repo1", "repo2", "repo3"},
+			results: []runner.Result{
+				makeDispatchResult("repo1", "ok", 0, nil),
+				makeDispatchResult("repo2", "", 0, assert.AnError),
+				makeDispatchResult("repo3", "", 1, nil),
+			},
+			checkStderr: func(t *testing.T, stderr string) {
+				t.Helper()
+				assert.Contains(t, stderr, "; failed: repo2, repo3")
+			},
+		},
+	}
 
-func TestDispatchWithError(t *testing.T) {
-	names := []string{"repo1"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Err: assert.AnError}
-	})
-	assert.NoError(t, err)
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run := func() {
+				err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
+					for _, result := range tt.results {
+						resultCh <- result
+					}
+				})
+				assert.NoError(t, err)
+			}
 
-func TestDispatchWithOutput(t *testing.T) {
-	names := []string{"repo1"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Output: "line1\nline2\n", ExitCode: 0}
-	})
-	assert.NoError(t, err)
-}
-
-func TestDispatchMultipleRepos(t *testing.T) {
-	names := []string{"repo1", "repo2"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
-
-		resultCh <- runner.Result{RepoName: "repo2", Output: "ok", ExitCode: 0}
-	})
-	assert.NoError(t, err)
-}
-
-func TestDispatchMixedResults(t *testing.T) {
-	names := []string{"repo1", "repo2", "repo3"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
-
-		resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
-
-		resultCh <- runner.Result{RepoName: "repo3", Output: "ok", ExitCode: 0}
-	})
-	assert.NoError(t, err)
-}
-
-func TestDispatchNonZeroExitCode(t *testing.T) {
-	names := []string{"repo1"}
-	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-		resultCh <- runner.Result{RepoName: "repo1", Output: "", ExitCode: 1}
-	})
-	assert.NoError(t, err)
-}
-
-func TestDispatchSummaryListsFailedRepos(t *testing.T) {
-	names := []string{"repo1", "repo2", "repo3"}
-	stderr := captureStderr(t, func() {
-		err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
-			resultCh <- runner.Result{RepoName: "repo1", Output: "ok", ExitCode: 0}
-
-			resultCh <- runner.Result{RepoName: "repo2", Err: assert.AnError}
-
-			resultCh <- runner.Result{RepoName: "repo3", Output: "", ExitCode: 1}
+			if tt.checkStderr != nil {
+				stderr := capturer.CaptureStderr(run)
+				tt.checkStderr(t, stderr)
+			} else {
+				run()
+			}
 		})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stderr, "; failed: repo2, repo3")
-}
-
-func TestVcsArgs_FiltersRepoAndGroupNames(t *testing.T) {
-	repos := map[string]config.Repo{
-		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
 	}
-	groups := map[string]config.Group{
-		"work": {Repos: []string{"repo1"}},
-	}
-
-	args := cmdArgsFilter([]string{"repo1", "--", "status"}, repos, groups)
-	assert.Equal(t, []string{"status"}, args)
 }
 
-func TestVcsArgs_HandlesDoubleDash(t *testing.T) {
-	args := cmdArgsFilter([]string{"--", "log", "--oneline"}, nil, nil)
-	assert.Equal(t, []string{"log", "--oneline"}, args)
-}
-
-func TestGatherStatus_WithError(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Err: assert.AnError}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_WithDetails(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:        "main",
-			CommitMsg:  "initial commit",
-			CommitTime: "2 days ago",
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Synced(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
-			OverallState: backend.RefStateSynced,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Ahead(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateAhead, Ahead: 2}},
-			OverallState: backend.RefStateAhead,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_ConflictFlag(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	stdout := captureStdout(t, func() {
-		err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-			resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-				Ref:          "main",
-				Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
-				OverallState: backend.RefStateSynced,
-				Conflict:     true,
-			}}
-		})
-		assert.NoError(t, err)
-	})
-	assert.Contains(t, stdout, "‼", "repo-level conflict should display ‼ flag")
-}
-
-func TestGatherStatus_Dirty(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
-			OverallState: backend.RefStateSynced,
-			Dirty:        true,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Conflict(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "jj"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "abc123",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced, Conflict: true}},
-			OverallState: backend.RefStateDiverged,
-			Conflict:     true,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Gone(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "jj"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "abc123",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateGone}},
-			OverallState: backend.RefStateGone,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_NoRemote(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "jj"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "abc123",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "feat", State: backend.RefStateNoRemote}},
-			OverallState: backend.RefStateNoRemote,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Unknown(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "jj"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "abc123",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateUnknown}},
-			OverallState: backend.RefStateUnknown,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Diverged(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateDiverged, Ahead: 2, Behind: 1}},
-			OverallState: backend.RefStateDiverged,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_Behind(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateBehind, Behind: 3}},
-			OverallState: backend.RefStateBehind,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_NoBookmarks(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{},
-			OverallState: backend.RefStateNoRemote,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_JJRef(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "jj"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "abc123def",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
-			OverallState: backend.RefStateSynced,
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_DefaultState(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefState(999)}},
-			OverallState: backend.RefState(999),
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestGatherStatus_DetailsTimeOnly(t *testing.T) {
-	names := []string{"repo1"}
-	vcsByName := map[string]string{"repo1": "git"}
-	err := gatherStatus(names, vcsByName, true, func(resultCh chan<- runner.StatusResult) {
-		resultCh <- runner.StatusResult{RepoName: "repo1", Status: backend.RepoStatus{
-			Ref:          "main",
-			Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
-			OverallState: backend.RefStateSynced,
-			CommitTime:   "2 days ago",
-		}}
-	})
-	assert.NoError(t, err)
-}
-
-func TestJjCmd(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "jj", "--", "status"})
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errNoReposWithBackend)
-}
-
-// TestJjCmdInteractiveMismatch verifies the interactive dispatch path also filters by
-// backend — `jj diff` (interactive) on a git-only repo should error, not try to exec jj.
-func TestJjCmdInteractiveMismatch(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: gitDir, Backends: []string{"git"}},
-		},
-	})
-
-	app := newTestApp()
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "jj", "-i", "--", "diff"},
-	)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errNoReposWithBackend)
-}
-
-// ─── @-prefix for group names in dispatch ─────────────────────────────────
-
-func TestVcsArgsFilterWithAtPrefix(t *testing.T) {
-	repos := map[string]config.Repo{
-		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-	}
-	groups := map[string]config.Group{
-		"work": {Repos: []string{"repo1"}},
-	}
-
-	args := cmdArgsFilter([]string{"@work", "--", "status"}, repos, groups)
-	assert.Equal(t, []string{"status"}, args)
-}
-
-func TestVcsArgsFilterWithAtPrefixOnly(t *testing.T) {
-	groups := map[string]config.Group{
-		"work": {Repos: []string{"repo1"}},
-	}
-
-	args := cmdArgsFilter([]string{"@work", "--"}, nil, groups)
-	assert.Empty(t, args)
-}
-
-func TestResolveScopeWithAtPrefix(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	}
-
-	names, err := cfg.ResolveScope([]string{"@work"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"repo1"}, names)
-}
-
-func TestResolveScopeWithAtPrefixNotGroupBecomesRepo(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	}
-
-	// @work alone (single-name) expands via group lookup.
-	names, err := cfg.ResolveScope([]string{"@work"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"repo1"}, names)
-}
-
-func TestVcsArgsFilterWithMixedAtAndPlain(t *testing.T) {
+func TestCmdArgsFilter(t *testing.T) { //nolint:funlen
 	repos := map[string]config.Repo{
 		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
 		"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
@@ -956,6 +506,300 @@ func TestVcsArgsFilterWithMixedAtAndPlain(t *testing.T) {
 		"work": {Repos: []string{"repo1"}},
 	}
 
-	args := cmdArgsFilter([]string{"repo1", "@work", "--", "status"}, repos, groups)
-	assert.Equal(t, []string{"status"}, args)
+	t.Run("filter", func(t *testing.T) {
+		for _, tt := range []struct {
+			name   string
+			args   []string
+			repos  map[string]config.Repo
+			groups map[string]config.Group
+			want   []string
+		}{
+			{
+				name:   "TestVcsArgs_FiltersRepoAndGroupNames",
+				args:   []string{"repo1", "--", "status"},
+				repos:  repos,
+				groups: groups,
+				want:   []string{"status"},
+			},
+			{
+				name: "TestVcsArgs_HandlesDoubleDash",
+				args: []string{"--", "log", "--oneline"},
+				want: []string{"log", "--oneline"},
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				args := cmdArgsFilter(tt.args, tt.repos, tt.groups)
+				assert.Equal(t, tt.want, args)
+			})
+		}
+	})
+
+	t.Run("@-prefix variants", func(t *testing.T) {
+		for _, tt := range []struct {
+			name string
+			run  func(t *testing.T)
+		}{
+			{
+				name: "TestVcsArgsFilterWithAtPrefix",
+				run: func(t *testing.T) {
+					t.Helper()
+
+					args := cmdArgsFilter([]string{"@work", "--", "status"}, repos, groups)
+					assert.Equal(t, []string{"status"}, args)
+				},
+			},
+			{
+				name: "TestVcsArgsFilterWithAtPrefixOnly",
+				run: func(t *testing.T) {
+					t.Helper()
+
+					args := cmdArgsFilter([]string{"@work", "--"}, nil, groups)
+					assert.Empty(t, args)
+				},
+			},
+			{
+				name: "TestResolveScopeWithAtPrefix",
+				run: func(t *testing.T) {
+					t.Helper()
+
+					cfg := config.Config{Repos: repos, Groups: groups}
+					names, err := cfg.ResolveScope([]string{"@work"})
+					require.NoError(t, err)
+					assert.Equal(t, []string{"repo1"}, names)
+				},
+			},
+			{
+				name: "TestResolveScopeWithAtPrefixNotGroupBecomesRepo",
+				run: func(t *testing.T) {
+					t.Helper()
+
+					cfg := config.Config{Repos: repos, Groups: groups}
+					names, err := cfg.ResolveScope([]string{"@work"})
+					require.NoError(t, err)
+					assert.Equal(t, []string{"repo1"}, names)
+				},
+			},
+			{
+				name: "TestVcsArgsFilterWithMixedAtAndPlain",
+				run: func(t *testing.T) {
+					t.Helper()
+
+					args := cmdArgsFilter([]string{"repo1", "@work", "--", "status"}, repos, groups)
+					assert.Equal(t, []string{"status"}, args)
+				},
+			},
+		} {
+			t.Run(tt.name, tt.run)
+		}
+	})
+}
+
+func TestGatherStatus(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name        string
+		vcs         string
+		details     bool
+		result      runner.StatusResult
+		checkStdout func(t *testing.T, stdout string)
+	}{
+		{
+			name:   "TestGatherStatus_WithError",
+			vcs:    "git",
+			result: makeStatusError("repo1", "git", assert.AnError),
+		},
+		{
+			name:    "TestGatherStatus_WithDetails",
+			vcs:     "git",
+			details: true,
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref:        "main",
+				CommitMsg:  "initial commit",
+				CommitTime: "2 days ago",
+			}),
+		},
+		{
+			name: "TestGatherStatus_Synced",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced},
+				},
+				OverallState: backend.RefStateSynced,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Ahead",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateAhead, Ahead: 2},
+				},
+				OverallState: backend.RefStateAhead,
+			}),
+		},
+		{
+			name: "TestGatherStatus_ConflictFlag",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced},
+				},
+				OverallState: backend.RefStateSynced,
+				Conflict:     true,
+			}),
+			checkStdout: func(t *testing.T, stdout string) {
+				t.Helper()
+				assert.Contains(t, stdout, "‼", "repo-level conflict should display ‼ flag")
+			},
+		},
+		{
+			name: "TestGatherStatus_Dirty",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced},
+				},
+				OverallState: backend.RefStateSynced,
+				Dirty:        true,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Conflict",
+			vcs:  "jj",
+			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+				Ref: "abc123",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced, Conflict: true},
+				},
+				OverallState: backend.RefStateDiverged,
+				Conflict:     true,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Gone",
+			vcs:  "jj",
+			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+				Ref:          "abc123",
+				Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateGone}},
+				OverallState: backend.RefStateGone,
+			}),
+		},
+		{
+			name: "TestGatherStatus_NoRemote",
+			vcs:  "jj",
+			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+				Ref: "abc123",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "feat", State: backend.RefStateNoRemote},
+				},
+				OverallState: backend.RefStateNoRemote,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Unknown",
+			vcs:  "jj",
+			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+				Ref: "abc123",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateUnknown},
+				},
+				OverallState: backend.RefStateUnknown,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Diverged",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateDiverged, Ahead: 2, Behind: 1},
+				},
+				OverallState: backend.RefStateDiverged,
+			}),
+		},
+		{
+			name: "TestGatherStatus_Behind",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateBehind, Behind: 3},
+				},
+				OverallState: backend.RefStateBehind,
+			}),
+		},
+		{
+			name: "TestGatherStatus_NoBookmarks",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref:          "main",
+				Bookmarks:    []backend.BookmarkStatus{},
+				OverallState: backend.RefStateNoRemote,
+			}),
+		},
+		{
+			name: "TestGatherStatus_JJRef",
+			vcs:  "jj",
+			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+				Ref: "abc123def",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced},
+				},
+				OverallState: backend.RefStateSynced,
+			}),
+		},
+		{
+			name: "TestGatherStatus_DefaultState",
+			vcs:  "git",
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefState(999)},
+				},
+				OverallState: backend.RefState(999),
+			}),
+		},
+		{
+			name:    "TestGatherStatus_DetailsTimeOnly",
+			vcs:     "git",
+			details: true,
+			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+				Ref: "main",
+				Bookmarks: []backend.BookmarkStatus{
+					{Name: "main", State: backend.RefStateSynced},
+				},
+				OverallState: backend.RefStateSynced,
+				CommitTime:   "2 days ago",
+			}),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			names := []string{"repo1"}
+			vcsByName := map[string]string{"repo1": tt.vcs}
+			run := func() {
+				err := gatherStatus(
+					names,
+					vcsByName,
+					tt.details,
+					func(resultCh chan<- runner.StatusResult) {
+						resultCh <- tt.result
+					},
+				)
+				assert.NoError(t, err)
+			}
+
+			if tt.checkStdout != nil {
+				stdout := captureStdout(t, run)
+				tt.checkStdout(t, stdout)
+			} else {
+				run()
+			}
+		})
+	}
 }

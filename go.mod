@@ -9,6 +9,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.8.0
+	github.com/zenizh/go-capturer v0.0.0-20211219060012-52ea6c8fed04
 	golang.org/x/sync v0.20.0
 	golang.org/x/term v0.43.0
 )

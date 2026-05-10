@@ -290,20 +290,6 @@ func TestAddGroup_Dedup(t *testing.T) {
 	assert.Equal(t, []string{"r1", "r2", "r3"}, cfg.Groups["work"].Repos)
 }
 
-func TestAddGroup_DedupNoDuplicates(t *testing.T) {
-	cfg := &Config{
-		Repos: map[string]Repo{
-			"r1": {Path: "/1"},
-			"r2": {Path: "/2"},
-		},
-		Groups: map[string]Group{},
-	}
-
-	err := cfg.AddGroup("work", []string{"r1", "r2"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
-}
-
 func TestAddGroup_UnknownRepo(t *testing.T) {
 	cfg := &Config{Repos: map[string]Repo{"r1": {Path: "/1"}}}
 

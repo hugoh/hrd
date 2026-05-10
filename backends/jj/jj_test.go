@@ -13,6 +13,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setupJJDir creates a temp directory with a minimal .jj structure.
+func setupJJDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
+	require.NoError(t, err)
+
+	return dir
+}
+
+// initJJRepo initializes a real jj repository and skips the test if jj is not available.
+func initJJRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	cmd := exec.Command("jj", "git", "init")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
+		t.Skipf("jj git init did not create a .jj directory, skipping")
+	}
+
+	return dir
+}
+
 func TestBackend_Priority(t *testing.T) {
 	b := &Backend{}
 	assert.Positive(t, b.Priority())
@@ -258,31 +285,33 @@ func TestBackend_Name_JJ(t *testing.T) {
 	assert.Equal(t, "jj", b.Name())
 }
 
-func TestBackend_Detect_WithJJDir(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
+func TestBackend_Detect(t *testing.T) {
+	t.Run("with jj dir", func(t *testing.T) {
+		dir := t.TempDir()
+		err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
+		require.NoError(t, err)
 
-	b := &Backend{}
-	ok, err := b.Detect(dir)
-	require.NoError(t, err)
-	assert.True(t, ok)
-}
+		b := &Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.True(t, ok)
+	})
 
-func TestBackend_Detect_WithoutJJDir(t *testing.T) {
-	dir := t.TempDir()
+	t.Run("without jj dir", func(t *testing.T) {
+		dir := t.TempDir()
 
-	b := &Backend{}
-	ok, err := b.Detect(dir)
-	require.NoError(t, err)
-	assert.False(t, ok)
-}
+		b := &Backend{}
+		ok, err := b.Detect(dir)
+		require.NoError(t, err)
+		assert.False(t, ok)
+	})
 
-func TestBackend_Detect_ErrorOnPath(t *testing.T) {
-	b := &Backend{}
-	ok, err := b.Detect("\x00invalid")
-	assert.False(t, ok)
-	assert.Error(t, err)
+	t.Run("error on invalid path", func(t *testing.T) {
+		b := &Backend{}
+		ok, err := b.Detect("\x00invalid")
+		assert.False(t, ok)
+		assert.Error(t, err)
+	})
 }
 
 func TestBackend_Detect_NonColocated(t *testing.T) {
@@ -314,23 +343,15 @@ func TestBackend_Detect_NonColocated(t *testing.T) {
 }
 
 func TestBackend_Run_Interactive(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
-	_, err = b.Run(context.Background(), dir, []string{"log", "-r:", "-n1"}, true)
+	_, err := b.Run(context.Background(), dir, []string{"log", "-r:", "-n1"}, true)
 	assert.NoError(t, err)
 }
 
 func TestBackend_Run_InteractiveNonZero(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"nonexistent-command"}, true)
@@ -345,14 +366,7 @@ func TestRegister_JJ(t *testing.T) {
 }
 
 func TestBackend_Status(t *testing.T) {
-	dir := t.TempDir()
-	cmd := exec.Command("jj", "git", "init")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj git init did not create a .jj directory, skipping")
-	}
+	dir := initJJRepo(t)
 
 	b := &Backend{}
 	st, err := b.Status(context.Background(), dir)
@@ -361,14 +375,7 @@ func TestBackend_Status(t *testing.T) {
 }
 
 func TestBackend_Status_AncestorWithDescription(t *testing.T) {
-	dir := t.TempDir()
-	cmd := exec.Command("jj", "git", "init")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj git init did not create a .jj directory, skipping")
-	}
+	dir := initJJRepo(t)
 
 	setup := func(args ...string) {
 		c := exec.Command("jj", args...)
@@ -388,14 +395,7 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 }
 
 func TestBackend_Status_AncestorWalkError(t *testing.T) {
-	dir := t.TempDir()
-	cmd := exec.Command("jj", "git", "init")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skip("jj git init did not create a .jj directory, skipping")
-	}
+	dir := initJJRepo(t)
 
 	// Make the working copy have no description so the ancestor walk runs,
 	// then cause runJJ to fail on ancestor revs.
@@ -429,11 +429,7 @@ func TestBackend_Status_NotAJJRepo(t *testing.T) {
 }
 
 func TestBackend_Run(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"log", "-r:", "-n1"}, false)
@@ -442,11 +438,7 @@ func TestBackend_Run(t *testing.T) {
 }
 
 func TestBackend_Run_NonZeroExit(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(dir, ".jj", "repo"), []byte("."), 0o644)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
 	res, err := b.Run(context.Background(), dir, []string{"nonexistent"}, false)
@@ -455,24 +447,20 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 }
 
 func TestBackend_Run_NoExecutable(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
 
 	t.Setenv("PATH", "")
 
-	_, err = b.Run(context.Background(), dir, []string{"log"}, false)
+	_, err := b.Run(context.Background(), dir, []string{"log"}, false)
 	assert.Error(t, err)
 }
 
 func TestRunJJ_Failure(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
-	_, err = runJJ(
+	_, err := runJJ(
 		context.Background(),
 		dir,
 		[]string{"log", "-r", "@", "--template", "invalid_template"},
@@ -482,15 +470,13 @@ func TestRunJJ_Failure(t *testing.T) {
 }
 
 func TestBackend_Status_JjLogFailure(t *testing.T) {
-	dir := t.TempDir()
-	err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-	require.NoError(t, err)
+	dir := setupJJDir(t)
 
 	b := &Backend{}
 
 	t.Setenv("PATH", "")
 
-	_, err = b.Status(context.Background(), dir)
+	_, err := b.Status(context.Background(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
 }
