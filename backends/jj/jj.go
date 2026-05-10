@@ -71,7 +71,7 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
 	}
 
-	st := parseWorkingCopy(wcOut, sep)
+	st := parseWorkingCopy(wcOut)
 
 	if st.CommitMsg == "" {
 		const parentTmpl = `description.first_line() ++ "` + sep + `" ++ committer.timestamp().ago()`
@@ -188,8 +188,8 @@ func runJJ(ctx context.Context, _ string, args []string) (string, error) {
 // parseWorkingCopy parses unit-separated log template output.
 //
 // Fields: changeID \x1f "dirty"|"" \x1f "conflict"|"" \x1f description \x1f time_ago.
-func parseWorkingCopy(raw, sep string) backend.RepoStatus {
-	parts := strings.SplitN(strings.TrimRight(raw, "\n"), sep, 5) //nolint:mnd // 5 fields expected
+func parseWorkingCopy(raw string) backend.RepoStatus {
+	parts := strings.SplitN(strings.TrimRight(raw, "\n"), "\x1f", 5) //nolint:mnd // 5 fields expected
 
 	var st backend.RepoStatus
 	if len(parts) >= 1 {

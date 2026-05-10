@@ -20,6 +20,7 @@ linters:
     - gosec
     - mnd
     - revive
+    - goconst
   exclusions:
     rules:
       - path: _test\.go$

@@ -14,14 +14,23 @@ import (
 )
 
 func main() {
+	os.Exit(Run(os.Args))
+}
+
+// Run executes the hrd application with the given arguments.
+// Returns exit code: 0 for success, 1 for error.
+func Run(args []string) int {
 	git.Register()
 	jj.Register()
 
 	app := cmd.NewApp()
 
-	err := app.Run(context.Background(), os.Args)
+	err := app.Run(context.Background(), args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+
+		return 1
 	}
+
+	return 0
 }

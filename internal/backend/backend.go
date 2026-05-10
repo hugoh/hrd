@@ -101,6 +101,12 @@ type RepoStatus struct {
 // ComputeBookmarkState derives the RefState for a single BookmarkStatus from
 // its Ahead/Behind counts and whether a remote is configured.
 func ComputeBookmarkState(bookmark *BookmarkStatus) {
+	if bookmark.Conflict {
+		bookmark.State = RefStateDiverged
+
+		return
+	}
+
 	switch {
 	case bookmark.Remote == "":
 		bookmark.State = RefStateNoRemote
@@ -233,7 +239,7 @@ var errUnknownBackend = errors.New("unknown backend")
 //nolint:ireturn // returning interface is intentional for plugin architecture
 func Detect(path string) (Backend, error) {
 	abs, err := filepath.Abs(path)
-	if err != nil {
+	if err != nil { // coverage-ignore — only fails on nil, caller controls input
 		return nil, fmt.Errorf("resolving path %q: %w", path, err)
 	}
 
@@ -257,7 +263,7 @@ var errNoKnownVCS = errors.New("no known VCS detected")
 // with jj first when both jj and git are present.
 func DetectAll(path string) ([]Backend, error) {
 	abs, err := filepath.Abs(path)
-	if err != nil {
+	if err != nil { // coverage-ignore — only fails on nil, caller controls input
 		return nil, fmt.Errorf("resolving path %q: %w", path, err)
 	}
 

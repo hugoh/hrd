@@ -178,8 +178,10 @@ func parseStatus(raw string) backend.RepoStatus {
 		bm.Behind = behind
 	}
 
-	backend.ComputeBookmarkState(&bm)
-	st.Bookmarks = []backend.BookmarkStatus{bm}
+	if bm.Name != "" {
+		backend.ComputeBookmarkState(&bm)
+		st.Bookmarks = []backend.BookmarkStatus{bm}
+	}
 	st.OverallState = backend.WorstState(st.Bookmarks, st.Conflict)
 
 	return st

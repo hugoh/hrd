@@ -17,5 +17,9 @@ func execInteractive(ctx context.Context, dir, bin string, args []string) error 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	return fmt.Errorf("exec %s: %w", bin, cmd.Run())
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("exec %s: %w", bin, err)
+	}
+
+	return nil
 }
