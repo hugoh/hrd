@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"testing"
 	"time"
@@ -20,9 +19,7 @@ func TestShellCmdNoArgs(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "shell"})
 	assert.Error(t, err)
@@ -35,9 +32,7 @@ func TestShellCmdWithCommand(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -46,20 +41,28 @@ func TestShellCmdWithCommand(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestShellCmdNoReposMatched(t *testing.T) {
+func TestNoReposMatched(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "status", args: []string{"hrd", "--config", cfgPath, "status"}},
+		{name: "diff", args: []string{"hrd", "--config", cfgPath, "diff"}},
+		{name: "shell", args: []string{"hrd", "--config", cfgPath, "shell", "--", "echo test"}},
+	}
 
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo hello"},
-	)
-	assert.ErrorIs(t, err, errNoReposMatched)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newTestApp()
+
+			err := app.Run(context.Background(), tt.args)
+			assert.ErrorIs(t, err, errNoReposMatched)
+		})
+	}
 }
 
 func TestLsCmdNoRepos(t *testing.T) {
@@ -67,9 +70,7 @@ func TestLsCmdNoRepos(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ls"})
@@ -86,9 +87,7 @@ func TestLsCmdWithRepos(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "ls"})
@@ -105,9 +104,7 @@ func TestLsCmdWithMessage(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -128,9 +125,7 @@ func TestLlCmd(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -152,9 +147,7 @@ func TestLsCmdWithReposFlag(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -175,9 +168,7 @@ func TestLsCmdNamesOnly(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -196,9 +187,7 @@ func TestLsCmdNamesOnlyLongFlag(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -220,9 +209,7 @@ func TestLsCmdDirsOnly(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -242,9 +229,7 @@ func TestLsCmdDirsOnlyLongFlag(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -264,9 +249,7 @@ func TestStatusCmd(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "status"})
@@ -283,9 +266,7 @@ func TestDiffCmd(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "diff"})
@@ -301,9 +282,7 @@ func TestGitCmdNoReposWithBackend(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -321,9 +300,7 @@ func TestGitCmdWithRepos(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -341,9 +318,7 @@ func TestGitCmdWithReposFlag(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -361,9 +336,7 @@ func TestGitCmdInteractiveMultipleRepos(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -380,9 +353,7 @@ func TestGitCmdNoArgsFmt(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git", "--"})
 	require.Error(t, err)
@@ -400,9 +371,7 @@ func TestGroupListWithPanel(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
@@ -416,9 +385,7 @@ func TestGroupListNoGroups(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "ls"})
@@ -439,9 +406,7 @@ func TestGroupListWithName(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -460,9 +425,7 @@ func TestGroupListUnknownName(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -479,9 +442,7 @@ func TestGroupAddTooFewArgs(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -495,9 +456,7 @@ func TestGroupAddUnknownRepo(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -511,9 +470,7 @@ func TestGroupRemoveTooFewArgs(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "group", "rm"})
 	assert.ErrorIs(t, err, errGroupRmUsage)
@@ -530,9 +487,7 @@ func TestGroupRemoveClearsContext(t *testing.T) {
 		Context: config.Context{Current: "work"},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -552,9 +507,7 @@ func TestContextSetTooFewArgs(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "set"})
 	assert.ErrorIs(t, err, errContextSetUsage)
@@ -563,9 +516,7 @@ func TestContextSetTooFewArgs(t *testing.T) {
 func TestContextSetUnknownGroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -577,9 +528,7 @@ func TestContextSetUnknownGroup(t *testing.T) {
 func TestContextShowEmpty(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	stdout := captureStdout(t, func() {
 		err := app.Run(
@@ -589,25 +538,6 @@ func TestContextShowEmpty(t *testing.T) {
 		assert.NoError(t, err)
 	})
 	assert.Contains(t, stdout, "all repos")
-}
-
-func TestResolveScopeWithCommand(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	}
-
-	names, err := cfg.ResolveScope([]string{"repo1"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"repo1"}, names)
-
-	names, err = cfg.ResolveScope([]string{"work"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"repo1"}, names)
 }
 
 func TestDispatchWithFewerResultsThanNames(t *testing.T) {
@@ -699,48 +629,20 @@ func TestDispatchSummaryListsFailedRepos(t *testing.T) {
 }
 
 func TestVcsArgs_FiltersRepoAndGroupNames(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
+	repos := map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+	}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"repo1"}},
 	}
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
-
-	args := vcsArgsForTest(cfg, []string{"repo1", "--", "status"})
+	args := vcsArgsFilter([]string{"repo1", "--", "status"}, repos, groups)
 	assert.Equal(t, []string{"status"}, args)
 }
 
 func TestVcsArgs_HandlesDoubleDash(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{},
-	}
-
-	args := vcsArgsForTest(cfg, []string{"--", "log", "--oneline"})
+	args := vcsArgsFilter([]string{"--", "log", "--oneline"}, nil, nil)
 	assert.Equal(t, []string{"log", "--oneline"}, args)
-}
-
-func vcsArgsForTest(cfg config.Config, args []string) []string {
-	var out []string
-
-	for _, arg := range args {
-		if arg == "--" {
-			continue
-		}
-
-		if _, ok := cfg.Repos[arg]; !ok {
-			if _, ok := cfg.Groups[arg]; !ok {
-				out = append(out, arg)
-			}
-		}
-	}
-
-	return out
 }
 
 func TestGatherStatus_WithError(t *testing.T) {
@@ -954,48 +856,6 @@ func TestGatherStatus_DetailsTimeOnly(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestStatusCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "status"})
-	assert.ErrorIs(t, err, errNoReposMatched)
-}
-
-func TestDiffCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
-
-	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "diff"})
-	assert.ErrorIs(t, err, errNoReposMatched)
-}
-
-func TestShellCmdNoRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{},
-	})
-
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
-
-	err := app.Run(
-		context.Background(),
-		[]string{"hrd", "--config", cfgPath, "shell", "--", "echo test"},
-	)
-	assert.ErrorIs(t, err, errNoReposMatched)
-}
-
 func TestJjCmd(t *testing.T) {
 	gitDir := setupFakeGitRepo(t)
 	cfgPath := setupTestConfig(t, config.Config{
@@ -1004,9 +864,7 @@ func TestJjCmd(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "jj", "--", "status"})
 	require.Error(t, err)
@@ -1023,9 +881,7 @@ func TestJjCmdInteractiveMismatch(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),

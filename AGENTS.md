@@ -41,6 +41,7 @@ mise clean # Clean build artifacts
 
 ```bash
 mise ci # Run full CI checks (lint, test, covercheck)
+hk check # Run hooks
 ```
 
 ## Agent Workflow

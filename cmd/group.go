@@ -31,6 +31,19 @@ var (
 	errUnknownGroup    = errors.New("unknown group")
 )
 
+func loadGroupAndCheck(cfgPath, name string) (config.Config, error) {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("loading config: %w", err)
+	}
+
+	if _, ok := cfg.Groups[name]; !ok {
+		return config.Config{}, fmt.Errorf("%w %q", errUnknownGroup, name)
+	}
+
+	return cfg, nil
+}
+
 // groupCommands returns the `group` subcommand with its children.
 func groupCommands(cfgPath *string) *cli.Command {
 	return &cli.Command{
@@ -87,14 +100,11 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 
 			name := cmd.Args().Get(0)
 
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadGroupAndCheck(*cfgPath, name)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return err
 			}
 
-			if _, ok := cfg.Groups[name]; !ok {
-				return fmt.Errorf("%w %q", errUnknownGroup, name)
-			}
 			// Clear context if it points to this group.
 			if cfg.Context.Current == name {
 				cfg.Context.Current = ""
@@ -199,13 +209,9 @@ func contextSetCmd(cfgPath *string) *cli.Command {
 
 			name := cmd.Args().Get(0)
 
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadGroupAndCheck(*cfgPath, name)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-
-			if _, ok := cfg.Groups[name]; !ok {
-				return fmt.Errorf("%w %q", errUnknownGroup, name)
+				return err
 			}
 
 			cfg.Context.Current = name

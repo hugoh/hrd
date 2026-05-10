@@ -102,29 +102,6 @@ func setupFakeJJRepo(t *testing.T) string {
 	return dir
 }
 
-// ─── Pure function tests ──────────────────────────────────────────────────────────
-
-func TestVcsArgs(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want []string
-	}{
-		{"repo name filtered", []string{"myrepo", "--", "status"}, []string{"status"}},
-		{"group name filtered", []string{"work", "log"}, []string{"log"}},
-		{"args after -- kept", []string{"--", "log", "--oneline"}, []string{"log", "--oneline"}},
-		{"only flags", []string{"--", "fetch", "--all"}, []string{"fetch", "--all"}},
-		{"no special args", []string{"status", "-s"}, []string{"status", "-s"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(_ *testing.T) {
-			// These tests document expected vcsArgs behavior.
-			// The actual vcsArgs function is tested through integration tests.
-			_ = tt.want // suppress unused warning
-		})
-	}
-}
-
 func TestFilterMatching(t *testing.T) {
 	repos := map[string]config.Repo{
 		"gitrepo":  {Path: "/tmp/gitrepo", Backends: []string{"git"}},
@@ -197,9 +174,7 @@ func TestRepoAddMultiple(t *testing.T) {
 	jjDir := setupFakeJJRepo(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -215,9 +190,7 @@ func TestRepoAddMultiple(t *testing.T) {
 func TestRepoAddNoPath(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "add"})
 	assert.ErrorIs(t, err, errAtLeastOnePath)
@@ -228,9 +201,7 @@ func TestRepoAddNameWithMultiple(t *testing.T) {
 	jjDir := setupFakeJJRepo(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(),
 		[]string{"hrd", "--config", cfgPath, "repo", "add", "--name", "mygit", gitDir, jjDir})
@@ -245,9 +216,7 @@ func TestRepoRemove(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	// Remove the repo
 	err := app.Run(
@@ -269,9 +238,7 @@ func TestRepoRemoveNoName(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rm"})
 	assert.ErrorIs(t, err, errAtLeastOneName)
@@ -284,9 +251,7 @@ func TestRepoRemoveUnknown(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -304,9 +269,7 @@ func TestRepoRename(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -326,9 +289,7 @@ func TestRepoRename(t *testing.T) {
 func TestRepoRenameUsageError(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	// No args
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "rename"})
@@ -345,9 +306,7 @@ func TestRepoRenameUsageError(t *testing.T) {
 func TestRepoRenameUnknown(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -365,9 +324,7 @@ func TestRepoRenameExists(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -412,9 +369,7 @@ func TestGroupRemove(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -468,9 +423,7 @@ func TestContextClear(t *testing.T) {
 		Context: config.Context{Current: "work"},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "context", "clear"})
 	require.NoError(t, err)
@@ -579,9 +532,7 @@ func TestGitCommandNoArgs(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	// git command without -- and args should fail
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git"})
@@ -596,9 +547,7 @@ func TestRepoRefreshAll(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -615,9 +564,7 @@ func TestRepoRefreshSpecific(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),
@@ -633,9 +580,7 @@ func TestRepoRefreshNoArgs(t *testing.T) {
 		},
 	})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "repo", "refresh"})
 	assert.ErrorIs(t, err, errAtLeastOneOrAll)
@@ -668,9 +613,7 @@ func TestRepoLsWithGroupFilter(t *testing.T) {
 func TestRepoLsUnknownGroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	app := NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app := newTestApp()
 
 	err := app.Run(
 		context.Background(),

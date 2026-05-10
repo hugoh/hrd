@@ -16,11 +16,14 @@ jobs:
       contents: read
     runs-on: ubuntu-latest
     steps:
-      - &checkout
+      - &checkout-full
+        name: Checkout code with full history
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           persist-credentials: false
+          fetch-depth: 0
       - &mise
+        name: Setup mise
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151
       - name: hk checks
         run: hk check --no-progress --profile ci --all
@@ -34,7 +37,10 @@ jobs:
     permissions:
       contents: read
     steps:
-      - *checkout
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - &go-version
         name: Get Go version
         id: go-version
@@ -75,15 +81,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-          fetch-depth: 0
+      - *checkout-full
       - *go-version
       - *go-cache
       - *mise
       - name: Semver release
-        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20 # v4.1.0
+        uses: cocogitto/cocogitto-action@9a9fe03b31c47444290c0d7f9b1ee1b44ee13f20
         with:
           command: bump
           args: --auto
@@ -94,7 +97,6 @@ jobs:
             echo "No tag at HEAD — skipping release"
           else
             echo "Pushing ${TAG}"
-            # Push the tag using a temporary header to avoid persist-credentials: true
             git -c http.https://github.com/.extraheader="AUTHORIZATION: basic $(echo -n "x-access-token:${GITHUB_TOKEN}" | base64)" push origin "${TAG}"
             echo "Releasing ${TAG}"
             goreleaser release --clean

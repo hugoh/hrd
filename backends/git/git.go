@@ -4,11 +4,8 @@ package git
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -32,16 +29,12 @@ func (b *Backend) Name() string { return "git" }
 
 // Detect returns true if path contains a .git directory.
 func (b *Backend) Detect(path string) (bool, error) {
-	_, err := os.Stat(filepath.Join(path, ".git"))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-
+	ok, err := backend.DetectDir(path, ".git")
 	if err != nil {
-		return false, fmt.Errorf("stating .git: %w", err)
+		return false, fmt.Errorf("detect git: %w", err)
 	}
 
-	return true, nil
+	return ok, nil
 }
 
 // Status queries git for the current branch/remote relationship and working
@@ -73,51 +66,12 @@ func (b *Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	if interactive {
-		//nolint:gosec // controlled command execution, args from user input
-		cmd := exec.CommandContext(
-			ctx,
-			gitBin,
-			args...)
-		cmd.Dir = path
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		code := 0
-
-		if err != nil {
-			ee := &exec.ExitError{}
-			if errors.As(err, &ee) {
-				code = ee.ExitCode()
-				err = nil // non-zero exit is not an infrastructure error
-			}
-		}
-
-		return backend.RunResult{ExitCode: code}, err
-	}
-
-	var buf bytes.Buffer
-
-	//nolint:gosec // controlled command execution, args from user input
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = path
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	exitCode := 0
-
-	err := cmd.Run()
+	res, err := backend.RunCommand(ctx, gitBin, path, args, interactive)
 	if err != nil {
-		ee := &exec.ExitError{}
-		if errors.As(err, &ee) {
-			exitCode = ee.ExitCode()
-		} else {
-			return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
-		}
+		return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
 	}
 
-	return backend.RunResult{Output: buf.String(), ExitCode: exitCode}, nil
+	return res, nil
 }
 
 // runGit is a helper for internal status queries.

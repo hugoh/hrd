@@ -4,11 +4,8 @@ package jj
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -45,16 +42,12 @@ func (b *Backend) Name() string { return "jj" }
 // Detect returns true if path contains a .jj directory.
 // jj is registered before git so colocated repos (jj + .git) are claimed by jj.
 func (b *Backend) Detect(path string) (bool, error) {
-	_, err := os.Stat(filepath.Join(path, ".jj"))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
-
+	ok, err := backend.DetectDir(path, ".jj")
 	if err != nil {
-		return false, fmt.Errorf("stating .jj: %w", err)
+		return false, fmt.Errorf("detect jj: %w", err)
 	}
 
-	return true, nil
+	return ok, nil
 }
 
 // Status queries jj for the current change, all local bookmark tracking
@@ -112,46 +105,12 @@ func (b *Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	if interactive {
-		cmd := exec.CommandContext(ctx, "jj", args...) //nolint:gosec // user-invoked jj command
-		cmd.Dir = path
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		err := cmd.Run()
-		code := 0
-
-		if err != nil {
-			ee := &exec.ExitError{}
-			if errors.As(err, &ee) {
-				code = ee.ExitCode()
-				err = nil
-			}
-		}
-
-		return backend.RunResult{ExitCode: code}, err
-	}
-
-	var buf bytes.Buffer
-
-	cmd := exec.CommandContext(ctx, "jj", args...) //nolint:gosec // user-invoked jj command
-	cmd.Dir = path
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-
-	exitCode := 0
-
-	err := cmd.Run()
+	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
 	if err != nil {
-		ee := &exec.ExitError{}
-		if errors.As(err, &ee) {
-			exitCode = ee.ExitCode()
-		} else {
-			return backend.RunResult{}, fmt.Errorf("jj run: %w", err)
-		}
+		return backend.RunResult{}, fmt.Errorf("jj run: %w", err)
 	}
 
-	return backend.RunResult{Output: buf.String(), ExitCode: exitCode}, nil
+	return res, nil
 }
 
 //nolint:gochecknoglobals // swapped in tests to simulate jj failures
