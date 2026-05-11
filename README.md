@@ -175,7 +175,13 @@ concurrency = 8
 
 **Note**: Group names in the CLI are prefixed with `@` (e.g., `hrd context set @oss`, `hrd group ls @work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. The config file stores group names without the `@` prefix. on dispatch commands to run with a real terminal (pagers, interactive diffs). Interactive commands run sequentially on one repo at a time rather than in parallel.
 
-## Adding a backend
+---
+
+## Contributing
+
+Contributions are very welcome! Please open an issue or submit a pull request. See [development instructions](AGENTS.md).
+
+### Adding a backend
 
 Implement the `Backend` interface in a new package, add a `Register()` function that calls `backend.Register()`, and call it from `main.go`'s `Run()` function. The interface is four methods: `Name`, `Detect`, `Status`, and `Run`.
 
@@ -183,13 +189,9 @@ Implement the `Backend` interface in a new package, add a `Register()` function 
 
 ## Related tools
 
-**[gita](https://github.com/nosarthur/gita)** — the direct inspiration for `hrd`.
+[gita](https://github.com/nosarthur/gita) is the direct inspiration for `hrd`.
 
-**[gitbatch](https://github.com/isacikgoz/gitbatch)** — interactive TUI for batch git operations.
-
-**[ghq](https://github.com/x-motemen/ghq)** — manages repository locations and clones. Complementary to `hrd`: use `ghq` to clone and organize, `hrd` to operate across them.
-
-**[jj](https://github.com/jj-vcs/jj)** — the Jujutsu VCS that motivated first-class non-git support in `hrd`.
+[Jujutsu (jj) VCS](https://github.com/jj-vcs/jj) motivated creating `hrd` with first-class non-git support.
 
 ## Disclaimer
 

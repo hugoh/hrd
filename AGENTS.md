@@ -1,6 +1,4 @@
-# Agent Instructions
-
-## Project Overview
+# Development Instructions
 
 ## Build & Development Tasks
 
@@ -9,7 +7,7 @@ This project uses `mise` for task management. Use the following Mise tasks for a
 ### Building
 
 ```bash
-mise build    # Build application binary to dist/tmhi-cli
+mise build    # Build application binary into dist/
 mise dev      # Run in development mode (go run .)
 ```
 
@@ -23,10 +21,18 @@ mise covercheck # Check coverage meets threshold (80%)
 
 ### Linting & Formatting
 
+#### Go Codebase
+
 ```bash
-mise lint   # Run all lint checks (go mod tidy -diff, golangci-lint, prettier, goreleaser)
-mise format # Format code (golangci-lint fmt, prettier --write)
-mise fix    # Auto-fix lint issues (golangci-lint run --fix)
+mise lint   # Run all lint checks (go mod tidy -diff, golangci-lint, goreleaser)
+mise format # Format code (w/ golangci-lint)
+mise fix    # Auto-fix lint issues (w/ golangci-lint)
+```
+
+#### Other Files
+
+```bash
+hk check --all # Runs all linters
 ```
 
 ### Module Maintenance
@@ -53,11 +59,11 @@ When making changes to this codebase:
    - Run `mise format` to format code
    - Run `mise test` to verify tests pass
    - Run `mise lint` to check for remaining issues
-3. **If lint or formatting issues remain**: Run `mise fix` and `mise format` to autofix, then re-run lint
+3. **If lint or formatting issues remain**: Run `mise fix` and `mise format` to auto-fix, then re-run lint
 4. **Before completion**: Run `mise ci` to ensure all checks pass
 
-## Notes
+Always use `mise` tasks rather than calling tools directly
 
-- Test coverage threshold is configured in `.testcoverage.yml`.
-- Prettier is used for non-Go files (Markdown, YAML, etc.)
-- Always use `mise` tasks rather than calling tools directly
+## Test Coverage
+
+Test coverage threshold is configured in `.testcoverage.yml`.
