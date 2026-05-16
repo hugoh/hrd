@@ -14,6 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	testEmail  = "test@example.com"
+	testName   = "Test"
+	initMain   = "-b"
+	branchMain = "main"
+)
+
 func TestMain(m *testing.M) {
 	if len(backend.All()) == 0 {
 		backend.Register(&gitBackend{})
@@ -124,9 +131,9 @@ func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 
 func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 	dir := t.TempDir()
-	runGit(t, dir, "init")
-	runGit(t, dir, "config", "user.email", "test@test.com")
-	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "init", initMain, branchMain)
+	runGit(t, dir, "config", "user.email", testEmail)
+	runGit(t, dir, "config", "user.name", testName)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
 	runGit(t, dir, "add", "test.txt")
 	runGit(t, dir, "commit", "-m", "initial")
@@ -146,7 +153,7 @@ func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 	require.Len(t, results, 1)
 
 	require.NoError(t, results[0].Err)
-	assert.Contains(t, results[0].Output, "main")
+	assert.Contains(t, results[0].Output, branchMain)
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -188,9 +195,9 @@ func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
 
 func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
 	dir := t.TempDir()
-	runGit(t, dir, "init")
-	runGit(t, dir, "config", "user.email", "test@test.com")
-	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "init", initMain, branchMain)
+	runGit(t, dir, "config", "user.email", testEmail)
+	runGit(t, dir, "config", "user.name", testName)
 
 	repos := map[string]config.Repo{
 		"r1": {Path: dir, Backends: []string{"git"}},

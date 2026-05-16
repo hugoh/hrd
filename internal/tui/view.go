@@ -129,7 +129,7 @@ func (m *model) renderInputLine() string {
 	return prompt + m.input.View()
 }
 
-func (m *model) renderFooter() string {
+func (*model) renderFooter() string {
 	return styleFooter.Render("G:git J:jj S:shell f:fetch d:diff l:log p:pull P:push s:status")
 }
 
@@ -332,7 +332,7 @@ func truncateVis(s string, maxVis int) string {
 	return s[:ansiByteOff(s, maxVis)]
 }
 
-func (m *model) helpContent() string {
+func (*model) helpContent() string {
 	content := " Help\n\n"
 	content += "Navigation:\n"
 	content += "  ↑/k  Move cursor up (select mode)\n"
@@ -392,7 +392,7 @@ func (m *model) groupPopupContent() string {
 		Render(content)
 }
 
-func (m *model) alertContent() string {
+func (*model) alertContent() string {
 	content := styleWarn.Render("No repos selected") + "\n" +
 		ui.Muted("Select a group with @ or specific repos with Space")
 

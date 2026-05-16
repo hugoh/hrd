@@ -33,7 +33,7 @@ func stripLeadingSpace(s string) string {
 	lines := strings.Split(s, "\n")
 
 	for i, line := range lines {
-		if len(line) > 0 && line[0] == ' ' {
+		if line != "" && line[0] == ' ' {
 			lines[i] = line[1:]
 		}
 	}

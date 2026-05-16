@@ -286,7 +286,7 @@ func runShellInteractive(
 		ctx,
 		repos,
 		names,
-		func(ctx context.Context, name string, repo config.Repo) error {
+		func(ctx context.Context, _ string, repo config.Repo) error {
 			return runInteractive(ctx, repo.Path, "sh", []string{"-c", cmdStr})
 		},
 	)
@@ -484,7 +484,7 @@ func runSubcmdInteractive(
 		ctx,
 		repos,
 		names,
-		func(ctx context.Context, name string, repo config.Repo) error {
+		func(ctx context.Context, _ string, repo config.Repo) error {
 			bck, err := backend.ByName(repo.ActiveBackend())
 			if err != nil {
 				return fmt.Errorf("checking backend: %w", err)
@@ -522,7 +522,7 @@ func dispatchInteractive(
 		ctx,
 		repos,
 		names,
-		func(ctx context.Context, name string, repo config.Repo) error {
+		func(ctx context.Context, _ string, repo config.Repo) error {
 			return runInteractive(ctx, repo.Path, backendName, cmdArgs)
 		},
 	)
