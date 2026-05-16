@@ -285,6 +285,27 @@ func TestBackend_Name_JJ(t *testing.T) {
 	assert.Equal(t, "jj", b.Name())
 }
 
+func TestBackend_SubcommandArgs_JJ(t *testing.T) {
+	b := &Backend{}
+
+	tests := []struct {
+		op   string
+		want []string
+	}{
+		{"status", []string{"status"}},
+		{"fetch", []string{"git", "fetch"}},
+		{"push", []string{"git", "push"}},
+		{"pull", []string{"pull"}},
+		{"log", []string{"log"}},
+		{"diff", []string{"diff"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.op, func(t *testing.T) {
+			assert.Equal(t, tt.want, b.SubcommandArgs(tt.op))
+		})
+	}
+}
+
 func TestBackend_Detect(t *testing.T) {
 	t.Run("with jj dir", func(t *testing.T) {
 		dir := t.TempDir()
@@ -479,4 +500,63 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 	_, err := b.Status(context.Background(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
+}
+
+func TestMultiStepOps_Table(t *testing.T) {
+	steps, ok := multiStepOps["pull"]
+	require.True(t, ok, "pull must be a multi-step op")
+	require.Len(t, steps, 2, "pull must have 2 steps")
+
+	assert.Equal(t, []string{"git", "fetch"}, steps[0])
+	assert.Equal(t, []string{"rebase", "-d", "trunk()"}, steps[1])
+}
+
+func TestBackend_Run_Pull(t *testing.T) {
+	dir := initJJRepo(t)
+
+	b := &Backend{}
+	res, err := b.Run(context.Background(), dir, []string{"pull"}, false)
+	require.NoError(t, err)
+
+	// In a fresh repo there's no remote, so fetch fails with exit 1.
+	// That's fine — the multi-step path was taken and returned the failure.
+	assert.NotZero(t, res.ExitCode, "fetch should fail in repo with no remote")
+	assert.Contains(t, res.Output, "No git remotes", "fetch error should mention no remotes")
+}
+
+func TestBackend_Run_Pull_FirstStepFails(t *testing.T) {
+	dir := initJJRepo(t)
+	b := &Backend{}
+
+	orig := multiStepOps["pull"]
+	multiStepOps["pull"] = [][]string{{"nonexistent-command"}, {"log"}}
+
+	t.Cleanup(func() { multiStepOps["pull"] = orig })
+
+	res, err := b.Run(context.Background(), dir, []string{"pull"}, false)
+	require.NoError(t, err)
+	assert.NotZero(t, res.ExitCode, "should fail on first step and not attempt step 2")
+	assert.Contains(t, res.Output, "error", "output should contain error from nonexistent command")
+}
+
+func TestRunSteps_AllSucceed(t *testing.T) {
+	dir := initJJRepo(t)
+
+	res, err := runSteps(context.Background(), dir, "test",
+		[][]string{{"log", "-r", "@", "-n1", "--no-graph", "--color=never"}}, false)
+
+	require.NoError(t, err)
+	assert.Zero(t, res.ExitCode)
+}
+
+func TestRunSteps_InfraError(t *testing.T) {
+	dir := initJJRepo(t)
+
+	t.Setenv("PATH", "")
+
+	_, err := runSteps(context.Background(), dir, "test",
+		[][]string{{"log"}}, false)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "jj test")
 }

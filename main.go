@@ -1,3 +1,5 @@
+//go:generate go run ./cmd/genreadme
+
 // Package main is the hrd multi-repo manager entrypoint.
 package main
 

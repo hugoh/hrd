@@ -7,6 +7,7 @@ import (
 
 	"github.com/hugoh/hrd/cmd"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMainRun(t *testing.T) {
@@ -37,5 +38,7 @@ func TestMainRunNoArgs(t *testing.T) {
 	app.ErrWriter = &bytes.Buffer{}
 
 	err := app.Run(context.Background(), []string{"hrd"})
-	assert.NoError(t, err)
+	// Without args, hrd launches the TUI, which requires a real TTY.
+	// In test environments the TTY is unavailable, so verify TUI was invoked.
+	require.ErrorContains(t, err, "TTY", "launched TUI but no TTY available")
 }

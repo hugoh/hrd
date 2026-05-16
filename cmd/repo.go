@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -12,7 +13,6 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/urfave/cli/v3"
 )
 
@@ -192,6 +192,7 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 	}
 }
 
+//nolint:funlen // function body includes full action closure
 func repoListCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
 		Name:  "ls",
@@ -226,13 +227,15 @@ func repoListCmd(cfgPath *string) *cli.Command {
 				sort.Strings(names)
 			}
 
-			tbl := ui.NewTable()
-			tbl.AppendHeader(table.Row{nameLabel, vcsLabel, "PATH"})
-			tbl.SetColumnConfigs([]table.ColumnConfig{
-				{Number: colName, AutoMerge: true},
-				{Number: colVCS, AutoMerge: true},
-			})
+			const nameWidth = 15
 
+			const vcsWidth = 3
+
+			const gap = 2
+
+			pathWidth := ui.GetTermWidth() - nameWidth - vcsWidth - gap
+
+			rows := make([][]string, 0, len(names))
 			for _, name := range names {
 				repo := cfg.Repos[name]
 
@@ -241,10 +244,15 @@ func repoListCmd(cfgPath *string) *cli.Command {
 					vcsLabel = strings.Join(repo.Backends, ",")
 				}
 
-				tbl.AppendRow(table.Row{name, vcsLabel, repo.Path})
+				rows = append(rows, []string{name, vcsLabel, repo.Path})
 			}
 
-			tbl.Render()
+			widths := []int{nameWidth, vcsWidth, pathWidth}
+			header := []string{NameLabel, "VCS", "PATH"}
+
+			_, _ = os.Stdout.WriteString(ui.RenderTable(
+				header, rows, ui.EffectiveWidths(header, rows, widths),
+			))
 
 			return nil
 		},

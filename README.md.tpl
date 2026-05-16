@@ -87,11 +87,7 @@ hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ## Status dashboard
 
 ```text
-NAME        VCS STATUS                                                   
-myproject   git main ↑2*  feat: add new feature (2 hours ago)            
-dotfiles    jj  main ✓∅  config: update zshrc (1 day ago)                
-infra       git feat/rework ↑1↓3  refactor: networking layer (3 days ago)
-old-service jj  legacy ✗✓!‼  fix: critical bug (1 week ago)
+{{ .LLOutput -}}
 ```
 
 Status symbols at a glance:
@@ -124,37 +120,7 @@ The TUI mirrors the CLI: the same backends, the same parallel execution, the sam
 ## Command reference
 
 ```text
-NAME:
-   hrd - manage multiple git and jj repositories
-
-USAGE:
-   hrd [global options] [command [command options]]
-
-VERSION:
-   dev
-
-COMMANDS:
-   repo        manage tracked repositories
-   group       manage repo groups
-   context     set or clear the active group scope
-   ls, ll      show status of repos
-   status, st  show detailed status for repos (git status or jj status)
-   diff        show diff for repos (git diff or jj diff)
-   log         show log for repos (git log or jj log)
-   fetch       fetch from remotes (git fetch or jj git fetch)
-   pull        pull from remotes (git pull or jj git pull)
-   push        push to remotes (git push or jj git push)
-   git         run a git command across repos
-   jj          run a jj command across repos
-   shell       run an arbitrary shell command across repos
-   tui, i      interactive terminal UI for browsing and running commands across repos
-   help, h     Shows a list of commands or help for one command
-   completion  Output shell completion script for bash, zsh, fish, or Powershell
-
-GLOBAL OPTIONS:
-   --config string, -c string  path to config file (default: "~/.config/hrd/config.toml")
-   --help, -h                  show help
-   --version, -v               print the version
+{{ .HelpOutput -}}
 ```
 
 ## Configuration

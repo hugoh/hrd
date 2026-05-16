@@ -135,6 +135,55 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			expectError:   true,
 			expectErrorIs: errNoReposWithBackend,
 		},
+		{
+			name: "TestFetchCmd",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args: []string{"fetch"},
+		},
+		{
+			name: "TestFetchCmdWithReposFlag",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				gitDir := setupFakeGitRepo(t)
+
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: gitDir, Backends: []string{"git"}},
+					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				}})
+			},
+			args: []string{"fetch", "--repos", "repo1"},
+		},
+		{
+			name: "TestFetchCmdInteractive",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return cfgPath
+			},
+			args: []string{"fetch", "-i"},
+		},
+		{
+			name: "TestFetchCmdInteractiveNoBackend",
+			setup: func(t *testing.T) string {
+				t.Helper()
+
+				gitDir := setupFakeGitRepo(t)
+
+				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+					"repo1": {Path: gitDir, Backends: []string{}},
+				}})
+			},
+			args: []string{"fetch", "-i"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -165,6 +214,7 @@ func TestNoReposMatched(t *testing.T) {
 	}{
 		{name: "status", args: []string{"hrd", "--config", cfgPath, "status"}},
 		{name: "diff", args: []string{"hrd", "--config", cfgPath, "diff"}},
+		{name: "fetch", args: []string{"hrd", "--config", cfgPath, "fetch"}},
 		{name: "shell", args: []string{"hrd", "--config", cfgPath, "shell", "--", "echo test"}},
 	}
 
@@ -231,7 +281,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 					assert: func(t *testing.T, stdout string) {
 						t.Helper()
 						assert.Contains(t, stdout, "repo1")
-						assert.Contains(t, stdout, msgLabel)
+						assert.Contains(t, stdout, StatusLabel)
 					},
 				}
 			},
@@ -249,7 +299,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 					assert: func(t *testing.T, stdout string) {
 						t.Helper()
 						assert.Contains(t, stdout, "repo1")
-						assert.Contains(t, stdout, msgLabel)
+						assert.Contains(t, stdout, StatusLabel)
 					},
 				}
 			},
@@ -373,6 +423,20 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 				}
 			},
 		},
+		{
+			name: "TestFetchCmd",
+			setup: func(t *testing.T) setupResult {
+				t.Helper()
+
+				cfgPath := cfgSingleGitRepo(t)
+
+				return setupResult{
+					cfgPath: cfgPath,
+					args:    []string{"fetch"},
+					assert:  assertContains("repo1"),
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -384,7 +448,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 	}
 }
 
-func assertContains(needle string) func(t *testing.T, stdout string) {
+func assertContains(needle string) func(t *testing.T, stdout string) { //nolint:unparam
 	return func(t *testing.T, stdout string) {
 		t.Helper()
 		assert.Contains(t, stdout, needle)
@@ -611,7 +675,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 			name:    "TestGatherStatus_WithDetails",
 			vcs:     "git",
 			details: true,
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref:        "main",
 				CommitMsg:  "initial commit",
 				CommitTime: "2 days ago",
@@ -620,7 +684,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Synced",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced},
@@ -631,7 +695,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Ahead",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateAhead, Ahead: 2},
@@ -642,7 +706,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_ConflictFlag",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced},
@@ -658,7 +722,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Dirty",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced},
@@ -670,7 +734,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Conflict",
 			vcs:  "jj",
-			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+			result: makeStatusResult("jj", backend.RepoStatus{
 				Ref: "abc123",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced, Conflict: true},
@@ -682,7 +746,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Gone",
 			vcs:  "jj",
-			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+			result: makeStatusResult("jj", backend.RepoStatus{
 				Ref:          "abc123",
 				Bookmarks:    []backend.BookmarkStatus{{Name: "main", State: backend.RefStateGone}},
 				OverallState: backend.RefStateGone,
@@ -691,7 +755,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_NoRemote",
 			vcs:  "jj",
-			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+			result: makeStatusResult("jj", backend.RepoStatus{
 				Ref: "abc123",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "feat", State: backend.RefStateNoRemote},
@@ -702,7 +766,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Unknown",
 			vcs:  "jj",
-			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+			result: makeStatusResult("jj", backend.RepoStatus{
 				Ref: "abc123",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateUnknown},
@@ -713,7 +777,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Diverged",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateDiverged, Ahead: 2, Behind: 1},
@@ -724,7 +788,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_Behind",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateBehind, Behind: 3},
@@ -735,7 +799,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_NoBookmarks",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref:          "main",
 				Bookmarks:    []backend.BookmarkStatus{},
 				OverallState: backend.RefStateNoRemote,
@@ -744,7 +808,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_JJRef",
 			vcs:  "jj",
-			result: makeStatusResult("repo1", "jj", backend.RepoStatus{
+			result: makeStatusResult("jj", backend.RepoStatus{
 				Ref: "abc123def",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced},
@@ -755,7 +819,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGatherStatus_DefaultState",
 			vcs:  "git",
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefState(999)},
@@ -767,7 +831,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 			name:    "TestGatherStatus_DetailsTimeOnly",
 			vcs:     "git",
 			details: true,
-			result: makeStatusResult("repo1", "git", backend.RepoStatus{
+			result: makeStatusResult("git", backend.RepoStatus{
 				Ref: "main",
 				Bookmarks: []backend.BookmarkStatus{
 					{Name: "main", State: backend.RefStateSynced},
@@ -795,7 +859,7 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 			}
 
 			if tt.checkStdout != nil {
-				stdout := captureStdout(t, run)
+				stdout := capturer.CaptureStdout(run)
 				tt.checkStdout(t, stdout)
 			} else {
 				run()

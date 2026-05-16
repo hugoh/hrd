@@ -34,6 +34,8 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestDefaultPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+
 	path := DefaultPath()
 	assert.Contains(t, path, "hrd")
 	assert.Contains(t, path, "config.toml")
@@ -42,6 +44,13 @@ func TestDefaultPath(t *testing.T) {
 
 	customPath := DefaultPath()
 	assert.Equal(t, "/custom/config/hrd/config.toml", customPath)
+}
+
+func TestDefaultPathAlreadySet(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg/custom")
+
+	path := DefaultPath()
+	assert.Equal(t, "/xdg/custom/hrd/config.toml", path)
 }
 
 func TestLoad_NoFile(t *testing.T) {
@@ -269,14 +278,11 @@ func TestAddGroup(t *testing.T) {
 	err := cfg.AddGroup("work", []string{"r1", "r2"})
 	require.NoError(t, err)
 	assert.Contains(t, cfg.Groups, "work")
-
-	err = cfg.AddGroup("work", []string{"r1"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"r1"}, cfg.Groups["work"].Repos)
+	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
 }
 
-func TestAddGroup_Dedup(t *testing.T) {
-	cfg := &Config{
+func newTestConfigWith3Repos() *Config {
+	return &Config{
 		Repos: map[string]Repo{
 			"r1": {Path: "/1"},
 			"r2": {Path: "/2"},
@@ -284,6 +290,28 @@ func TestAddGroup_Dedup(t *testing.T) {
 		},
 		Groups: map[string]Group{},
 	}
+}
+
+func TestAddGroup_Append(t *testing.T) {
+	cfg := newTestConfigWith3Repos()
+
+	require.NoError(t, cfg.AddGroup("work", []string{"r1", "r2"}))
+	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
+
+	require.NoError(t, cfg.AddGroup("work", []string{"r3"}))
+	assert.Equal(t, []string{"r1", "r2", "r3"}, cfg.Groups["work"].Repos)
+}
+
+func TestAddGroup_AppendDedup(t *testing.T) {
+	cfg := newTestConfigWith3Repos()
+
+	require.NoError(t, cfg.AddGroup("work", []string{"r1"}))
+	require.NoError(t, cfg.AddGroup("work", []string{"r1", "r2"}))
+	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
+}
+
+func TestAddGroup_Dedup(t *testing.T) {
+	cfg := newTestConfigWith3Repos()
 
 	err := cfg.AddGroup("work", []string{"r1", "r2", "r1", "r3", "r2"})
 	require.NoError(t, err)
@@ -296,4 +324,55 @@ func TestAddGroup_UnknownRepo(t *testing.T) {
 	err := cfg.AddGroup("work", []string{"r1", "nonexistent"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
+}
+
+func TestStripGroupPrefix(t *testing.T) {
+	assert.Equal(t, "work", stripGroupPrefix("work"))
+	assert.Equal(t, "work", stripGroupPrefix("@work"))
+	assert.Empty(t, stripGroupPrefix(""))
+	assert.Equal(t, "@work", stripGroupPrefix("@@work"))
+}
+
+func TestGroupReposDirect(t *testing.T) {
+	cfg := &Config{
+		Repos:  map[string]Repo{"a": {}, "b": {}},
+		Groups: map[string]Group{"work": {Repos: []string{"a", "b"}}},
+	}
+
+	repos, ok := cfg.groupRepos("work")
+	require.True(t, ok)
+	assert.Equal(t, []string{"a", "b"}, repos)
+}
+
+func TestGroupReposWithAtPrefix(t *testing.T) {
+	cfg := &Config{
+		Repos:  map[string]Repo{"a": {}},
+		Groups: map[string]Group{"work": {Repos: []string{"a"}}},
+	}
+
+	repos, ok := cfg.groupRepos("@work")
+	require.True(t, ok)
+	assert.Equal(t, []string{"a"}, repos)
+}
+
+func TestGroupReposNotFound(t *testing.T) {
+	cfg := &Config{Groups: map[string]Group{}}
+
+	_, ok := cfg.groupRepos("nonexistent")
+	assert.False(t, ok)
+}
+
+func TestLoadFileReadError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nonexistent", "config.toml")
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.Equal(t, defaultConcurrency, cfg.Settings.Concurrency)
+}
+
+func TestSaveMkdirError(t *testing.T) {
+	err := Save("/nonexistent-dir-12345/config.toml", Config{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "creating config dir")
 }

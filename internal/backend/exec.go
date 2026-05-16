@@ -48,6 +48,7 @@ func RunCommand(
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 	} else {
+		cmd.Stdin = nil
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
 	}

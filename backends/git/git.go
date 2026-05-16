@@ -17,6 +17,7 @@ const (
 	abPartsCount = 2      // number of parts in "branch.ab +<ahead> -<behind>"
 	headRef      = "HEAD" // HEAD reference name
 	logCmd       = "log"  // log command name
+	subCmdStatus = "status"
 )
 
 // Backend implements backend.Backend for git repositories.
@@ -43,7 +44,7 @@ func (*Backend) Detect(path string) (bool, error) {
 // Status queries git for the current branch/remote relationship and working
 // tree cleanliness using a single `git status --porcelain=v2 --branch` call.
 func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
-	out, err := runGit(ctx, path, []string{"status", "--porcelain=v2", "--branch"})
+	out, err := runGit(ctx, path, []string{subCmdStatus, "--porcelain=v2", "--branch"})
 	if err != nil {
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
 	}
@@ -60,6 +61,10 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	}
 
 	return status, nil
+}
+
+func (*Backend) SubcommandArgs(op string) []string {
+	return []string{op}
 }
 
 // Run executes arbitrary git args in path.

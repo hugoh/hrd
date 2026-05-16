@@ -214,13 +214,17 @@ type Backend interface {
 	// Status returns the unified status for the repo at path.
 	Status(ctx context.Context, path string) (RepoStatus, error)
 
+	// SubcommandArgs returns the full argument list for a VCS operation.
+	// For example, git returns ["fetch"] but jj returns ["git", "fetch"]
+	// because jj wraps git operations under the "git" subcommand.
+	SubcommandArgs(op string) []string
+
 	// Run executes the given args using this VCS tool in path.
 	// When interactive is true, the caller has already arranged for the
 	// subprocess to inherit the terminal; Run must not capture output.
 	Run(ctx context.Context, path string, args []string, interactive bool) (RunResult, error)
 }
 
-// registry holds all registered backends in registration order.
 // Detection priority follows registration order.
 //
 //nolint:gochecknoglobals // intentional: plugin registry

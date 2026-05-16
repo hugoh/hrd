@@ -20,10 +20,25 @@ const (
 	templateFlag         = "--template"
 	separator            = "\x1f"
 	cmdNameLog           = "log"
+	cmdGit               = "git"
+	opFetch              = "fetch"
+	opPull               = "pull"
+	opPush               = "push"
 )
 
 //nolint:gochecknoglobals // common jj log flags shared across Status calls
 var logBaseArgs = []string{cmdNameLog, noGraphFlag, colorNeverFlag}
+
+//nolint:gochecknoglobals // lookup table for jj git-prefixed subcommands
+var jjPrefixedOps = map[string]bool{
+	opFetch: true,
+	opPush:  true,
+}
+
+//nolint:gochecknoglobals // table of multi-step operations (op → sequence of arg lists)
+var multiStepOps = map[string][][]string{
+	opPull: {{cmdGit, opFetch}, {"rebase", "-d", "trunk()"}},
+}
 
 // Backend implements backend.Backend for jj repositories.
 type Backend struct{}
@@ -44,6 +59,14 @@ func (*Backend) Detect(path string) (bool, error) {
 	}
 
 	return ok, nil
+}
+
+func (*Backend) SubcommandArgs(op string) []string {
+	if jjPrefixedOps[op] {
+		return []string{cmdGit, op}
+	}
+
+	return []string{op}
 }
 
 // Status queries jj for the current change, all local bookmark tracking
@@ -94,19 +117,48 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	return status, nil
 }
 
-// Run executes arbitrary jj args in path.
+// Run executes jj args in path. Multi-step ops (pull, etc.) run each step
+// sequentially, stopping on the first failure.
 func (*Backend) Run(
 	ctx context.Context,
 	path string,
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
+	if len(args) > 0 {
+		if steps, ok := multiStepOps[args[0]]; ok {
+			return runSteps(ctx, path, args[0], steps, interactive)
+		}
+	}
+
 	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
 	if err != nil {
 		return backend.RunResult{}, fmt.Errorf("jj run: %w", err)
 	}
 
 	return res, nil
+}
+
+// runSteps executes each step sequentially, returning on the first non-zero
+// exit or infrastructure error.
+func runSteps(
+	ctx context.Context,
+	path, op string,
+	steps [][]string,
+	interactive bool,
+) (backend.RunResult, error) {
+	for _, step := range steps {
+		res, err := backend.RunCommand(ctx, "jj", path, step, interactive)
+		if err != nil {
+			return backend.RunResult{}, fmt.Errorf("jj %s: %w", op, err)
+		}
+
+		if res.ExitCode != 0 {
+			return res, nil
+		}
+	}
+
+	return backend.RunResult{}, nil
 }
 
 //nolint:gochecknoglobals // swapped in tests to simulate jj failures
@@ -325,7 +377,7 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 	remote = strings.TrimSuffix(remote, ":")
 
 	// Skip synthetic @git remote (internal colocation bookmark, not a real remote).
-	if remote == "git" {
+	if remote == cmdGit {
 		return
 	}
 
