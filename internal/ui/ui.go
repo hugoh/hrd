@@ -1,87 +1,150 @@
-// Package ui provides terminal UI rendering for repo status and dispatch results.
 package ui
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"strconv"
+	"strings"
 
+	"charm.land/lipgloss/v2"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/jedib0t/go-pretty/v6/text"
-	"github.com/muesli/reflow/truncate"
-	"github.com/muesli/reflow/wordwrap"
+	"github.com/hugoh/hrd/internal/theme"
 	"golang.org/x/term"
 )
 
-var tableStyle = table.Style{ //nolint:gochecknoglobals
-	Box: table.StyleBoxDefault,
-	Color: table.ColorOptions{
-		Header: text.Colors{text.Bold, text.FgHiCyan},
-	},
+func lipglossColor(colorName string) color.Color {
+	return lipgloss.Color(theme.ColorCode(colorName))
 }
 
-// RenderDispatchResult renders a dispatch result (success/failure).
+func Muted(s string) string {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(s)
+}
+
+func MutedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+}
+
+func StateStyle(state backend.RefState) lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipglossColor(theme.StateColor(state)))
+}
+
+func ApplyColor(colorName, symbol string) string {
+	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
+}
+
+func ColorSprint(colorName string, s string) string {
+	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(s)
+}
+
+func FormatDispatchHeader(name, vcs string) string {
+	return fmt.Sprintf(" %-15s %-3s", name, vcs)
+}
+
 func RenderDispatchResult(res runner.Result) string {
-	header := text.Colors{text.BgHiBlack, text.FgHiWhite}.Sprintf(" %-19s", res.RepoName)
+	headerStyle := lipgloss.NewStyle().
+		Background(lipgloss.Color("236")).
+		Foreground(lipgloss.Color("15"))
+	header := headerStyle.Render(FormatDispatchHeader(res.RepoName, res.VCS))
 
-	if res.Err != nil {
-		return header + " " + text.FgRed.Sprint("✗ "+res.Err.Error())
+	if runner.ResultColor(res) == "red" {
+		if res.Err != nil {
+			return header + " " + lipgloss.NewStyle().
+				Foreground(lipgloss.Color("1")).
+				Render("✗ "+res.Err.Error())
+		}
+
+		return header + " " + lipgloss.NewStyle().
+			Foreground(lipgloss.Color("1")).
+			Render("✗ exit "+strconv.Itoa(res.ExitCode))
 	}
 
-	if res.ExitCode != 0 {
-		return header + " " + text.FgRed.Sprint("✗ exit "+strconv.Itoa(res.ExitCode))
-	}
-
-	return header + " " + text.Colors{text.Bold, text.FgGreen}.Sprint("✓")
+	return header + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
 }
 
-// Outf prints to stdout with formatting.
+type StatusLineParts struct {
+	Ref      string
+	Symbols  string
+	Detail   string
+	HasRef   bool
+	HasError bool
+	Error    string
+}
+
+func FormatStatusLine(status backend.RepoStatus, symStr string, detail string) StatusLineParts {
+	refStr := ""
+	hasRef := false
+
+	if len(status.Bookmarks) > 0 {
+		refStr = status.Bookmarks[0].Name
+		hasRef = true
+	} else if status.Ref != "" {
+		refStr = status.Ref
+		hasRef = true
+	}
+
+	return StatusLineParts{
+		Ref:     refStr,
+		Symbols: symStr,
+		Detail:  detail,
+		HasRef:  hasRef,
+	}
+}
+
+func FormatDispatchStatusLine(status backend.RepoStatus, includeDetail bool) string {
+	symStr := theme.FormatSymbols(status, ApplyColor)
+	parts := FormatStatusLine(status, symStr, "")
+	style := StateStyle(status.OverallState)
+
+	if parts.HasRef {
+		combined := style.Render(fmt.Sprintf("%s %s", parts.Ref, parts.Symbols))
+
+		if includeDetail {
+			detail := FormatDetail(status.CommitMsg, status.CommitTime)
+			if detail != "" {
+				combined += "  " + Muted(detail)
+			}
+		}
+
+		return combined
+	}
+
+	return ""
+}
+
 func Outf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stdout, format+"\n", args...)
 }
 
-// Errf prints to stderr with formatting.
 func Errf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 }
 
-// Success prints a green success message to stderr.
 func Success(msg string, args ...any) {
-	fmt.Fprintf(os.Stderr, "%s\n", text.Colors{text.FgGreen}.Sprintf(msg, args...))
+	fmt.Fprintf(
+		os.Stderr,
+		"%s\n",
+		lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf(msg, args...)),
+	)
 }
 
-// Warn prints a yellow warning message to stderr.
 func Warn(msg string, args ...any) {
-	fmt.Fprintf(os.Stderr, "%s\n", text.Colors{text.FgYellow}.Sprintf(msg, args...))
+	fmt.Fprintf(
+		os.Stderr,
+		"%s\n",
+		lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(fmt.Sprintf(msg, args...)),
+	)
 }
 
-// Info prints an cyan info message to stderr.
-func Info(msg string, args ...any) {
-	fmt.Fprintf(os.Stderr, "%s\n", text.Colors{text.FgCyan}.Sprintf(msg, args...))
-}
-
-// Fail prints a red error message to stderr.
 func Fail(msg string, args ...any) {
-	fmt.Fprintf(os.Stderr, "%s\n", text.Colors{text.FgRed}.Sprintf(msg, args...))
+	fmt.Fprintf(
+		os.Stderr,
+		"%s\n",
+		lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf(msg, args...)),
+	)
 }
 
-// ColorSprint prints a string with the given text colors.
-func ColorSprint(c text.Colors, s string) string {
-	return c.Sprint(s)
-}
-
-// Truncate truncates a string to the given maximum length.
-func Truncate(s string, maxLen int) string {
-	return truncate.String(s, uint(maxLen))
-}
-
-// Wrap wraps text to the given width.
-func Wrap(s string, maxLen int) string {
-	return wordwrap.String(s, maxLen)
-}
-
-// ComputeRemainderWidth calculates remaining width after accounting for used columns.
 func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
 	var total, numSeparators int
 
@@ -95,18 +158,30 @@ func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
 	return max(termWidth-total-numSeparators*separatorWidth, minWidth)
 }
 
-// NewTable creates a new table writer for status output.
-//
-//nolint:ireturn // factory returning library interface is the canonical usage
-func NewTable() table.Writer {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(tableStyle)
+func FormatSummary(total int, failed []string) string {
+	success := total - len(failed)
 
-	return t
+	if len(failed) > 0 {
+		return fmt.Sprintf(
+			"%d/%d repos completed successfully; failed: %s",
+			success, total, strings.Join(failed, ", "),
+		)
+	}
+
+	return fmt.Sprintf("%d/%d repos completed successfully", success, total)
 }
 
-// GetTermWidth returns the current terminal width.
+func FormatDetail(msg, time string) string {
+	switch {
+	case msg == "":
+		return time
+	case time == "":
+		return msg
+	default:
+		return msg + " " + time
+	}
+}
+
 func GetTermWidth() int {
 	const defaultTermWidth = 80
 

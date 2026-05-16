@@ -58,10 +58,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-${{ steps.go-version.outputs.go }}-
       - *mise
+      - name: README check
+        run: mise readmecheck
       - name: Lint
         run: mise lint
       - name: Test
         run: mise test
+      - name: Integration tests
+        run: mise test-int
       - name: Coverage
         run: mise coverage
       - name: Upload coverage reports to Codecov

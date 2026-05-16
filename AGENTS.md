@@ -67,3 +67,27 @@ Always use `mise` tasks rather than calling tools directly
 ## Test Coverage
 
 Test coverage threshold is configured in `.testcoverage.yml`.
+
+## Project State
+
+### Done
+
+- CLI alias: `hrd st` (status) works via `cmd.Aliases`
+- Unknown subcommand fix: `hrd foo` returns error instead of launching TUI
+- README auto-generation via `go:generate` + `cmd/genreadme`
+- `ls` detail fix: no inline commit msg in REF column by default; `ll` shows it in MSG column
+- Streaming `ls` output: ANSI-based in-place table updates, batch fallback for pipes
+
+### Next
+
+- TUI: `s t` two-key sequence alias for status (currently only `s` works)
+- README regeneration anytime dispatched output format changes
+
+## Key Files
+
+- `cmd/dispatch.go`: `gatherStatus`, `streamStatus`, `batchStatus`, `renderStatusTable`, `AppendStatusRows`, `statusTableConfig`
+- `cmd/genreadme/main.go`: README generator binary
+- `cmd/root.go`: `errUnknownCommand`, root action dispatch
+- `cmd/constants.go`: exported labels (`NameLabel`, etc.)
+- `internal/ui/ui.go`: `TableStyle`, `ComputeRemainderWidth`, `FormatDispatchStatusLine`
+- `README.md.tpl`: template with `{{.LLOutput}}`, `{{.HelpOutput}}`

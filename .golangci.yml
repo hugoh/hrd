@@ -6,10 +6,21 @@ linters:
     - exhaustruct
     - godoclint
     - gomodguard
+    - ireturn
     - noinlineerr
     - paralleltest
     - testpackage
+    - varnamelen
     - wsl
+  settings:
+    revive:
+      rules:
+        - name: redefines-builtin-id
+          disabled: true
+        - name: exported
+          disabled: true
+        - name: unused-parameter
+        - name: unused-receiver
   exclusions:
     rules:
       - path: _test\.go$

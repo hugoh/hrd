@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/urfave/cli/v3"
 )
 
@@ -77,7 +76,7 @@ const minGroupAddArgs = 2
 func groupAddCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
 		Name:      cmdNameAdd,
-		Usage:     "create or replace a group",
+		Usage:     "create or append to a group",
 		ArgsUsage: "<name> <repo>...",
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() < minGroupAddArgs {
@@ -100,7 +99,7 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 				return fmt.Errorf("adding group: %w", err)
 			}
 
-			ui.Info("group %q: %s", displayGroup(name), strings.Join(repos, ", "))
+			ui.Success("added %s to group %s", strings.Join(repos, ", "), displayGroup(name))
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -178,32 +177,29 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 
 func renderGroupTable(cfg config.Config) error {
 	const (
-		groupWidth    = 20 // width for group column
-		reposMinWidth = 20 // minimum width for repos column
+		groupWidth    = 20
+		reposMinWidth = 20
 	)
 
-	tbl := ui.NewTable()
-	tbl.AppendHeader(table.Row{"GROUP", "REPOS", ""})
-
 	termWidth := ui.GetTermWidth()
-
 	reposWidth := ui.ComputeRemainderWidth(termWidth, reposMinWidth, 1, groupWidth)
 
-	tbl.SetColumnConfigs([]table.ColumnConfig{
-		{Number: 1, AutoMerge: true, WidthMax: groupWidth},
-		{Number: 2, WidthMax: reposWidth, WidthMaxEnforcer: ui.Wrap}, //nolint:mnd
-	})
-
+	rows := make([][]string, 0, len(cfg.Groups))
 	for name, group := range cfg.Groups {
 		active := ""
 		if cfg.Context.Current == name {
-			active = text.Colors{text.FgGreen}.Sprint("●")
+			active = ui.ColorSprint("green", "●")
 		}
 
-		tbl.AppendRow(table.Row{displayGroup(name), strings.Join(group.Repos, ", "), active})
+		rows = append(rows, []string{displayGroup(name), strings.Join(group.Repos, ", "), active})
 	}
 
-	tbl.Render()
+	widths := []int{groupWidth, reposWidth, 1}
+	header := []string{"GROUP", "REPOS", ""}
+
+	_, _ = os.Stdout.WriteString(ui.RenderTable(
+		header, rows, ui.EffectiveWidths(header, rows, widths),
+	))
 
 	return nil
 }

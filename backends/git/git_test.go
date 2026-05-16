@@ -200,6 +200,26 @@ func TestBackend_Name(t *testing.T) {
 	assert.Equal(t, "git", b.Name())
 }
 
+func TestBackend_SubcommandArgs(t *testing.T) {
+	b := &Backend{}
+
+	tests := []struct {
+		op   string
+		want []string
+	}{
+		{"status", []string{"status"}},
+		{"fetch", []string{"fetch"}},
+		{"push", []string{"push"}},
+		{"pull", []string{"pull"}},
+		{"log", []string{"log"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.op, func(t *testing.T) {
+			assert.Equal(t, tt.want, b.SubcommandArgs(tt.op))
+		})
+	}
+}
+
 func TestBackend_Detect(t *testing.T) {
 	t.Run("with git dir", func(t *testing.T) {
 		dir := t.TempDir()

@@ -1,0 +1,86 @@
+package ui
+
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+	"github.com/muesli/reflow/truncate"
+)
+
+func RenderTable(header []string, rows [][]string, widths []int) string {
+	var buf strings.Builder
+
+	writeHeader(&buf, header, widths)
+	buf.WriteByte('\n')
+
+	for _, row := range rows {
+		writeRow(&buf, row, widths)
+		buf.WriteByte('\n')
+	}
+
+	return buf.String()
+}
+
+func RenderHeader(cells []string, widths []int) string {
+	var buf strings.Builder
+	writeHeader(&buf, cells, widths)
+
+	return buf.String()
+}
+
+func RenderRow(cells []string, widths []int) string {
+	var buf strings.Builder
+	writeRow(&buf, cells, widths)
+
+	return buf.String()
+}
+
+func EffectiveWidths(header []string, rows [][]string, maxWidths []int) []int {
+	eff := make([]int, len(maxWidths))
+
+	for i := range maxWidths {
+		w := lipgloss.Width(header[i])
+
+		for _, row := range rows {
+			w = max(w, lipgloss.Width(row[i]))
+		}
+
+		eff[i] = min(w, maxWidths[i])
+		eff[i] = max(eff[i], 1)
+	}
+
+	return eff
+}
+
+func writeHeader(buf *strings.Builder, cells []string, widths []int) {
+	for i, cell := range cells {
+		if lipgloss.Width(cell) > widths[i] {
+			cell = truncate.String(cell, uint(widths[i]))
+		}
+
+		cell += strings.Repeat(" ", widths[i]-lipgloss.Width(cell))
+		cell = "\x1b[1;96m" + cell + "\x1b[0m"
+
+		if i > 0 {
+			buf.WriteByte(' ')
+		}
+
+		buf.WriteString(cell)
+	}
+}
+
+func writeRow(buf *strings.Builder, cells []string, widths []int) {
+	for i, cell := range cells {
+		if lipgloss.Width(cell) > widths[i] {
+			cell = truncate.String(cell, uint(widths[i]))
+		}
+
+		cell += strings.Repeat(" ", widths[i]-lipgloss.Width(cell))
+
+		if i > 0 {
+			buf.WriteByte(' ')
+		}
+
+		buf.WriteString(cell)
+	}
+}

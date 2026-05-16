@@ -15,7 +15,6 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
-// errRepoNotFound is returned when a repo is not found in the map.
 var errRepoNotFound = errors.New("repo not found")
 
 // forEachRepo calls fn concurrently for each repo, limiting parallelism with a
@@ -62,6 +61,24 @@ type Result struct {
 	Output   string
 	ExitCode int
 	Err      error
+}
+
+func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
+	if ec, ok := backend.ExtractExitCode(runErr); ok {
+		return Result{
+			RepoName: name, RepoPath: path, VCS: vcs,
+			Output: buf.String(), ExitCode: ec,
+		}
+	}
+
+	if runErr != nil {
+		return Result{RepoName: name, RepoPath: path, Err: runErr}
+	}
+
+	return Result{
+		RepoName: name, RepoPath: path, VCS: vcs,
+		Output: buf.String(), ExitCode: 0,
+	}
 }
 
 // StatusResult carries the live status for a single repo used by `ll`.
@@ -138,95 +155,41 @@ func Dispatch(
 	), nil
 }
 
-// VCS runs `<vcs> <subcmd>` (e.g. `git status`, `jj diff`) for each repo,
-// streaming one Result per repo to the returned channel. The VCS binary is
-// determined per-repo from its active backend.
-func VCS(
+// VCSSubcmd runs a VCS subcommand (status, diff, log, fetch, push, pull, etc.)
+// across repos, resolving backend-specific arg prefixes automatically.
+// For example, "fetch" becomes ["fetch"] for git but ["git", "fetch"] for jj.
+func VCSSubcmd(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	subcmd string,
-	concurrency int64,
-) <-chan Result {
-	return vcsRun(ctx, repos, names, subcmd, nil, concurrency)
-}
-
-// VCSArgs runs `<vcs> <subcmd> <args>...` for each repo.
-func VCSArgs(
-	ctx context.Context,
-	repos map[string]config.Repo,
-	names []string,
-	subcmd string,
-	args []string,
-	concurrency int64,
-) <-chan Result {
-	return vcsRun(ctx, repos, names, subcmd, args, concurrency)
-}
-
-// vcsRun is the shared implementation for VCS and VCSArgs.
-func vcsRun(
-	ctx context.Context,
-	repos map[string]config.Repo,
-	names []string,
-	subcmd string,
-	args []string,
+	op string,
 	concurrency int64,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
-			bin := repo.ActiveBackend()
+			bck, err := backend.ByName(repo.ActiveBackend())
+			if err != nil {
+				results <- Result{RepoName: name, Err: fmt.Errorf("checking backend: %w", err)}
 
-			cmdArgs := append([]string{subcmd}, args...)
+				return nil
+			}
 
-			var buf bytes.Buffer
+			args := bck.SubcommandArgs(op)
 
-			//nolint:gosec // controlled command execution, args from user input
-			execCmd := exec.CommandContext(ctx, bin, cmdArgs...)
-			execCmd.Dir = repo.Path
-			execCmd.Stdout = &buf
-			execCmd.Stderr = &buf
-
-			err := execCmd.Run()
-			if ec, ok := backend.ExtractExitCode(err); ok {
-				results <- Result{
-					RepoName: name, RepoPath: repo.Path, VCS: bin,
-					Output: buf.String(), ExitCode: ec,
-				}
-			} else if err != nil {
-				results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-			} else {
-				results <- Result{
-					RepoName: name, RepoPath: repo.Path, VCS: bin,
-					Output: buf.String(), ExitCode: 0,
-				}
+			res, runErr := bck.Run(ctx, repo.Path, args, false)
+			results <- Result{
+				RepoName: name,
+				RepoPath: repo.Path,
+				VCS:      bck.Name(),
+				Output:   res.Output,
+				ExitCode: res.ExitCode,
+				Err:      runErr,
 			}
 
 			return nil
 		},
 		func(name string) Result { return Result{RepoName: name, Err: errRepoNotFound} },
 	)
-}
-
-// Status runs `git status` or `jj status` for each repo, streaming
-// one Result per repo to the returned channel.
-func Status(
-	ctx context.Context,
-	repos map[string]config.Repo,
-	names []string,
-	concurrency int64,
-) <-chan Result {
-	return VCS(ctx, repos, names, "status", concurrency)
-}
-
-// Diff runs `git diff` or `jj diff` for each repo, streaming
-// one Result per repo to the returned channel.
-func Diff(
-	ctx context.Context,
-	repos map[string]config.Repo,
-	names []string,
-	concurrency int64,
-) <-chan Result {
-	return VCS(ctx, repos, names, "diff", concurrency)
 }
 
 // Shell runs an arbitrary shell command across repos. It does not route
@@ -248,25 +211,22 @@ func Shell(
 			cmd.Stdout = &buf
 			cmd.Stderr = &buf
 
-			err := cmd.Run()
-			if ec, ok := backend.ExtractExitCode(err); ok {
-				results <- Result{
-					RepoName: name, RepoPath: repo.Path, VCS: repo.ActiveBackend(),
-					Output: buf.String(), ExitCode: ec,
-				}
-			} else if err != nil {
-				results <- Result{RepoName: name, RepoPath: repo.Path, Err: err}
-			} else {
-				results <- Result{
-					RepoName: name, RepoPath: repo.Path, VCS: repo.ActiveBackend(),
-					Output: buf.String(), ExitCode: 0,
-				}
-			}
+			results <- resultFrom(name, repo.Path, repo.ActiveBackend(), buf, cmd.Run())
 
 			return nil
 		},
 		func(name string) Result { return Result{RepoName: name, Err: errRepoNotFound} },
 	)
+}
+
+// ResultColor returns the display color ("red" or "green") for a result
+// based on whether it errored or had a non-zero exit code.
+func ResultColor(res Result) string {
+	if res.Err != nil || res.ExitCode != 0 {
+		return "red"
+	}
+
+	return "green"
 }
 
 // GatherStatus fetches the VCS status for each repo concurrently,

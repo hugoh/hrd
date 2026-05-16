@@ -3,7 +3,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,9 +10,10 @@ import (
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/internal/config"
-	"github.com/pterm/pterm"
+	"github.com/hugoh/hrd/internal/tui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zenizh/go-capturer"
 )
 
 func TestMain(m *testing.M) {
@@ -36,25 +36,7 @@ func setupTestConfig(t *testing.T, cfg config.Config) string {
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	require.NoError(t, err)
-
-	os.Stdout = w
-
-	pterm.SetDefaultOutput(w)
-
-	fn()
-
-	_ = w.Close()
-
-	pterm.SetDefaultOutput(old)
-	os.Stdout = old
-
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-
-	return string(out)
+	return capturer.CaptureStdout(fn)
 }
 
 // Helper to create a temporary directory that looks like a git repo.
@@ -637,4 +619,20 @@ func TestHelpersDisplayGroup(t *testing.T) {
 	assert.Equal(t, "@work", displayGroup("@work"))
 	assert.Equal(t, "@", displayGroup("@"))
 	assert.Equal(t, "@", displayGroup(""))
+}
+
+func TestRootAction(t *testing.T) {
+	orig := runTUI
+
+	runTUI = func(_ context.Context, opts tui.Options) error {
+		assert.Equal(t, config.DefaultPath(), opts.ConfigPath)
+
+		return nil
+	}
+
+	defer func() { runTUI = orig }()
+
+	app := NewApp()
+	err := app.Action(context.Background(), app)
+	require.NoError(t, err)
 }

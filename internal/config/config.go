@@ -183,20 +183,26 @@ func (c *Config) RemoveRepo(name string) {
 
 // AddGroup creates or replaces a group.
 func (c *Config) AddGroup(name string, repos []string) error {
-	seen := make(map[string]bool, len(repos))
+	seen := make(map[string]bool)
 	unique := make([]string, 0, len(repos))
+
+	if existing, ok := c.Groups[name]; ok {
+		for _, repo := range existing.Repos {
+			seen[repo] = true
+			unique = append(unique, repo)
+		}
+	}
 
 	for _, repo := range repos {
 		if seen[repo] {
 			continue
 		}
 
-		seen[repo] = true
-
 		if _, ok := c.Repos[repo]; !ok {
 			return fmt.Errorf("%w %q", errUnknownRepo, repo)
 		}
 
+		seen[repo] = true
 		unique = append(unique, repo)
 	}
 

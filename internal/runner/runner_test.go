@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,13 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	testEmail  = "test@example.com"
+	testName   = "Test"
+	initMain   = "-b"
+	branchMain = "main"
 )
 
 func TestMain(m *testing.M) {
@@ -29,14 +37,19 @@ func (*gitBackend) Detect(_ string) (bool, error) { return false, nil }
 func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
-
+func (*gitBackend) SubcommandArgs(op string) []string { return []string{op} }
 func (*gitBackend) Run(
-	_ context.Context,
-	_ string,
-	_ []string,
-	_ bool,
+	ctx context.Context,
+	path string,
+	args []string,
+	interactive bool,
 ) (backend.RunResult, error) {
-	return backend.RunResult{}, nil
+	res, err := backend.RunCommand(ctx, "git", path, args, interactive)
+	if err != nil {
+		return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
+	}
+
+	return res, nil
 }
 
 func TestDispatch(t *testing.T) {
@@ -91,12 +104,12 @@ func TestDispatch_RepoNotFound(t *testing.T) {
 	assert.Error(t, results[0].Err)
 }
 
-func TestVCS(t *testing.T) {
+func TestVCSSubcmd(t *testing.T) {
 	repos := map[string]config.Repo{
 		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
 	}
 
-	ch := VCS(context.Background(), repos, []string{"r1"}, "status", 1)
+	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "status", 1)
 
 	count := 0
 	for range ch {
@@ -106,36 +119,21 @@ func TestVCS(t *testing.T) {
 	assert.Equal(t, 1, count)
 }
 
-func TestVCS_RepoNotFound(t *testing.T) {
+func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := VCS(context.Background(), repos, []string{"nonexistent"}, "status", 1)
+	ch := VCSSubcmd(context.Background(), repos, []string{"nonexistent"}, "status", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
 	assert.Error(t, results[0].Err)
 }
 
-func TestVCSArgs(t *testing.T) {
-	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
-	}
-
-	ch := VCSArgs(context.Background(), repos, []string{"r1"}, "log", []string{"--oneline"}, 1)
-
-	count := 0
-	for range ch {
-		count++
-	}
-
-	assert.Equal(t, 1, count)
-}
-
-func TestVCS_RunsInRepoDir(t *testing.T) {
+func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 	dir := t.TempDir()
-	runGit(t, dir, "init")
-	runGit(t, dir, "config", "user.email", "test@test.com")
-	runGit(t, dir, "config", "user.name", "Test")
+	runGit(t, dir, "init", initMain, branchMain)
+	runGit(t, dir, "config", "user.email", testEmail)
+	runGit(t, dir, "config", "user.name", testName)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
 	runGit(t, dir, "add", "test.txt")
 	runGit(t, dir, "commit", "-m", "initial")
@@ -144,19 +142,18 @@ func TestVCS_RunsInRepoDir(t *testing.T) {
 		"r1": {Path: dir, Backends: []string{"git"}},
 	}
 
-	ch := VCSArgs(
+	ch := VCSSubcmd(
 		context.Background(),
 		repos,
 		[]string{"r1"},
-		"rev-parse",
-		[]string{"--git-dir"},
+		"status",
 		1,
 	)
 	results := collectResults(ch)
 	require.Len(t, results, 1)
 
 	require.NoError(t, results[0].Err)
-	assert.Contains(t, results[0].Output, ".git")
+	assert.Contains(t, results[0].Output, branchMain)
 }
 
 func runGit(t *testing.T, dir string, args ...string) {
@@ -167,34 +164,66 @@ func runGit(t *testing.T, dir string, args ...string) {
 	require.NoError(t, cmd.Run())
 }
 
-func TestStatus(t *testing.T) {
+func TestVCSSubcmd_Ops(t *testing.T) {
 	repos := map[string]config.Repo{
 		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
 	}
 
-	ch := Status(context.Background(), repos, []string{"r1"}, 1)
+	for _, op := range []string{"diff", "fetch"} {
+		t.Run(op, func(t *testing.T) {
+			ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, op, 1)
 
-	count := 0
-	for range ch {
-		count++
+			count := 0
+			for range ch {
+				count++
+			}
+
+			assert.Equal(t, 1, count)
+		})
 	}
-
-	assert.Equal(t, 1, count)
 }
 
-func TestDiff(t *testing.T) {
+func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
+	repos := map[string]config.Repo{}
+
+	ch := VCSSubcmd(context.Background(), repos, []string{"nonexistent"}, "fetch", 1)
+	results := collectResults(ch)
+	assert.Len(t, results, 1)
+	assert.Equal(t, "nonexistent", results[0].RepoName)
+	assert.Error(t, results[0].Err)
+}
+
+func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init", initMain, branchMain)
+	runGit(t, dir, "config", "user.email", testEmail)
+	runGit(t, dir, "config", "user.name", testName)
+
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: dir, Backends: []string{"git"}},
 	}
 
-	ch := Diff(context.Background(), repos, []string{"r1"}, 1)
+	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "fetch", 1)
+	results := collectResults(ch)
+	require.Len(t, results, 1)
+	require.NoError(t, results[0].Err)
+	assert.Equal(t, "r1", results[0].RepoName)
+}
+
+func TestVCSSubcmd_MultipleRepos(t *testing.T) {
+	repos := map[string]config.Repo{
+		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r2": {Path: "/tmp/r2", Backends: []string{"git"}},
+	}
+
+	ch := VCSSubcmd(context.Background(), repos, []string{"r1", "r2"}, "status", 2)
 
 	count := 0
 	for range ch {
 		count++
 	}
 
-	assert.Equal(t, 1, count)
+	assert.Equal(t, 2, count)
 }
 
 func TestShell(t *testing.T) {
@@ -276,22 +305,6 @@ func TestDispatch_MultipleRepos(t *testing.T) {
 		2,
 	)
 	require.NoError(t, err)
-
-	count := 0
-	for range ch {
-		count++
-	}
-
-	assert.Equal(t, 2, count)
-}
-
-func TestVCS_MultipleRepos(t *testing.T) {
-	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
-		"r2": {Path: "/tmp/r2", Backends: []string{"git"}},
-	}
-
-	ch := VCS(context.Background(), repos, []string{"r1", "r2"}, "status", 2)
 
 	count := 0
 	for range ch {

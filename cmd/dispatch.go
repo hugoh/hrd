@@ -5,15 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/urfave/cli/v3"
 )
 
@@ -21,15 +18,7 @@ const (
 	cmdNameGit   = "git"
 	cmdNameShell = "shell"
 
-	fmtSuccess     = "%d/%d repos completed successfully"
-	fmtFailSummary = "%d/%d repos completed successfully; failed: %s"
-)
-
-const (
-	colName = iota + 1
-	colVCS
-	colStatus
-	colMsg
+	cmdReposFlag = "repos"
 )
 
 var (
@@ -37,6 +26,7 @@ var (
 	errNoShellCommand     = errors.New("no shell command provided")
 	errNoArgsFmt          = errors.New("no args provided")
 	errNoReposWithBackend = errors.New("no repos with backend")
+	errNonZeroExit        = errors.New("non-zero exit")
 )
 
 //nolint:gochecknoglobals // CLI flag definitions are package-level by nature
@@ -52,8 +42,6 @@ var dispatchFlags = []cli.Flag{
 		Usage:   "run with a real terminal (sequential, one repo at a time)",
 	},
 }
-
-const cmdReposFlag = "repos"
 
 // loadAndResolve loads the config, resolves the CLI scope, and returns
 // both. It returns errNoReposMatched when no repos match.
@@ -154,11 +142,14 @@ func jjCmd(cfgPath *string) *cli.Command {
 }
 
 func statusCmd(cfgPath *string) *cli.Command {
-	return vcsSubcmdCmd(
+	cmd := vcsSubcmdCmd(
 		cfgPath,
 		"status",
 		"show detailed status for repos (git status or jj status)",
 	)
+	cmd.Aliases = []string{"st"}
+
+	return cmd
 }
 
 func diffCmd(cfgPath *string) *cli.Command {
@@ -169,6 +160,30 @@ func logCmd(cfgPath *string) *cli.Command {
 	return vcsSubcmdCmd(cfgPath, "log", "show log for repos (git log or jj log)")
 }
 
+func fetchCmd(cfgPath *string) *cli.Command {
+	return vcsSubcmdCmd(
+		cfgPath,
+		"fetch",
+		"fetch from remotes (git fetch or jj git fetch)",
+	)
+}
+
+func pushCmd(cfgPath *string) *cli.Command {
+	return vcsSubcmdCmd(
+		cfgPath,
+		"push",
+		"push to remotes (git push or jj git push)",
+	)
+}
+
+func pullCmd(cfgPath *string) *cli.Command {
+	return vcsSubcmdCmd(
+		cfgPath,
+		"pull",
+		"pull from remotes (git pull or jj git pull)",
+	)
+}
+
 func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 	return &cli.Command{
 		Name:      subcmd,
@@ -176,7 +191,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 		ArgsUsage: "[repo|group...]",
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
-				Name:    "repos",
+				Name:    cmdReposFlag,
 				Aliases: []string{"r"},
 				Usage:   "repo names or a group name",
 			},
@@ -197,7 +212,13 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 			}
 
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
-				ch := runner.VCS(ctx, cfg.Repos, names, subcmd, int64(cfg.Settings.Concurrency))
+				ch := runner.VCSSubcmd(
+					ctx,
+					cfg.Repos,
+					names,
+					subcmd,
+					int64(cfg.Settings.Concurrency),
+				)
 				for res := range ch {
 					resultCh <- res
 				}
@@ -261,18 +282,14 @@ func runShellInteractive(
 	names []string,
 	cmdStr string,
 ) {
-	var failed []string
-
-	for _, name := range names {
-		repo := repos[name]
-
-		if err := runInteractive(ctx, repo.Path, "sh", []string{"-c", cmdStr}); err != nil {
-			ui.Errf("%s: %v", name, err)
-			failed = append(failed, name)
-		}
-	}
-
-	dispatchSummary(len(names), failed)
+	runInteractiveEach(
+		ctx,
+		repos,
+		names,
+		func(ctx context.Context, _ string, repo config.Repo) error {
+			return runInteractive(ctx, repo.Path, "sh", []string{"-c", cmdStr})
+		},
+	)
 }
 
 func lsCmd(cfgPath *string) *cli.Command {
@@ -423,44 +440,68 @@ func runInteractive(ctx context.Context, dir, bin string, args []string) error {
 	return execInteractive(ctx, dir, bin, args)
 }
 
-func dispatchSummary(total int, failed []string) {
-	success := total - len(failed)
-
-	if len(failed) > 0 {
-		ui.Fail(fmtFailSummary, success, total, strings.Join(failed, ", "))
-	} else {
-		ui.Success(fmtSuccess, success, total)
-	}
-}
-
-// runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
-// Each repo uses its own active backend (git or jj).
-func runSubcmdInteractive(
+// runInteractiveEach executes fn sequentially for each repo, collecting
+// failures and printing a summary. This is the shared loop body for all
+// interactive dispatch variants.
+func runInteractiveEach(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	subcmd string,
-) error {
+	fn func(context.Context, string, config.Repo) error,
+) {
 	var failed []string
 
 	for _, name := range names {
 		repo := repos[name]
-		bin := repo.ActiveBackend()
 
-		if bin == "" {
-			ui.Errf("%s: no active backend", name)
-			failed = append(failed, name)
-
-			continue
-		}
-
-		if err := runInteractive(ctx, repo.Path, bin, []string{subcmd}); err != nil {
+		if err := fn(ctx, name, repo); err != nil {
 			ui.Errf("%s: %v", name, err)
 			failed = append(failed, name)
 		}
 	}
 
 	dispatchSummary(len(names), failed)
+}
+
+func dispatchSummary(total int, failed []string) {
+	if len(failed) > 0 {
+		ui.Fail("%s", ui.FormatSummary(total, failed))
+	} else {
+		ui.Success("%s", ui.FormatSummary(total, failed))
+	}
+}
+
+// runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
+// Each repo uses its own active backend (git or jj), resolving arg prefixes
+// like "git fetch" for jj automatically.
+func runSubcmdInteractive(
+	ctx context.Context,
+	repos map[string]config.Repo,
+	names []string,
+	subcmd string,
+) error {
+	runInteractiveEach(
+		ctx,
+		repos,
+		names,
+		func(ctx context.Context, _ string, repo config.Repo) error {
+			bck, err := backend.ByName(repo.ActiveBackend())
+			if err != nil {
+				return fmt.Errorf("checking backend: %w", err)
+			}
+
+			res, err := bck.Run(ctx, repo.Path, bck.SubcommandArgs(subcmd), true)
+			if err != nil {
+				return fmt.Errorf("%s %s: %w", bck.Name(), subcmd, err)
+			}
+
+			if res.ExitCode != 0 {
+				return fmt.Errorf("%s %s: %w", bck.Name(), subcmd, errNonZeroExit)
+			}
+
+			return nil
+		},
+	)
 
 	return nil
 }
@@ -477,18 +518,14 @@ func dispatchInteractive(
 		return fmt.Errorf("%w %s", errNoReposWithBackend, backendName)
 	}
 
-	var failed []string
-
-	for _, name := range names {
-		repo := repos[name]
-
-		if err := runInteractive(ctx, repo.Path, backendName, cmdArgs); err != nil {
-			ui.Errf("%s: %v", name, err)
-			failed = append(failed, name)
-		}
-	}
-
-	dispatchSummary(len(names), failed)
+	runInteractiveEach(
+		ctx,
+		repos,
+		names,
+		func(ctx context.Context, _ string, repo config.Repo) error {
+			return runInteractive(ctx, repo.Path, backendName, cmdArgs)
+		},
+	)
 
 	return nil
 }
@@ -586,7 +623,11 @@ func gatherStatus(
 	details bool,
 	gather func(resultCh chan<- runner.StatusResult),
 ) error {
-	results := make([]runner.StatusResult, 0, len(names))
+	if len(names) == 0 {
+		return nil
+	}
+
+	widths, header := statusTableConfig(details)
 
 	resultCh := make(chan runner.StatusResult, len(names))
 	go func() {
@@ -594,33 +635,60 @@ func gatherStatus(
 		close(resultCh)
 	}()
 
-	for res := range resultCh {
-		results = append(results, res)
+	nameIdx := make(map[string]int, len(names))
+	for i, n := range names {
+		nameIdx[n] = i
 	}
 
-	rank := make(map[string]int, len(names))
+	pending := make([][]string, len(names))
 	for i, name := range names {
-		rank[name] = i
+		pending[i] = statusRow(name, vcsByName[name], nil, details)
 	}
 
-	sort.Slice(results, func(indexI, indexJ int) bool {
-		return rank[results[indexI].RepoName] < rank[results[indexJ].RepoName]
-	})
+	const colStatus = 2
 
-	tbl := ui.NewTable()
+	eff := ui.EffectiveWidths(header, pending, widths)
+	if len(eff) > colStatus {
+		eff[colStatus] = widths[colStatus]
+	}
 
-	colConfigs, header := statusTableConfig(details)
-	tbl.AppendHeader(header)
-	tbl.SetColumnConfigs(colConfigs)
+	ui.Outf(ui.RenderHeader(header, eff))
 
-	appendStatusRows(tbl, results, vcsByName, details)
+	results := make([]*runner.StatusResult, len(names))
+	next := 0
 
-	tbl.Render()
+	for res := range resultCh {
+		idx := nameIdx[res.RepoName]
+		results[idx] = &res
+
+		for next < len(names) && results[next] != nil {
+			cells := statusRow(names[next], vcsByName[names[next]], results[next], details)
+			ui.Outf(ui.RenderRow(cells, eff))
+
+			next++
+		}
+	}
 
 	return nil
 }
 
-func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
+const placeholder = "..."
+
+func statusRow(name, vcs string, res *runner.StatusResult, details bool) []string {
+	if res == nil {
+		return []string{name, vcs, placeholder}
+	}
+
+	if res.Err != nil {
+		return []string{name, vcs, ui.ColorSprint("red", fmt.Sprintf("%v", res.Err))}
+	}
+
+	line := ui.FormatDispatchStatusLine(res.Status, details)
+
+	return []string{name, vcs, line}
+}
+
+func statusTableConfig(details bool) ([]int, []string) {
 	const (
 		minNameWidth   = 15
 		minStatusWidth = 20
@@ -631,168 +699,14 @@ func statusTableConfig(details bool) ([]table.ColumnConfig, table.Row) {
 
 	weights := layoutWeights{name: 25, status: 75} //nolint:mnd
 	if details {
-		weights = layoutWeights{name: 20, status: 37} //nolint:mnd
+		weights = layoutWeights{name: 20, status: 80} //nolint:mnd
 	}
 
 	termWidth := ui.GetTermWidth()
 	pct := func(p int) int { return termWidth * p / 100 } //nolint:mnd
 
 	nameWidth := max(pct(weights.name), minNameWidth)
-	statusWidth := ui.ComputeRemainderWidth(
-		pct(weights.name+weights.status),
-		minStatusWidth,
-		nameWidth,
-		vcsWidth,
-	)
+	statusWidth := ui.ComputeRemainderWidth(termWidth, minStatusWidth, nameWidth, vcsWidth)
 
-	header := table.Row{nameLabel, vcsLabel, refLabel}
-
-	colConfigs := []table.ColumnConfig{
-		{Number: colName, WidthMax: nameWidth, WidthMaxEnforcer: ui.Truncate},
-		{Number: colVCS, WidthMax: vcsWidth, WidthMaxEnforcer: ui.Truncate},
-		{Number: colStatus, WidthMax: statusWidth},
-	}
-
-	if details {
-		header = append(header, msgLabel)
-
-		msgWidth := ui.ComputeRemainderWidth(
-			termWidth,
-			minStatusWidth,
-			nameWidth,
-			vcsWidth,
-			statusWidth,
-		)
-		colConfigs = append(colConfigs, table.ColumnConfig{
-			Number: colMsg, WidthMax: msgWidth, WidthMaxEnforcer: ui.Wrap,
-		})
-	}
-
-	return colConfigs, header
-}
-
-func appendStatusRows(
-	tbl table.Writer,
-	results []runner.StatusResult,
-	vcsByName map[string]string,
-	details bool,
-) {
-	for _, res := range results {
-		if res.Err != nil {
-			tbl.AppendRow(table.Row{
-				res.RepoName,
-				vcsByName[res.RepoName],
-				ui.ColorSprint(text.Colors{text.FgRed}, fmt.Sprintf("%v", res.Err)),
-			})
-
-			continue
-		}
-
-		status := res.Status
-
-		var statusStr string
-
-		if len(status.Bookmarks) > 0 {
-			statusStr = status.Bookmarks[0].Name
-		} else {
-			statusStr = status.Ref
-		}
-
-		var symbols []string
-
-		for _, bookmark := range status.Bookmarks {
-			symbols = append(symbols, bookmarkSymbols(bookmark)...)
-		}
-
-		if status.Dirty {
-			symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgYellow}, "*"))
-		}
-
-		if status.Conflict {
-			symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgRed}, "‼"))
-		}
-
-		symStr := strings.Join(symbols, "")
-		situColor := statusColor(status.OverallState)
-		combined := situColor.Sprintf("%s %s", statusStr, symStr)
-		row := []any{
-			res.RepoName,
-			vcsByName[res.RepoName],
-			combined,
-		}
-
-		if details {
-			row = append(row, formatDetail(res.Status.CommitMsg, res.Status.CommitTime))
-		}
-
-		tbl.AppendRow(row)
-	}
-}
-
-func bookmarkSymbols(bookmark backend.BookmarkStatus) []string {
-	var symbols []string
-
-	switch bookmark.State {
-	case backend.RefStateSynced:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgGreen}, "✓"))
-	case backend.RefStateAhead:
-		symbols = append(
-			symbols,
-			ui.ColorSprint(text.Colors{text.FgBlue}, fmt.Sprintf("↑%d", bookmark.Ahead)),
-		)
-	case backend.RefStateBehind:
-		symbols = append(
-			symbols,
-			ui.ColorSprint(text.Colors{text.FgYellow}, fmt.Sprintf("↓%d", bookmark.Behind)),
-		)
-	case backend.RefStateDiverged:
-		symbols = append(
-			symbols,
-			ui.ColorSprint(
-				text.Colors{text.FgRed},
-				fmt.Sprintf("↑%d↓%d", bookmark.Ahead, bookmark.Behind),
-			),
-		)
-	case backend.RefStateGone:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "✗"))
-	case backend.RefStateNoRemote:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "∅"))
-	case backend.RefStateUnknown:
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgMagenta}, "?"))
-	}
-
-	if bookmark.Conflict {
-		symbols = append(symbols, ui.ColorSprint(text.Colors{text.FgRed}, "!"))
-	}
-
-	return symbols
-}
-
-func statusColor(state backend.RefState) text.Colors {
-	switch state {
-	case backend.RefStateSynced:
-		return text.Colors{text.FgGreen}
-	case backend.RefStateAhead:
-		return text.Colors{text.FgBlue}
-	case backend.RefStateBehind:
-		return text.Colors{text.FgYellow}
-	case backend.RefStateDiverged:
-		return text.Colors{text.FgRed}
-	case backend.RefStateGone, backend.RefStateNoRemote, backend.RefStateUnknown:
-		return text.Colors{text.FgMagenta}
-	default:
-		return text.Colors{text.FgHiBlack}
-	}
-}
-
-func formatDetail(msg, time string) string {
-	if msg == "" {
-		return time
-	}
-
-	if time == "" {
-		return msg
-	}
-
-	return msg + " " + time
+	return []int{nameWidth, vcsWidth, statusWidth}, []string{NameLabel, VCSLabel, StatusLabel}
 }

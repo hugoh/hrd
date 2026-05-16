@@ -8,3 +8,8 @@ override:
     threshold: 100
   - path: backends/jj
     threshold: 100
+
+exclude:
+  paths:
+    - main\.go$ # Program entry point
+    - cmd/genreadme/

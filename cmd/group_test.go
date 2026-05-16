@@ -7,6 +7,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zenizh/go-capturer"
 )
 
 func TestGroupAdd(t *testing.T) { //nolint:funlen
@@ -265,10 +266,11 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 
 			var err error
 
-			stdout := captureStdout(t, func() {
+			stdout := capturer.CaptureStdout(func() {
 				fullArgs := append([]string{"hrd", "--config", cfgPath}, tt.args...)
 				err = app.Run(context.Background(), fullArgs)
 			})
+
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 
