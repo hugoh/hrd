@@ -120,6 +120,13 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 		}
 	}
 
+	if headName != "" {
+		status.LocalAhead = countRevs(ctx, path, headName+"..@")
+		if status.LocalAhead > 0 {
+			status.LocalAhead--
+		}
+	}
+
 	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
 
 	return status, nil
@@ -156,8 +163,8 @@ func enrichWithRemoteBookmark(
 		}
 
 		remoteBm := headName + "@" + remoteName
-		behind := countRevs(ctx, path, headName+"::"+remoteBm)
-		ahead := countRevs(ctx, path, remoteBm+"::"+headName)
+		behind := countRevs(ctx, path, headName+".."+remoteBm)
+		ahead := countRevs(ctx, path, remoteBm+".."+headName)
 
 		bm.Remote = remoteName
 		bm.Ahead = ahead
@@ -168,12 +175,11 @@ func enrichWithRemoteBookmark(
 	}
 }
 
-// countRevs runs jj log -r <revset> and returns the number of matching
-// revisions (one line per rev with --no-graph).
+// countRevs runs jj log -r <revset> --count and returns the number.
 func countRevs(ctx context.Context, path, revset string) int {
 	out, err := runJJ(ctx, path, []string{
-		cmdNameLog, "--no-graph", colorNeverFlag, ignoreWorkingCopyArg,
-		"-r", revset,
+		cmdNameLog, colorNeverFlag, ignoreWorkingCopyArg,
+		"-r", revset, "--count",
 	})
 	if err != nil {
 		return 0
@@ -184,7 +190,12 @@ func countRevs(ctx context.Context, path, revset string) int {
 		return 0
 	}
 
-	return strings.Count(trimmed, "\n") + 1
+	n, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0
+	}
+
+	return n
 }
 
 // Run executes jj args in path. Multi-step ops (pull, etc.) run each step
@@ -464,8 +475,8 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 		return
 	}
 
-	current.Ahead = extractCount(trimmed, "ahead by")
-	current.Behind = extractCount(trimmed, "behind by")
+	current.Ahead = extractCount(trimmed, "behind by")
+	current.Behind = extractCount(trimmed, "ahead by")
 	backend.ComputeBookmarkState(current)
 }
 

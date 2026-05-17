@@ -142,6 +142,11 @@ type RepoStatus struct {
 
 	// CommitTime is the relative commit time (e.g. "3 days ago").
 	CommitTime string
+
+	// LocalAhead is the number of commits the working copy (@) is ahead of
+	// the HEAD bookmark/branch. Only populated by the jj backend (git's
+	// working copy is always at the branch tip).
+	LocalAhead int
 }
 
 // ComputeBookmarkState derives the RefState for a single BookmarkStatus from

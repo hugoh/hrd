@@ -8,6 +8,29 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 )
 
+// SymbolDoc documents a status symbol and its meaning.
+type SymbolDoc struct {
+	Symbol      string
+	Description string
+}
+
+// StatusSymbolDocs returns documentation entries for all status symbols.
+//
+//nolint:gochecknoglobals // const-like documentation table
+var StatusSymbolDocs = []SymbolDoc{
+	{Symbol: "✓", Description: "Synced with remote"},
+	{Symbol: "↑N", Description: "N commits ahead of remote"},
+	{Symbol: "↓N", Description: "N commits behind remote"},
+	{Symbol: "⇡N", Description: "Working copy ahead of bookmark (local)"},
+	{Symbol: "↑N↓N", Description: "Diverged (ahead and behind)"},
+	{Symbol: "∅", Description: "Local only, no remote"},
+	{Symbol: "‼", Description: "Unresolved conflict"},
+	{Symbol: "!", Description: "Bookmark conflict (jj)"},
+	{Symbol: "✗", Description: "Remote was deleted"},
+	{Symbol: "*", Description: "Dirty working copy"},
+	{Symbol: "?", Description: "Unknown remote state"},
+}
+
 const (
 	colorYellow  = "yellow"
 	colorRed     = "red"
@@ -112,6 +135,10 @@ func FormatSymbols(status backend.RepoStatus, colorFn func(color, symbol string)
 		for _, cs := range BookmarkSymbols(bm) {
 			syms = append(syms, colorFn(cs.Color, cs.Symbol))
 		}
+	}
+
+	if status.LocalAhead > 0 {
+		syms = append(syms, colorFn("blue", fmt.Sprintf("⇡%d", status.LocalAhead)))
 	}
 
 	if status.Dirty {

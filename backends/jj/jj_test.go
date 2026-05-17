@@ -129,30 +129,34 @@ func TestParseBookmarks_WithRemoteSynced(t *testing.T) {
 }
 
 func TestParseBookmarks_WithRemoteAhead(t *testing.T) {
+	// "ahead by 3" means remote is 3 ahead → local is 3 behind.
 	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (ahead by 3 commits)\n"
 	result := parseBookmarks(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
-	assert.Equal(t, 3, result[0].Ahead)
+	assert.Equal(t, 0, result[0].Ahead)
+	assert.Equal(t, 3, result[0].Behind)
+	assert.Equal(t, "behind", result[0].State.String())
+}
+
+func TestParseBookmarks_WithRemoteBehind(t *testing.T) {
+	// "behind by 2" means remote is 2 behind → local is 2 ahead.
+	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (behind by 2 commits)\n"
+	result := parseBookmarks(input)
+	require.Len(t, result, 1)
+	assert.Equal(t, 2, result[0].Ahead)
 	assert.Equal(t, 0, result[0].Behind)
 	assert.Equal(t, "ahead", result[0].State.String())
 }
 
-func TestParseBookmarks_WithRemoteBehind(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (behind by 2 commits)\n"
-	result := parseBookmarks(input)
-	require.Len(t, result, 1)
-	assert.Equal(t, 0, result[0].Ahead)
-	assert.Equal(t, 2, result[0].Behind)
-	assert.Equal(t, "behind", result[0].State.String())
-}
-
 func TestParseBookmarks_WithRemoteDiverged(t *testing.T) {
+	// "ahead by 2, behind by 1" means remote ahead by 2 (local behind 2)
+	// and remote behind by 1 (local ahead 1).
 	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (ahead by 2 commits, behind by 1 commit)\n"
 	result := parseBookmarks(input)
 	require.Len(t, result, 1)
-	assert.Equal(t, 2, result[0].Ahead)
-	assert.Equal(t, 1, result[0].Behind)
+	assert.Equal(t, 1, result[0].Ahead)
+	assert.Equal(t, 2, result[0].Behind)
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
@@ -451,10 +455,10 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 			return "main: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
 				"  @git: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
 				"main@origin: opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil
-		case slices.Contains(args, "main::main@origin"):
-			return "opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil
-		case slices.Contains(args, "main@origin::main"):
-			return "", nil
+		case slices.Contains(args, "main..main@origin") && slices.Contains(args, "--count"):
+			return "1", nil
+		case slices.Contains(args, "main@origin..main") && slices.Contains(args, "--count"):
+			return "0", nil
 		default:
 			return "", nil
 		}
@@ -533,14 +537,11 @@ func TestCountRevs(t *testing.T) {
 		err    error
 		want   int
 	}{
-		{"no commits", "", nil, 0},
-		{"one commit", "opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil, 1},
-		{
-			"two commits",
-			"opxqzwyo e67b1a90 (empty) Merge pull request #17\nsxoqvoon 2c688398 (empty) Merge pull request #15\n",
-			nil,
-			2,
-		},
+		{"no commits", "0", nil, 0},
+		{"one commit", "1", nil, 1},
+		{"two commits", "2", nil, 2},
+		{"empty string error path", "", nil, 0},
+		{"non-numeric output", "abc", nil, 0},
 		{"runJJ error", "", assert.AnError, 0},
 	}
 
@@ -550,7 +551,7 @@ func TestCountRevs(t *testing.T) {
 				return tt.output, tt.err
 			}
 
-			assert.Equal(t, tt.want, countRevs(context.Background(), "/tmp", "main::main@origin"))
+			assert.Equal(t, tt.want, countRevs(context.Background(), "/tmp", "main..main@origin"))
 		})
 	}
 }
@@ -615,6 +616,112 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 	_, err := b.Status(context.Background(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
+}
+
+func TestBackend_Status_LocalAhead(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		// Working copy query: -r @ (standalone "@" arg)
+		if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+			return "rlkvwrto\x1f\x1f\x1ffeat: initial\x1f2 hours ago\n", nil
+		}
+
+		// Head bookmark name
+		if slices.Contains(args, "bookmarks.first().name()") {
+			return "main\n", nil
+		}
+
+		// Bookmark list (no remote tracking)
+		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
+			return "main: rlkvwrto ...\n  (no tracking remote)\n", nil
+		}
+
+		// Local ahead count: main..@ returns 3 commits
+		if (slices.Contains(args, "main..@") || slices.Contains(args, "..@")) &&
+			slices.Contains(args, "--count") {
+			return "3", nil
+		}
+
+		return "", nil
+	}
+
+	b := &Backend{}
+	st, err := b.Status(context.Background(), "/tmp")
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, st.LocalAhead, "described @ also has 1 subtracted")
+	assert.Equal(t, "main", st.Bookmarks[0].Name)
+	assert.Equal(t, "feat: initial", st.CommitMsg)
+}
+
+func TestBackend_Status_LocalAhead_Undescribed(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+			return "rlkvwrto\x1f\x1f\x1f\x1f2 hours ago\n", nil
+		}
+
+		if slices.Contains(args, "bookmarks.first().name()") {
+			return "main\n", nil
+		}
+
+		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
+			return "main: rlkvwrto ...\n  (no tracking remote)\n", nil
+		}
+
+		if (slices.Contains(args, "main..@") || slices.Contains(args, "..@")) &&
+			slices.Contains(args, "--count") {
+			return "3", nil
+		}
+
+		return "", nil
+	}
+
+	b := &Backend{}
+	st, err := b.Status(context.Background(), "/tmp")
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, st.LocalAhead, "should subtract 1 for undescribed @")
+	assert.Equal(t, "main", st.Bookmarks[0].Name)
+	assert.False(t, st.Dirty)
+}
+
+func TestBackend_Status_LocalAhead_UndescribedDirty(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+			return "rlkvwrto\x1fdirty\x1f\x1f\x1f2 hours ago\n", nil
+		}
+
+		if slices.Contains(args, "bookmarks.first().name()") {
+			return "main\n", nil
+		}
+
+		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
+			return "main: rlkvwrto ...\n  (no tracking remote)\n", nil
+		}
+
+		if (slices.Contains(args, "main..@") || slices.Contains(args, "..@")) &&
+			slices.Contains(args, "--count") {
+			return "3", nil
+		}
+
+		return "", nil
+	}
+
+	b := &Backend{}
+	st, err := b.Status(context.Background(), "/tmp")
+	require.NoError(t, err)
+
+	assert.Equal(t, 2, st.LocalAhead, "should subtract 1 for undescribed @")
+	assert.Equal(t, "main", st.Bookmarks[0].Name)
+	assert.True(t, st.Dirty, "dirty flag should be preserved")
 }
 
 func TestMultiStepOps_Table(t *testing.T) {

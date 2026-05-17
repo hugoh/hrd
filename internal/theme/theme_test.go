@@ -153,4 +153,20 @@ func TestFormatSymbols(t *testing.T) {
 		assert.Contains(t, result, "[green:✓]")
 		assert.Contains(t, result, "[yellow:*]")
 	})
+
+	t.Run("local ahead", func(t *testing.T) {
+		status := backend.RepoStatus{
+			Bookmarks:  []backend.BookmarkStatus{{Name: "main", State: backend.RefStateSynced}},
+			LocalAhead: 5,
+		}
+		result := theme.FormatSymbols(status, colorFn)
+		assert.Contains(t, result, "[green:✓]")
+		assert.Contains(t, result, "[blue:⇡5]")
+	})
+
+	t.Run("local ahead without bookmark", func(t *testing.T) {
+		status := backend.RepoStatus{LocalAhead: 3}
+		result := theme.FormatSymbols(status, colorFn)
+		assert.Equal(t, "[blue:⇡3]", result)
+	})
 }

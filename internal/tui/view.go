@@ -433,6 +433,13 @@ func buildHelp(bindings []binding) string {
 		bld.WriteString("\n")
 	}
 
+	bld.WriteString("Status symbols:\n")
+
+	for _, d := range theme.StatusSymbolDocs {
+		fmt.Fprintf(&bld, "  %-6s %s\n", d.Symbol, d.Description)
+	}
+
+	bld.WriteString("\n")
 	bld.WriteString("General:\n")
 	bld.WriteString("  q      Quit (or go back from screens)\n")
 	bld.WriteString("  Ctrl+C Cancel execution / Quit")

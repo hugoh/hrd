@@ -92,18 +92,7 @@ hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 
 Status symbols at a glance:
 
-| Symbol | Meaning                |
-| ------ | ---------------------- |
-| `✓`    | synced with remote     |
-| `↑2`   | 2 commits ahead        |
-| `↓1`   | 1 commit behind        |
-| `↑2↓1` | diverged               |
-| `∅`    | local only, no remote  |
-| `!`    | bookmark conflict (jj) |
-| `✗`    | remote was deleted     |
-| `*`    | dirty working copy     |
-| `‼`    | unresolved conflict    |
-| `?`    | unknown remote state   |
+{{ .SymbolsTable }}
 
 ## Interactive TUI
 

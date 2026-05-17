@@ -89,25 +89,26 @@ hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ```text
 NAME        VCS STATUS                                                   
 myproject   git main ↑2*  feat: add new feature (2 hours ago)            
-dotfiles    jj  main ✓∅  config: update zshrc (1 day ago)                
+dotfiles    jj  main ✓∅⇡5  config: update zshrc (1 day ago)              
 infra       git feat/rework ↑1↓3  refactor: networking layer (3 days ago)
 old-service jj  legacy ✗✓!‼  fix: critical bug (1 week ago)
 ```
 
 Status symbols at a glance:
 
-| Symbol | Meaning                |
-| ------ | ---------------------- |
-| `✓`    | synced with remote     |
-| `↑2`   | 2 commits ahead        |
-| `↓1`   | 1 commit behind        |
-| `↑2↓1` | diverged               |
-| `∅`    | local only, no remote  |
-| `!`    | bookmark conflict (jj) |
-| `✗`    | remote was deleted     |
-| `*`    | dirty working copy     |
-| `‼`    | unresolved conflict    |
-| `?`    | unknown remote state   |
+| Symbol | Meaning                                |
+| ------ | -------------------------------------- |
+| `✓`    | Synced with remote                     |
+| `↑N`   | N commits ahead of remote              |
+| `↓N`   | N commits behind remote                |
+| `⇡N`   | Working copy ahead of bookmark (local) |
+| `↑N↓N` | Diverged (ahead and behind)            |
+| `∅`    | Local only, no remote                  |
+| `‼`    | Unresolved conflict                    |
+| `!`    | Bookmark conflict (jj)                 |
+| `✗`    | Remote was deleted                     |
+| `*`    | Dirty working copy                     |
+| `?`    | Unknown remote state                   |
 
 ## Interactive TUI
 

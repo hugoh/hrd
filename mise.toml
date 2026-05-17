@@ -77,7 +77,7 @@ run = "go run ."
 
 [tasks.readme]
 description = "Regenerate README.md from template"
-run = "go generate ./..."
+run = ["go generate ./...", "dprint fmt README.md"]
 
 [tasks.readmecheck]
 description = "Check README.md is in sync with template"
