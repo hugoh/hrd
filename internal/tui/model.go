@@ -45,6 +45,13 @@ const (
 	modalAlert
 )
 
+type groupMode int
+
+const (
+	groupFilterMode groupMode = iota
+	groupAddMode
+)
+
 type cmdPrefix int
 
 const (
@@ -96,6 +103,7 @@ const (
 	vcsJj       = "jj"
 	labelAll    = "all"
 	labelAllCap = "[all]"
+	labelNew    = "[new...]"
 	keyEsc      = "esc"
 	keyEnter    = "enter"
 )
@@ -127,6 +135,8 @@ type model struct {
 
 	groupPopupCursor  int
 	groupPopupOptions []string
+	groupMode         groupMode
+	groupNewInput     bool
 
 	commandOpen bool
 	input       textinput.Model

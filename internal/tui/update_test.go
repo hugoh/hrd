@@ -917,7 +917,7 @@ func TestOpenGroupPopup(t *testing.T) {
 		groupFilter: "work",
 	}
 
-	openGroupPopup(m)
+	openGroupPopup(m, groupFilterMode)
 
 	if m.screen != screenGroup {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
@@ -941,10 +941,14 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 		},
 	}
 
-	openGroupPopup(m)
+	openGroupPopup(m, groupFilterMode)
 
 	if m.screen != screenGroup {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
+	}
+
+	if len(m.groupPopupOptions) != 2 {
+		t.Errorf("expected 2 popup options, got %d", len(m.groupPopupOptions))
 	}
 
 	if m.groupPopupCursor != 0 {

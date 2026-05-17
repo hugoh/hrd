@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
@@ -88,17 +89,16 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleQKey()
 	}
 
-	if msg.String() == keyEsc {
-		switch m.screen { //nolint:exhaustive
-		case screenHelp, screenGroup:
-			m.screen = screenMain
-
-			return m, nil
-		}
-	}
-
 	if m.commandOpen {
 		return m.handleInputKey(msg)
+	}
+
+	if m.groupNewInput {
+		return m.handleGroupNewInput(msg)
+	}
+
+	if msg.String() == keyEsc {
+		return m.handleEscKey()
 	}
 
 	switch m.screen {
@@ -110,6 +110,23 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	case screenGroup:
 		return m.handleGroupKey(msg)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
+	if m.groupNewInput {
+		m.groupNewInput = false
+
+		return m, nil
+	}
+
+	switch m.screen { //nolint:exhaustive
+	case screenHelp, screenGroup:
+		m.screen = screenMain
+
+		return m, nil
 	}
 
 	return m, nil
@@ -145,6 +162,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case screenHelp, screenGroup:
+		m.groupNewInput = false
 		m.screen = screenMain
 
 		return m, nil
@@ -191,27 +209,102 @@ func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 	case keyEnter:
-		selected := m.groupPopupOptions[m.groupPopupCursor]
-		if selected == labelAllCap {
-			m.groupFilter = ""
-		} else {
-			m.groupFilter = selected
-		}
-
-		m.cursor = 0
-
-		m.selected = make(map[string]bool)
-		for _, name := range m.filteredRepos() {
-			m.selected[name] = true
-		}
-
-		m.screen = screenMain
-		m.loading = true
-
-		return m, loadStatusesCmd(m)
+		return m.handleGroupEnter()
 	}
 
 	return m, nil
+}
+
+func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
+	selected := m.groupPopupOptions[m.groupPopupCursor]
+
+	switch m.groupMode {
+	case groupFilterMode:
+		return m.handleGroupFilterSelect(selected)
+	case groupAddMode:
+		return m.handleGroupAddSelect(selected)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
+	if selected == labelAllCap {
+		m.groupFilter = ""
+	} else {
+		m.groupFilter = selected
+	}
+
+	m.cursor = 0
+
+	m.selected = make(map[string]bool)
+	for _, name := range m.filteredRepos() {
+		m.selected[name] = true
+	}
+
+	m.screen = screenMain
+	m.loading = true
+
+	return m, loadStatusesCmd(m)
+}
+
+func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
+	if selected == labelNew {
+		m.input.SetValue("")
+		m.input.Placeholder = "enter group name..."
+		m.input.Focus()
+		m.input.SetWidth(m.inputWidth())
+		m.groupNewInput = true
+
+		return m, nil
+	}
+
+	repos := m.selectedNames()
+	if err := m.cfg.AddGroup(selected, repos); err != nil {
+		return m, nil
+	}
+
+	if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
+		return m, nil
+	}
+
+	m.screen = screenMain
+
+	return m, nil
+}
+
+func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	m.input, cmd = m.input.Update(msg)
+
+	switch msg.String() {
+	case keyEnter:
+		name := strings.TrimSpace(m.input.Value())
+		if name == "" {
+			return m, nil
+		}
+
+		repos := m.selectedNames()
+		if err := m.cfg.AddGroup(name, repos); err != nil {
+			return m, nil
+		}
+
+		if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
+			return m, nil
+		}
+
+		m.groupNewInput = false
+		m.screen = screenMain
+
+		return m, nil
+	case keyEsc:
+		m.groupNewInput = false
+
+		return m, nil
+	}
+
+	return m, cmd
 }
 
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -343,7 +436,19 @@ var mainKeyHandlers = map[string]func(*model) (tea.Model, tea.Cmd){
 		return m.handleCmdBarOpen(m.cmdPrefix)
 	},
 	"@": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
-		openGroupPopup(m)
+		openGroupPopup(m, groupFilterMode)
+
+		return m, nil
+	},
+	"g": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
+		selected := m.selectedNames()
+		if len(selected) == 0 {
+			m.modal = modalAlert
+
+			return m, nil
+		}
+
+		openGroupPopup(m, groupAddMode)
 
 		return m, nil
 	},
@@ -503,15 +608,27 @@ func openCommandBar(m *model, p cmdPrefix) {
 	m.input.SetWidth(m.inputWidth())
 }
 
-func openGroupPopup(m *model) {
+func openGroupPopup(m *model, mode groupMode) {
 	groupNames := sortedGroupNames(m.cfg.Groups)
-	options := make([]string, 0, 1+len(groupNames))
-	options = append(options, labelAllCap)
-	options = append(options, groupNames...)
+
+	var options []string
+
+	switch mode {
+	case groupFilterMode:
+		options = make([]string, 0, 1+len(groupNames))
+		options = append(options, labelAllCap)
+		options = append(options, groupNames...)
+	case groupAddMode:
+		options = make([]string, 0, len(groupNames)+1)
+		options = append(options, groupNames...)
+		options = append(options, labelNew)
+	}
+
 	m.groupPopupOptions = options
+	m.groupMode = mode
 
 	m.groupPopupCursor = 0
-	if m.groupFilter != "" {
+	if m.groupFilter != "" && mode == groupFilterMode {
 		for i, opt := range options {
 			if opt == m.groupFilter || opt == "@"+m.groupFilter {
 				m.groupPopupCursor = i

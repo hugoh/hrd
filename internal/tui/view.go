@@ -208,6 +208,10 @@ func (m *model) helpView() string {
 }
 
 func (m *model) groupView() string {
+	if m.groupNewInput {
+		return m.groupNewInputView()
+	}
+
 	items := m.renderGroupItems()
 
 	ch := m.contentHeight()
@@ -228,11 +232,27 @@ func (m *model) groupView() string {
 
 	content := strings.Join(visible, "\n")
 
-	header := styleHeader.Render(" Select group ")
+	headerTxt := " Select group "
+	if m.groupMode == groupAddMode {
+		headerTxt = " Add to group "
+	}
+
+	header := styleHeader.Render(headerTxt)
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+}
+
+func (m *model) groupNewInputView() string {
+	header := styleHeader.Render(" New group name ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" Enter:confirm  Esc:back")
+
+	prompt := styleWarn.Render("name: ")
+	inputLine := prompt + m.input.View()
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
 }
 
 func (m *model) renderGroupItems() []string {
@@ -244,7 +264,7 @@ func (m *model) renderGroupItems() []string {
 		}
 
 		name := opt
-		if opt == m.groupFilter || opt == "@"+m.groupFilter {
+		if m.groupMode == groupFilterMode && (opt == m.groupFilter || opt == "@"+m.groupFilter) {
 			name = styleBold.Render(opt)
 		}
 
