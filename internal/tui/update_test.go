@@ -171,7 +171,7 @@ func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 
 	m.cfg = config.Config{
 		Repos: map[string]config.Repo{
-			"test": {Path: t.TempDir(), Backends: []string{"git"}},
+			"test": {Path: t.TempDir()},
 		},
 		Settings: config.Settings{Concurrency: 4},
 	}
@@ -282,7 +282,7 @@ func TestNameNotTruncatedWhenSelected(t *testing.T) {
 
 	m.cfg = config.Config{
 		Repos: map[string]config.Repo{
-			"AppBadgeWatcher.spoon": {Path: t.TempDir(), Backends: []string{"git"}},
+			"AppBadgeWatcher.spoon": {Path: t.TempDir()},
 		},
 		Settings: config.Settings{Concurrency: 4},
 	}

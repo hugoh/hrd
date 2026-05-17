@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/hugoh/hrd/internal/backend"
 )
 
 var (
@@ -27,20 +28,17 @@ const (
 type Repo struct {
 	// Path is the absolute path to the repository root.
 	Path string `toml:"path"`
-
-	// Backends holds all detected VCS backends at this path.
-	// The first element is the active backend.
-	Backends []string `toml:"backends"`
 }
 
-// ActiveBackend returns the first configured backend for this repo.
-// If no backends are configured, returns empty string.
+// ActiveBackend detects and returns the active VCS backend for this repo.
+// Returns empty string if no VCS is detected.
 func (r Repo) ActiveBackend() string {
-	if len(r.Backends) > 0 {
-		return r.Backends[0]
+	b, err := backend.Detect(r.Path)
+	if err != nil {
+		return ""
 	}
 
-	return ""
+	return b.Name()
 }
 
 // Group is a named collection of repo names.

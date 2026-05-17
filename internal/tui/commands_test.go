@@ -172,7 +172,7 @@ func TestLoadStatusesCmdStreaming(t *testing.T) {
 		repoOrder: []string{"r1"},
 		selected:  map[string]bool{"r1": true},
 		cfg: config.Config{
-			Repos:    map[string]config.Repo{"r1": {Path: t.TempDir(), Backends: []string{"git"}}},
+			Repos:    map[string]config.Repo{"r1": {Path: t.TempDir()}},
 			Settings: config.Settings{Concurrency: 1},
 		},
 	}

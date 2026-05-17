@@ -22,8 +22,8 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGroupAddAndList",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-				"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+				"repo1": {Path: "/tmp/repo1"},
+				"repo2": {Path: "/tmp/repo2"},
 			}},
 			args: []string{"group", "add", "work", "repo1", "repo2"},
 			check: func(t *testing.T, cfgPath string) {
@@ -35,8 +35,8 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGroupAddWithAtPrefix",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-				"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+				"repo1": {Path: "/tmp/repo1"},
+				"repo2": {Path: "/tmp/repo2"},
 			}},
 			args: []string{"group", "add", "@work", "repo1", "repo2"},
 			check: func(t *testing.T, cfgPath string) {
@@ -57,7 +57,7 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGroupAddWithoutAtPrefix",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+				"repo1": {Path: "/tmp/repo1"},
 			}},
 			args: []string{"group", "add", "work", "repo1"},
 			check: func(t *testing.T, cfgPath string) {
@@ -81,7 +81,7 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 		{
 			name: "TestGroupAddTooFewArgs",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+				"repo1": {Path: "/tmp/repo1"},
 			}},
 			args:    []string{"group", "add", "work"},
 			wantErr: errGroupAddUsage,
@@ -156,7 +156,7 @@ func TestGroupRemove(t *testing.T) { //nolint:funlen
 			name: "TestGroupRemoveClearsContext",
 			cfg: config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/repo1"},
 				},
 				Groups:  map[string]config.Group{"work": {Repos: []string{"repo1"}}},
 				Context: config.Context{Current: "work"},
@@ -247,7 +247,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 			name: "TestGroupFlowThroughAddThenList",
 			cfg: config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/repo1"},
 				},
 			},
 			args:        []string{"group", "ls"},
@@ -297,8 +297,8 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 func baseGroupConfig() config.Config {
 	return config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
 		},
 		Groups: map[string]config.Group{
 			"work": {Repos: []string{"repo1", "repo2"}},
@@ -309,9 +309,9 @@ func baseGroupConfig() config.Config {
 func groupListConfig() config.Config {
 	return config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
-			"repo3": {Path: "/tmp/repo3", Backends: []string{"git"}},
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
+			"repo3": {Path: "/tmp/repo3"},
 		},
 		Groups: map[string]config.Group{
 			"work": {Repos: []string{"repo1", "repo2"}},

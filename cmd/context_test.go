@@ -125,7 +125,7 @@ func TestContextClear(t *testing.T) {
 func baseContextConfig(current string) config.Config {
 	return config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+			"repo1": {Path: "/tmp/repo1"},
 		},
 		Groups: map[string]config.Group{
 			"work": {Repos: []string{"repo1"}},

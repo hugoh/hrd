@@ -254,7 +254,7 @@ func GatherStatus(
 			results <- StatusResult{
 				RepoName: name,
 				RepoPath: repo.Path,
-				VCS:      repo.ActiveBackend(),
+				VCS:      bck.Name(),
 				Status:   st,
 				Err:      err,
 			}

@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
-	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
@@ -20,11 +18,10 @@ var (
 	errAtLeastOnePath  = errors.New("at least one path required")
 	errNameSingleRepo  = errors.New("--name can only be used when adding a single repo")
 	errAtLeastOneName  = errors.New("at least one repo name required")
-	errAtLeastOneOrAll = errors.New("at least one repo name required, or use --all")
 	errRepoRenameUsage = errors.New("usage: repo rename <old> <new>")
 	errUnknownRepo     = errors.New("unknown repo")
 	errRepoExists      = errors.New("repo already exists")
-	errNoVCSDetected   = errors.New("no VCS detected")
+	errRepoNoVCS       = errors.New("no VCS detected")
 )
 
 // repoCommands returns the `repo` subcommand with its children.
@@ -37,7 +34,6 @@ func repoCommands(cfgPath *string) *cli.Command {
 			repoRemoveCmd(cfgPath),
 			repoListCmd(cfgPath),
 			repoRenameCmd(cfgPath),
-			repoRefreshCmd(cfgPath),
 		},
 	}
 }
@@ -48,10 +44,6 @@ func repoAddCmd(cfgPath *string) *cli.Command {
 		Usage:     "add one or more repositories",
 		ArgsUsage: "<path>...",
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:  "vcs",
-				Usage: "override VCS detection (git|jj|…)",
-			},
 			&cli.StringFlag{
 				Name:    "name",
 				Aliases: []string{"n"},
@@ -83,9 +75,8 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 				return fmt.Errorf("resolving %q: %w", arg, err)
 			}
 
-			backends, err := detectBackends(cmd.String("vcs"), abs)
-			if err != nil {
-				return fmt.Errorf("%s: %w", abs, err)
+			if _, err := backend.Detect(abs); err != nil {
+				return fmt.Errorf("%s: %w", abs, errRepoNoVCS)
 			}
 
 			name := cmd.String("name")
@@ -102,65 +93,12 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 				)
 			}
 
-			cfg.AddRepo(name, config.Repo{Path: abs, Backends: backends})
-			ui.Success("added %s (%s) as %q", abs, backends[0], name)
+			cfg.AddRepo(name, config.Repo{Path: abs})
+			ui.Success("added %s as %q", abs, name)
 		}
 
 		return config.Save(*cfgPath, cfg)
 	}
-}
-
-func detectBackends(vcsName, abs string) ([]string, error) {
-	if vcsName == "" {
-		return detectAllBackends(abs)
-	}
-
-	return detectExplicitBackend(vcsName, abs)
-}
-
-func detectAllBackends(abs string) ([]string, error) {
-	bList, err := backend.DetectAll(abs)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errNoVCSDetected, err)
-	}
-
-	names := make([]string, len(bList))
-
-	for i, b := range bList {
-		names[i] = b.Name()
-	}
-
-	return names, nil
-}
-
-func detectExplicitBackend(vcsName, abs string) ([]string, error) {
-	if _, err := backend.ByName(vcsName); err != nil {
-		return nil, fmt.Errorf("checking backend %q: %w", vcsName, err)
-	}
-
-	bList, err := backend.DetectAll(abs)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", abs, errNoVCSDetected)
-	}
-
-	names := make([]string, 0, len(bList))
-	hasVCS := false
-
-	for _, entry := range bList {
-		if entry.Name() == vcsName {
-			hasVCS = true
-
-			names = append([]string{vcsName}, names...)
-		} else {
-			names = append(names, entry.Name())
-		}
-	}
-
-	if !hasVCS {
-		return nil, fmt.Errorf("%w: %s not detected at %s", errNoVCSDetected, vcsName, abs)
-	}
-
-	return names, nil
 }
 
 func repoRemoveCmd(cfgPath *string) *cli.Command {
@@ -192,7 +130,6 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 	}
 }
 
-//nolint:funlen // function body includes full action closure
 func repoListCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
 		Name:  "ls",
@@ -240,9 +177,6 @@ func repoListCmd(cfgPath *string) *cli.Command {
 				repo := cfg.Repos[name]
 
 				vcsLabel := repo.ActiveBackend()
-				if len(repo.Backends) > 1 {
-					vcsLabel = strings.Join(repo.Backends, ",")
-				}
 
 				rows = append(rows, []string{name, vcsLabel, repo.Path})
 			}
@@ -260,9 +194,8 @@ func repoListCmd(cfgPath *string) *cli.Command {
 }
 
 const (
-	cmdNameRepo    = "repo"
-	cmdNameRename  = "rename"
-	cmdNameRefresh = "refresh"
+	cmdNameRepo   = "repo"
+	cmdNameRename = "rename"
 )
 
 func repoRenameCmd(cfgPath *string) *cli.Command {
@@ -309,83 +242,4 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 			return config.Save(*cfgPath, cfg)
 		},
 	}
-}
-
-func repoRefreshCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      cmdNameRefresh,
-		Usage:     "re-detect VCS for one or more repos",
-		ArgsUsage: "<name>...",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:    "all",
-				Aliases: []string{"a"},
-				Usage:   "refresh all known repos",
-			},
-		},
-		Action: repoRefreshAction(cfgPath),
-	}
-}
-
-func repoRefreshAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		cfg, err := config.Load(*cfgPath)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-
-		var names []string
-
-		if cmd.Bool("all") {
-			for name := range cfg.Repos {
-				names = append(names, name)
-			}
-
-			sort.Strings(names)
-		} else {
-			if cmd.NArg() == 0 {
-				return errAtLeastOneOrAll
-			}
-
-			names = cmd.Args().Slice()
-			for _, name := range names {
-				if _, ok := cfg.Repos[name]; !ok {
-					return fmt.Errorf("%w %q", errUnknownRepo, name)
-				}
-			}
-		}
-
-		for _, name := range names {
-			refreshRepo(name, &cfg)
-		}
-
-		return config.Save(*cfgPath, cfg)
-	}
-}
-
-func refreshRepo(name string, cfg *config.Config) {
-	repo := cfg.Repos[name]
-
-	backends, err := backend.DetectAll(repo.Path)
-	if err != nil {
-		ui.Fail("%s: %v", name, err)
-
-		return
-	}
-
-	var newBackends []string
-	for _, b := range backends {
-		newBackends = append(newBackends, b.Name())
-	}
-
-	if !slices.Equal(newBackends, repo.Backends) {
-		var note string
-		if newBackends[0] != repo.ActiveBackend() {
-			note = fmt.Sprintf(" %s → %s", repo.ActiveBackend(), newBackends[0])
-		}
-
-		ui.Outf("%s:%s (%s)", name, note, strings.Join(newBackends, ", "))
-	}
-
-	cfg.AddRepo(name, config.Repo{Path: repo.Path, Backends: newBackends})
 }

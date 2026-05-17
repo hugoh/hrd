@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -407,11 +406,19 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 }
 
 func filterMatching(names []string, repos map[string]config.Repo, backendName string) []string {
+	bck, err := backend.ByName(backendName)
+	if err != nil {
+		return nil
+	}
+
 	var out []string
 
 	for _, n := range names {
-		if r, ok := repos[n]; ok && slices.Contains(r.Backends, backendName) {
-			out = append(out, n)
+		if r, ok := repos[n]; ok {
+			ok, _ := bck.Detect(r.Path)
+			if ok {
+				out = append(out, n)
+			}
 		}
 	}
 

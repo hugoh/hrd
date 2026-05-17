@@ -27,7 +27,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				t.Helper()
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/repo1"},
 				}})
 			},
 			args:        []string{"shell"},
@@ -39,7 +39,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				t.Helper()
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: t.TempDir(), Backends: []string{"git"}},
+					"repo1": {Path: t.TempDir()},
 				}})
 			},
 			args: []string{"shell", "--", "echo hello"},
@@ -50,7 +50,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				t.Helper()
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Backends: []string{"jj"}},
+					"repo1": {Path: "/tmp/repo1"},
 				}})
 			},
 			args:          []string{"git", "--", "status"},
@@ -76,8 +76,8 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				gitDir := setupFakeGitRepo(t)
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir, Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo1": {Path: gitDir},
+					"repo2": {Path: "/tmp/other"},
 				}})
 			},
 			args: []string{"git", "--repos", "repo1", "--", "status"},
@@ -90,8 +90,8 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				gitDir := setupFakeGitRepo(t)
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir, Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo1": {Path: gitDir},
+					"repo2": {Path: "/tmp/other"},
 				}})
 			},
 			args: []string{"git", "-i", "repo1", "repo2", "--", "log"},
@@ -154,8 +154,8 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				gitDir := setupFakeGitRepo(t)
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir, Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo1": {Path: gitDir},
+					"repo2": {Path: "/tmp/other"},
 				}})
 			},
 			args: []string{"fetch", "--repos", "repo1"},
@@ -179,7 +179,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 				gitDir := setupFakeGitRepo(t)
 
 				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir, Backends: []string{}},
+					"repo1": {Path: gitDir},
 				}})
 			},
 			args: []string{"fetch", "-i"},
@@ -311,8 +311,8 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 
 				gitDir := setupFakeGitRepo(t)
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir, Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo1": {Path: gitDir},
+					"repo2": {Path: "/tmp/other"},
 				}})
 
 				return setupResult{
@@ -332,8 +332,8 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 				t.Helper()
 
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/r2", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/r1"},
+					"repo2": {Path: "/tmp/r2"},
 				}})
 
 				return setupResult{
@@ -349,7 +349,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 				t.Helper()
 
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/r1", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/r1"},
 				}})
 
 				return setupResult{
@@ -367,8 +367,8 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 				repo1Dir := t.TempDir()
 				repo2Dir := t.TempDir()
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: repo1Dir, Backends: []string{"git"}},
-					"repo2": {Path: repo2Dir, Backends: []string{"git"}},
+					"repo1": {Path: repo1Dir},
+					"repo2": {Path: repo2Dir},
 				}})
 
 				return setupResult{
@@ -385,7 +385,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 
 				repo1Dir := t.TempDir()
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: repo1Dir, Backends: []string{"git"}},
+					"repo1": {Path: repo1Dir},
 				}})
 
 				return setupResult{
@@ -563,8 +563,8 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 
 func TestCmdArgsFilter(t *testing.T) { //nolint:funlen
 	repos := map[string]config.Repo{
-		"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-		"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+		"repo1": {Path: "/tmp/repo1"},
+		"repo2": {Path: "/tmp/repo2"},
 	}
 	groups := map[string]config.Group{
 		"work": {Repos: []string{"repo1"}},
