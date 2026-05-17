@@ -385,6 +385,11 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 		m.updateTableRows()
 	}
 
+	if m.cursor < len(names)-1 {
+		m.cursor++
+		m.repoTable.SetCursor(m.cursor)
+	}
+
 	return m, nil
 }
 
