@@ -7,27 +7,6 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 )
 
-func TestResolveInitialPrefix(t *testing.T) {
-	tests := []struct {
-		name   string
-		prefix string
-		want   cmdPrefix
-	}{
-		{"empty prefix", "", prefixNone},
-		{"git prefix", "git", prefixGit},
-		{"jj prefix", "jj", prefixJj},
-		{"shell prefix", "sh", prefixShell},
-		{"unknown prefix", "nonexistent", prefixGit},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := cmdPrefix(resolveInitialPrefix(tt.prefix)); got != tt.want {
-				t.Errorf("resolveInitialPrefix(%q) = %v, want %v", tt.prefix, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestSortedRepoKeys(t *testing.T) {
 	repos := map[string]config.Repo{
 		"zeta":  {},
@@ -66,28 +45,6 @@ func TestSortedGroupNamesEmpty(t *testing.T) {
 	got := sortedGroupNames(map[string]config.Group{})
 	if len(got) != 0 {
 		t.Errorf("sortedGroupNames() = %v, want empty slice", got)
-	}
-}
-
-func TestSelectedPrefix(t *testing.T) {
-	m := &model{cmdPrefix: prefixGit}
-	if got := m.selectedPrefix(); got != "git" {
-		t.Errorf("selectedPrefix() = %q, want %q", got, "git")
-	}
-
-	m.cmdPrefix = prefixJj
-	if got := m.selectedPrefix(); got != "jj" {
-		t.Errorf("selectedPrefix() = %q, want %q", got, "jj")
-	}
-
-	m.cmdPrefix = prefixShell
-	if got := m.selectedPrefix(); got != "sh" {
-		t.Errorf("selectedPrefix() = %q, want %q", got, "sh")
-	}
-
-	m.cmdPrefix = prefixNone
-	if got := m.selectedPrefix(); got != "" {
-		t.Errorf("selectedPrefix() = %q, want %q", got, "")
 	}
 }
 

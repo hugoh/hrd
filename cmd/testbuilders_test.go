@@ -19,7 +19,7 @@ func cfgSingleGitRepo(t *testing.T) string {
 
 	return setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: repoPath, Backends: []string{"git"}},
+			"repo1": {Path: repoPath},
 		},
 	})
 }

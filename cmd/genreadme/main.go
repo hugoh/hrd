@@ -14,6 +14,7 @@ import (
 	"github.com/hugoh/hrd/cmd"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
 )
 
@@ -39,6 +40,19 @@ func stripLeadingSpace(s string) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func generateSymbolsTable() string {
+	var b strings.Builder
+
+	b.WriteString("| Symbol | Meaning |\n")
+	b.WriteString("| ------ | ------- |\n")
+
+	for _, d := range theme.StatusSymbolDocs {
+		fmt.Fprintf(&b, "| `%s` | %s |\n", d.Symbol, d.Description)
+	}
+
+	return b.String()
 }
 
 func generateHelp() string {
@@ -84,6 +98,7 @@ func statusResults() []runner.StatusResult {
 					{Name: refName, State: backend.RefStateSynced},
 					{Name: "feat", State: backend.RefStateNoRemote},
 				},
+				LocalAhead:   5, //nolint:mnd // example data
 				OverallState: backend.RefStateSynced,
 				CommitMsg:    "config: update zshrc",
 				CommitTime:   "(1 day ago)",
@@ -172,14 +187,16 @@ func generateLL() string {
 }
 
 type templateData struct {
-	LLOutput   string
-	HelpOutput string
+	LLOutput     string
+	HelpOutput   string
+	SymbolsTable string
 }
 
 func run() error {
 	tmplData := templateData{
-		LLOutput:   generateLL(),
-		HelpOutput: generateHelp(),
+		LLOutput:     generateLL(),
+		HelpOutput:   generateHelp(),
+		SymbolsTable: generateSymbolsTable(),
 	}
 
 	tplRaw, err := os.ReadFile("README.md.tpl")

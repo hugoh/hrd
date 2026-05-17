@@ -113,19 +113,45 @@ func (m *model) renderHeader() string {
 		left += styleSelectedCount.Render(" " + repoCount)
 	}
 
-	var right string
-	if m.loading {
-		right = ui.Muted(" " + m.spinner.View())
-	}
-
-	right += ui.Muted(
-		" @:group x:select r:refresh ?:Help q:Quit",
-	)
+	right := m.renderHeaderRight()
 
 	pad := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	pad = max(pad, 1)
 
 	return left + strings.Repeat(" ", pad) + right
+}
+
+func (m *model) renderHeaderRight() string {
+	var right string
+
+	if m.loading {
+		right = ui.Muted(" " + m.spinner.View())
+	}
+
+	var parts []string
+
+	for _, b := range mainBindings {
+		if !b.hrd || b.label == "" {
+			continue
+		}
+
+		if b.key == "a" && !m.selectMode {
+			continue
+		}
+
+		dk := b.displayKey
+		if dk == "" {
+			dk = b.key
+		}
+
+		parts = append(parts, dk+":"+b.label)
+	}
+
+	if m.screen == screenMain {
+		parts = append(parts, "q:quit")
+	}
+
+	return right + ui.Muted(" "+strings.Join(parts, " "))
 }
 
 func (m *model) renderInputLine() string {
@@ -135,7 +161,22 @@ func (m *model) renderInputLine() string {
 }
 
 func (*model) renderFooter() string {
-	return styleFooter.Render("G:git J:jj S:shell f:fetch d:diff l:log p:pull P:push s:status")
+	var parts []string
+
+	for _, b := range mainBindings {
+		if b.hrd || b.label == "" {
+			continue
+		}
+
+		dk := b.displayKey
+		if dk == "" {
+			dk = b.key
+		}
+
+		parts = append(parts, dk+":"+b.label)
+	}
+
+	return styleFooter.Render(strings.Join(parts, " "))
 }
 
 // --- Output screen ----------------------------------------------------------
@@ -208,6 +249,10 @@ func (m *model) helpView() string {
 }
 
 func (m *model) groupView() string {
+	if m.groupNewInput {
+		return m.groupNewInputView()
+	}
+
 	items := m.renderGroupItems()
 
 	ch := m.contentHeight()
@@ -228,11 +273,27 @@ func (m *model) groupView() string {
 
 	content := strings.Join(visible, "\n")
 
-	header := styleHeader.Render(" Select group ")
+	headerTxt := " Select group "
+	if m.groupMode == groupAddMode {
+		headerTxt = " Add to group "
+	}
+
+	header := styleHeader.Render(headerTxt)
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+}
+
+func (m *model) groupNewInputView() string {
+	header := styleHeader.Render(" New group name ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" Enter:confirm  Esc:back")
+
+	prompt := styleWarn.Render("name: ")
+	inputLine := prompt + m.input.View()
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
 }
 
 func (m *model) renderGroupItems() []string {
@@ -244,7 +305,7 @@ func (m *model) renderGroupItems() []string {
 		}
 
 		name := opt
-		if opt == m.groupFilter || opt == "@"+m.groupFilter {
+		if m.groupMode == groupFilterMode && (opt == m.groupFilter || opt == "@"+m.groupFilter) {
 			name = styleBold.Render(opt)
 		}
 
@@ -332,31 +393,69 @@ func truncateVis(s string, maxVis int) string {
 	return s[:ansiByteOff(s, maxVis)]
 }
 
-func (*model) helpContent() string {
-	content := "Navigation:\n"
-	content += "  ↑/k  Move cursor up (select mode)\n"
-	content += "  ↓/j  Move cursor down (select mode)\n\n"
-	content += "Selection:\n"
-	content += "  Space  Enter selection mode\n"
-	content += "  a    Select / deselect all\n\n"
-	content += "Filtering:\n"
-	content += "  @    Select group filter\n\n"
-	content += "Commands:\n"
-	content += "  s    Run status on selected\n"
-	content += "  l    Run log on selected\n"
-	content += "  d    Run diff on selected\n"
-	content += "  f    Run fetch on selected\n"
-	content += "  p    Run pull on selected\n"
-	content += "  P    Run push on selected\n"
-	content += "  G    Open command bar (git)\n"
-	content += "  J    Open command bar (jj)\n"
-	content += "  S    Open command bar (shell)\n\n"
-	content += "General:\n"
-	content += "  r    Refresh repo status\n"
-	content += "  ?    Toggle this help\n"
-	content += "  q / Ctrl+C  Quit"
+func buildHelp(bindings []binding) string {
+	type secEntry struct {
+		key  string
+		desc string
+	}
 
-	return content
+	grouped := make(map[string][]secEntry)
+
+	var sections []string
+
+	for _, b := range bindings {
+		if b.desc == "" {
+			continue
+		}
+
+		if _, ok := grouped[b.section]; !ok {
+			sections = append(sections, b.section)
+		}
+
+		dk := b.displayKey
+		if dk == "" {
+			dk = b.key
+		}
+
+		grouped[b.section] = append(grouped[b.section], secEntry{dk, b.desc})
+	}
+
+	var bld strings.Builder
+
+	for _, sec := range sections {
+		bld.WriteString(sec)
+		bld.WriteString(":\n")
+
+		for _, e := range grouped[sec] {
+			fmt.Fprintf(&bld, "  %-6s %s\n", e.key, e.desc)
+		}
+
+		bld.WriteString("\n")
+	}
+
+	bld.WriteString("Status symbols:\n")
+
+	for _, d := range theme.StatusSymbolDocs {
+		fmt.Fprintf(&bld, "  %-6s %s\n", d.Symbol, d.Description)
+	}
+
+	bld.WriteString("\n")
+	bld.WriteString("General:\n")
+	bld.WriteString("  q      Quit (or go back from screens)\n")
+	bld.WriteString("  Ctrl+C Cancel execution / Quit")
+
+	return bld.String()
+}
+
+//nolint:gochecknoglobals // pre-built help string from bindings
+var helpStr string
+
+func init() { //nolint:gochecknoinits
+	helpStr = buildHelp(mainBindings)
+}
+
+func (*model) helpContent() string {
+	return helpStr
 }
 
 func (m *model) groupPopupContent() string {

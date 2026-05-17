@@ -19,11 +19,10 @@ const (
 
 // PersistentState holds TUI session state saved between runs.
 type PersistentState struct {
-	Version    int      `json:"version"`
-	History    []string `json:"history"`
-	LastRepos  []string `json:"lastRepos"`
-	LastGroup  string   `json:"lastGroup"`
-	LastPrefix string   `json:"lastPrefix"`
+	Version   int      `json:"version"`
+	History   []string `json:"history"`
+	LastRepos []string `json:"lastRepos"`
+	LastGroup string   `json:"lastGroup"`
 }
 
 // defaultStatePath returns the default path for the TUI state file.

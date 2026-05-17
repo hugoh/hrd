@@ -31,9 +31,14 @@ func TestMain(m *testing.M) {
 
 type gitBackend struct{}
 
-func (*gitBackend) Name() string                  { return "git" }
-func (*gitBackend) Priority() int                 { return 10 }
-func (*gitBackend) Detect(_ string) (bool, error) { return false, nil }
+func (*gitBackend) Name() string  { return "git" }
+func (*gitBackend) Priority() int { return 10 }
+func (*gitBackend) Detect(path string) (bool, error) {
+	_, err := os.Stat(filepath.Join(path, ".git"))
+
+	return err == nil, nil
+}
+
 func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
@@ -54,7 +59,7 @@ func (*gitBackend) Run(
 
 func TestDispatch(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
 	}
 
 	ch, err := Dispatch(context.Background(), repos, []string{"r1"}, "git", []string{"status"}, 1)
@@ -70,7 +75,7 @@ func TestDispatch(t *testing.T) {
 
 func TestDispatch_UnknownBackend(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
 	}
 
 	_, err := Dispatch(
@@ -106,7 +111,7 @@ func TestDispatch_RepoNotFound(t *testing.T) {
 
 func TestVCSSubcmd(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
 	}
 
 	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "status", 1)
@@ -139,7 +144,7 @@ func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 	runGit(t, dir, "commit", "-m", "initial")
 
 	repos := map[string]config.Repo{
-		"r1": {Path: dir, Backends: []string{"git"}},
+		"r1": {Path: dir},
 	}
 
 	ch := VCSSubcmd(
@@ -166,7 +171,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 
 func TestVCSSubcmd_Ops(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
 	}
 
 	for _, op := range []string{"diff", "fetch"} {
@@ -200,7 +205,7 @@ func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
 	runGit(t, dir, "config", "user.name", testName)
 
 	repos := map[string]config.Repo{
-		"r1": {Path: dir, Backends: []string{"git"}},
+		"r1": {Path: dir},
 	}
 
 	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "fetch", 1)
@@ -212,8 +217,8 @@ func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
 
 func TestVCSSubcmd_MultipleRepos(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
-		"r2": {Path: "/tmp/r2", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
+		"r2": {Path: "/tmp/r2"},
 	}
 
 	ch := VCSSubcmd(context.Background(), repos, []string{"r1", "r2"}, "status", 2)
@@ -228,7 +233,7 @@ func TestVCSSubcmd_MultipleRepos(t *testing.T) {
 
 func TestShell(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: t.TempDir(), Backends: []string{"git"}},
+		"r1": {Path: t.TempDir()},
 	}
 
 	ch := Shell(context.Background(), repos, []string{"r1"}, "echo hello", 1)
@@ -250,7 +255,7 @@ func TestShell_RepoNotFound(t *testing.T) {
 
 func TestShell_WithExitCode(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp", Backends: []string{"git"}},
+		"r1": {Path: "/tmp"},
 	}
 
 	ch := Shell(context.Background(), repos, []string{"r1"}, "exit 42", 1)
@@ -261,7 +266,7 @@ func TestShell_WithExitCode(t *testing.T) {
 
 func TestGatherStatus(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
 	}
 
 	ch := GatherStatus(context.Background(), repos, []string{"r1"}, 1)
@@ -292,8 +297,8 @@ func TestErrRepoNotFound(t *testing.T) {
 
 func TestDispatch_MultipleRepos(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp/r1", Backends: []string{"git"}},
-		"r2": {Path: "/tmp/r2", Backends: []string{"git"}},
+		"r1": {Path: "/tmp/r1"},
+		"r2": {Path: "/tmp/r2"},
 	}
 
 	ch, err := Dispatch(
@@ -316,8 +321,8 @@ func TestDispatch_MultipleRepos(t *testing.T) {
 
 func TestShell_MultipleRepos(t *testing.T) {
 	repos := map[string]config.Repo{
-		"r1": {Path: "/tmp", Backends: []string{"git"}},
-		"r2": {Path: "/tmp", Backends: []string{"git"}},
+		"r1": {Path: "/tmp"},
+		"r2": {Path: "/tmp"},
 	}
 
 	ch := Shell(context.Background(), repos, []string{"r1", "r2"}, "echo test", 2)

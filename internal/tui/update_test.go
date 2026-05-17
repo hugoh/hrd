@@ -171,7 +171,7 @@ func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 
 	m.cfg = config.Config{
 		Repos: map[string]config.Repo{
-			"test": {Path: t.TempDir(), Backends: []string{"git"}},
+			"test": {Path: t.TempDir()},
 		},
 		Settings: config.Settings{Concurrency: 4},
 	}
@@ -282,7 +282,7 @@ func TestNameNotTruncatedWhenSelected(t *testing.T) {
 
 	m.cfg = config.Config{
 		Repos: map[string]config.Repo{
-			"AppBadgeWatcher.spoon": {Path: t.TempDir(), Backends: []string{"git"}},
+			"AppBadgeWatcher.spoon": {Path: t.TempDir()},
 		},
 		Settings: config.Settings{Concurrency: 4},
 	}
@@ -879,7 +879,7 @@ func TestShortcutCmdSuccess(t *testing.T) {
 		output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 	}
 
-	cmd := shortcutCmd(m, "status")
+	cmd := shortcutCmd(m, "status", false)
 
 	if cmd == nil {
 		t.Error("expected non-nil cmd when repos selected")
@@ -896,7 +896,7 @@ func TestShortcutCmdNoSelected(t *testing.T) {
 		selected:  map[string]bool{},
 	}
 
-	cmd := shortcutCmd(m, "status")
+	cmd := shortcutCmd(m, "status", false)
 	if cmd != nil {
 		t.Error("expected nil cmd when no repos selected")
 	}
@@ -917,7 +917,7 @@ func TestOpenGroupPopup(t *testing.T) {
 		groupFilter: "work",
 	}
 
-	openGroupPopup(m)
+	openGroupPopup(m, groupFilterMode)
 
 	if m.screen != screenGroup {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
@@ -941,10 +941,14 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 		},
 	}
 
-	openGroupPopup(m)
+	openGroupPopup(m, groupFilterMode)
 
 	if m.screen != screenGroup {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
+	}
+
+	if len(m.groupPopupOptions) != 2 {
+		t.Errorf("expected 2 popup options, got %d", len(m.groupPopupOptions))
 	}
 
 	if m.groupPopupCursor != 0 {
@@ -1204,6 +1208,291 @@ func TestInputWidthNarrow(t *testing.T) {
 
 	if w < minInputWidth {
 		t.Errorf("inputWidth() = %d, want >= %d", w, minInputWidth)
+	}
+}
+
+func TestHandleExecDoneWithSideEffect(t *testing.T) {
+	m := &model{
+		executing:      true,
+		execSideEffect: true,
+		output:         viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, cmd := m.handleExecDone(execDoneMsg{})
+
+	if m.executing {
+		t.Error("executing should be false after exec done")
+	}
+
+	if m.execSideEffect {
+		t.Error("execSideEffect should be reset after exec done")
+	}
+
+	if cmd == nil {
+		t.Error("expected non-nil cmd (refresh) when execSideEffect is true")
+	}
+}
+
+func TestOpenGroupPopupAddMode(t *testing.T) {
+	m := &model{
+		cfg: config.Config{
+			Groups: map[string]config.Group{
+				"work":     {},
+				"personal": {},
+			},
+		},
+	}
+
+	openGroupPopup(m, groupAddMode)
+
+	if m.screen != screenGroup {
+		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
+	}
+
+	if len(m.groupPopupOptions) != 3 {
+		t.Errorf("expected 3 popup options (2 groups + new), got %d", len(m.groupPopupOptions))
+	}
+
+	if m.groupPopupOptions[2] != labelNew {
+		t.Errorf("last option = %q, want %q", m.groupPopupOptions[2], labelNew)
+	}
+
+	if m.groupMode != groupAddMode {
+		t.Errorf("groupMode = %d, want %d", m.groupMode, groupAddMode)
+	}
+}
+
+func TestHandleGroupEnterFilterModeAll(t *testing.T) {
+	m := &model{
+		ctx: context.Background(),
+		cfg: config.Config{
+			Repos:  map[string]config.Repo{"r1": {}},
+			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
+		},
+		repoOrder:         []string{"r1"},
+		selected:          map[string]bool{},
+		groupFilter:       "work",
+		groupPopupOptions: []string{labelAllCap, "work"},
+	}
+
+	_, cmd := m.handleGroupEnter()
+
+	if m.groupFilter != "" {
+		t.Errorf("groupFilter = %q, want empty", m.groupFilter)
+	}
+
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	}
+
+	if cmd == nil {
+		t.Error("expected non-nil cmd (refresh) after group selection")
+	}
+}
+
+func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+
+	m := &model{
+		ctx: context.Background(),
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"repo1": {},
+				"repo2": {},
+			},
+			Groups: map[string]config.Group{
+				"work": {Repos: []string{"repo1"}},
+			},
+		},
+		opts:              Options{ConfigPath: cfgPath},
+		repoOrder:         []string{"repo1", "repo2"},
+		selected:          map[string]bool{"repo2": true},
+		groupPopupOptions: []string{"work", labelNew},
+		groupPopupCursor:  0,
+		groupMode:         groupAddMode,
+	}
+
+	_, cmd := m.handleGroupEnter()
+
+	if cmd != nil {
+		t.Error("expected nil cmd after adding to existing group")
+	}
+
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	}
+
+	if len(m.cfg.Groups["work"].Repos) != 2 {
+		t.Errorf("expected 2 repos in work group, got %v", m.cfg.Groups["work"].Repos)
+	}
+}
+
+func TestHandleGroupEnterAddModeNew(t *testing.T) {
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{"repo1": {}},
+		},
+		repoOrder:         []string{"repo1"},
+		selected:          map[string]bool{"repo1": true},
+		groupPopupOptions: []string{"work", labelNew},
+		groupPopupCursor:  1,
+		groupMode:         groupAddMode,
+	}
+	m.initInput()
+
+	_, cmd := m.handleGroupEnter()
+
+	if cmd != nil {
+		t.Error("expected nil cmd when entering new group name")
+	}
+
+	if !m.groupNewInput {
+		t.Error("groupNewInput should be true after selecting [new...]")
+	}
+}
+
+func TestHandleGroupNewInputEnter(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"repo1": {},
+				"repo2": {},
+			},
+			Groups: map[string]config.Group{},
+		},
+		opts:          Options{ConfigPath: cfgPath},
+		repoOrder:     []string{"repo1", "repo2"},
+		selected:      map[string]bool{"repo2": true},
+		groupNewInput: true,
+		screen:        screenGroup,
+	}
+	m.initInput()
+	m.input.SetValue("my-group")
+
+	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if cmd != nil {
+		t.Error("expected nil cmd after creating new group")
+	}
+
+	if m.groupNewInput {
+		t.Error("groupNewInput should be false after Enter")
+	}
+
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	}
+
+	if _, ok := m.cfg.Groups["my-group"]; !ok {
+		t.Error("my-group should exist in config after creation")
+	}
+}
+
+func TestHandleGroupNewInputEmpty(t *testing.T) {
+	m := &model{
+		groupNewInput: true,
+	}
+	m.initInput()
+
+	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if cmd != nil {
+		t.Error("expected nil cmd for empty group name")
+	}
+
+	if !m.groupNewInput {
+		t.Error("groupNewInput should remain true when name is empty")
+	}
+}
+
+func TestHandleGroupNewInputEsc(t *testing.T) {
+	m := &model{
+		groupNewInput: true,
+	}
+	m.initInput()
+
+	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEsc})
+
+	if cmd != nil {
+		t.Error("expected nil cmd after Esc")
+	}
+
+	if m.groupNewInput {
+		t.Error("groupNewInput should be false after Esc")
+	}
+}
+
+func TestHandleGroupKeyNavigation(t *testing.T) {
+	m := &model{
+		groupPopupOptions: []string{"a", "b", "c"},
+		groupPopupCursor:  1,
+	}
+
+	// Press up
+	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
+
+	if cmd != nil {
+		t.Error("expected nil cmd after up")
+	}
+
+	if m.groupPopupCursor != 0 {
+		t.Errorf("cursor = %d, want 0 after up", m.groupPopupCursor)
+	}
+
+	// Press down
+	_, cmd = m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
+
+	if cmd != nil {
+		t.Error("expected nil cmd after down")
+	}
+
+	if m.groupPopupCursor != 1 {
+		t.Errorf("cursor = %d, want 1 after down", m.groupPopupCursor)
+	}
+
+	// Up at top clamps to 0
+	m.groupPopupCursor = 0
+	m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
+
+	if m.groupPopupCursor != 0 {
+		t.Errorf("cursor = %d, want 0 at top", m.groupPopupCursor)
+	}
+
+	// Down at bottom clamps to len-1
+	m.groupPopupCursor = 2
+	m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
+
+	if m.groupPopupCursor != 2 {
+		t.Errorf("cursor = %d, want 2 at bottom", m.groupPopupCursor)
+	}
+}
+
+func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
+	m := &model{
+		ctx: context.Background(),
+		cfg: config.Config{
+			Repos:  map[string]config.Repo{"r1": {}},
+			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
+		},
+		repoOrder:         []string{"r1"},
+		selected:          map[string]bool{},
+		groupPopupOptions: []string{labelAllCap, "work"},
+	}
+
+	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	if m.groupFilter != "" {
+		t.Errorf("groupFilter = %q, want empty", m.groupFilter)
+	}
+
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	}
+
+	if cmd == nil {
+		t.Error("expected non-nil cmd (refresh) after group selection")
 	}
 }
 

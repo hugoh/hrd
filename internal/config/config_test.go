@@ -9,23 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRepo_ActiveBackend(t *testing.T) {
-	tests := []struct {
-		name     string
-		repo     Repo
-		expected string
-	}{
-		{"has backends", Repo{Backends: []string{"git", "jj"}}, "git"},
-		{"empty backends", Repo{Backends: []string{}}, ""},
-		{"nil backends", Repo{}, ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, tt.repo.ActiveBackend())
-		})
-	}
-}
-
 func TestDefaultConfig(t *testing.T) {
 	cfg := defaultConfig()
 	assert.Equal(t, defaultConcurrency, cfg.Settings.Concurrency)
@@ -133,7 +116,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 	cfg := Config{
 		Repos: map[string]Repo{
-			"myproject": {Path: "/home/user/myproject", Backends: []string{"git"}},
+			"myproject": {Path: "/home/user/myproject"},
 		},
 		Groups: map[string]Group{
 			"work": {Repos: []string{"myproject"}},
@@ -242,7 +225,7 @@ func TestResolveScope_UnknownRepo(t *testing.T) {
 
 func TestAddRepo(t *testing.T) {
 	cfg := &Config{Repos: map[string]Repo{}}
-	cfg.AddRepo("myproject", Repo{Path: "/p", Backends: []string{"git"}})
+	cfg.AddRepo("myproject", Repo{Path: "/p"})
 	assert.Contains(t, cfg.Repos, "myproject")
 	assert.Equal(t, "/p", cfg.Repos["myproject"].Path)
 }

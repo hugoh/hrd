@@ -45,6 +45,13 @@ const (
 	modalAlert
 )
 
+type groupMode int
+
+const (
+	groupFilterMode groupMode = iota
+	groupAddMode
+)
+
 type cmdPrefix int
 
 const (
@@ -96,9 +103,30 @@ const (
 	vcsJj       = "jj"
 	labelAll    = "all"
 	labelAllCap = "[all]"
+	labelNew    = "[new...]"
 	keyEsc      = "esc"
 	keyEnter    = "enter"
+
+	secNavigation = "Navigation"
+	secSelection  = "Selection"
+	secGroups     = "Groups"
+	secCommands   = "Commands"
+	secGeneral    = "General"
+	secCmdBar     = "Cmd bar"
 )
+
+// binding describes a single key binding in the main screen.
+type binding struct {
+	key        string
+	displayKey string // human-readable for header/footer; empty = use key
+	handler    func(*model) (tea.Model, tea.Cmd)
+	label      string
+	desc       string
+	hrd        bool // true → header (hrd-level), false → footer (repo-level)
+	sideEffect bool // true → auto-refresh repos after execution
+	section    string
+	order      int
+}
 
 // model is the root Bubble Tea model for the hrd TUI.
 type model struct {
@@ -127,16 +155,19 @@ type model struct {
 
 	groupPopupCursor  int
 	groupPopupOptions []string
+	groupMode         groupMode
+	groupNewInput     bool
 
 	commandOpen bool
 	input       textinput.Model
 	cmdPrefix   cmdPrefix
 
-	executing   bool
-	execTotal   int
-	execCancel  context.CancelFunc
-	execResults []execResult
-	resultsCh   <-chan runner.Result
+	executing      bool
+	execSideEffect bool
+	execTotal      int
+	execCancel     context.CancelFunc
+	execResults    []execResult
+	resultsCh      <-chan runner.Result
 
 	statusCh <-chan runner.StatusResult
 
@@ -177,7 +208,6 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		repoOrder:   sortedRepoKeys(cfg.Repos),
 		selected:    restoreSelected(persState.LastRepos, cfg.Repos),
 		groupFilter: resolveGroupFilter(opts.Group, persState.LastGroup, cfg),
-		cmdPrefix:   cmdPrefix(resolveInitialPrefix(persState.LastPrefix)),
 		stateFile:   statePath,
 		persState:   persState,
 	}
@@ -290,7 +320,6 @@ func (m *model) savePersState() {
 	sort.Strings(repos)
 	m.persState.LastRepos = repos
 	m.persState.LastGroup = m.groupFilter
-	m.persState.LastPrefix = m.selectedPrefix()
 	_ = saveState(m.stateFile, m.persState)
 }
 

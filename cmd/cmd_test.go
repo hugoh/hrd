@@ -64,10 +64,16 @@ func setupFakeJJRepo(t *testing.T) string {
 }
 
 func TestFilterMatching(t *testing.T) {
+	gitDir := setupFakeGitRepo(t)
+	jjDir := setupFakeJJRepo(t)
+	bothDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(bothDir, ".git"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(bothDir, ".jj"), 0o750))
+
 	repos := map[string]config.Repo{
-		"gitrepo":  {Path: "/tmp/gitrepo", Backends: []string{"git"}},
-		"jjrepo":   {Path: "/tmp/jjrepo", Backends: []string{"jj"}},
-		"bothrepo": {Path: "/tmp/both", Backends: []string{"git", "jj"}},
+		"gitrepo":  {Path: gitDir},
+		"jjrepo":   {Path: jjDir},
+		"bothrepo": {Path: bothDir},
 	}
 
 	tests := []struct {
@@ -172,7 +178,7 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 				t.Helper()
 				gitDir := setupFakeGitRepo(t)
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo": {Path: "/tmp/other"},
 				}})
 
 				return cfgPath, []string{"repo", "add", "--name", "repo", gitDir}
@@ -198,7 +204,7 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 				)
 				require.NoError(t, err)
 				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo": {Path: "/tmp/other", Backends: []string{"git"}},
+					"repo": {Path: "/tmp/other"},
 				}})
 
 				return cfgPath, []string{"repo", "add", repoDir}
@@ -270,7 +276,7 @@ func TestRepoRemove(t *testing.T) {
 		{
 			name: "TestRepoRemove",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+				"myrepo": {Path: "/tmp/myrepo"},
 			}},
 			args: []string{"repo", "rm", "myrepo"},
 			check: func(t *testing.T, cfgPath string) {
@@ -284,7 +290,7 @@ func TestRepoRemove(t *testing.T) {
 		{
 			name: "TestRepoRemoveNoName",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+				"myrepo": {Path: "/tmp/myrepo"},
 			}},
 			args:    []string{"repo", "rm"},
 			wantErr: errAtLeastOneName,
@@ -292,7 +298,7 @@ func TestRepoRemove(t *testing.T) {
 		{
 			name: "TestRepoRemoveUnknown",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
+				"myrepo": {Path: "/tmp/myrepo"},
 			}},
 			args:    []string{"repo", "rm", "unknown"},
 			wantErr: errUnknownRepo,
@@ -330,7 +336,7 @@ func TestRepoRename(t *testing.T) { //nolint:funlen
 		{
 			name: "TestRepoRename",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"oldname": {Path: "/tmp/oldname", Backends: []string{"git"}},
+				"oldname": {Path: "/tmp/oldname"},
 			}},
 			argGroups: [][]string{{"repo", "rename", "oldname", "newname"}},
 			check: func(t *testing.T, cfgPath string) {
@@ -360,8 +366,8 @@ func TestRepoRename(t *testing.T) { //nolint:funlen
 		{
 			name: "TestRepoRenameExists",
 			cfg: config.Config{Repos: map[string]config.Repo{
-				"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-				"repo2": {Path: "/tmp/other", Backends: []string{"git"}},
+				"repo1": {Path: "/tmp/repo1"},
+				"repo2": {Path: "/tmp/other"},
 			}},
 			argGroups: [][]string{{"repo", "rename", "repo1", "repo2"}},
 			wantErr:   errRepoExists,
@@ -387,46 +393,11 @@ func TestRepoRename(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestDetectBackends(t *testing.T) {
-	// Need to register backends for DetectAll to work in tests
-	// They are registered via init() in git.go and jj.go, but may not be in test context
-	// Let's test with a real git repo
-	gitDir := setupFakeGitRepo(t)
-
-	backends, err := detectBackends("", gitDir)
-	// This may fail if git backend isn't registered in test context
-	if err != nil {
-		t.Skip("git backend not registered in test context")
-	}
-
-	assert.NotEmpty(t, backends)
-	assert.Equal(t, "git", backends[0])
-}
-
-func TestDetectBackendsWithOverride(t *testing.T) {
-	gitDir := setupFakeGitRepo(t)
-
-	_, err := detectBackends("jj", gitDir)
-	require.ErrorIs(t, err, errNoVCSDetected)
-
-	backends, err := detectBackends("git", gitDir)
-	require.NoError(t, err)
-	assert.Equal(t, "git", backends[0])
-}
-
-func TestDetectBackendsNoVCS(t *testing.T) {
-	dir := t.TempDir() // No .git or .jj directory
-
-	_, err := detectBackends("", dir)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errNoVCSDetected)
-}
-
 func TestResolveScope(t *testing.T) {
 	cfg := config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-			"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
 		},
 		Groups: map[string]config.Group{
 			"work": {Repos: []string{"repo1"}},
@@ -472,7 +443,7 @@ func TestCompletion(t *testing.T) {
 func TestGitCommandNoArgs(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
+			"repo1": {Path: "/tmp/repo1"},
 		},
 	})
 
@@ -481,66 +452,6 @@ func TestGitCommandNoArgs(t *testing.T) {
 	// git command without -- and args should fail
 	err := app.Run(context.Background(), []string{"hrd", "--config", cfgPath, "git"})
 	assert.Error(t, err)
-}
-
-func TestRepoRefresh(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(t *testing.T) (string, []string)
-		wantErr error
-	}{
-		{
-			name: "TestRepoRefreshAll",
-			setup: func(t *testing.T) (string, []string) {
-				t.Helper()
-				gitDir := setupFakeGitRepo(t)
-				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"myrepo": {Path: gitDir, Backends: []string{"git"}},
-				}})
-
-				return cfgPath, []string{"repo", "refresh", "--all"}
-			},
-		},
-		{
-			name: "TestRepoRefreshSpecific",
-			setup: func(t *testing.T) (string, []string) {
-				t.Helper()
-				gitDir := setupFakeGitRepo(t)
-				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"myrepo": {Path: gitDir, Backends: []string{"git"}},
-				}})
-
-				return cfgPath, []string{"repo", "refresh", "myrepo"}
-			},
-		},
-		{
-			name: "TestRepoRefreshNoArgs",
-			setup: func(t *testing.T) (string, []string) {
-				t.Helper()
-				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"myrepo": {Path: "/tmp/myrepo", Backends: []string{"git"}},
-				}})
-
-				return cfgPath, []string{"repo", "refresh"}
-			},
-			wantErr: errAtLeastOneOrAll,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfgPath, args := tt.setup(t)
-
-			err := runApp(t, cfgPath, args)
-			if tt.wantErr != nil {
-				assert.ErrorIs(t, err, tt.wantErr)
-
-				return
-			}
-
-			assert.NoError(t, err)
-		})
-	}
 }
 
 func TestRepoList(t *testing.T) { //nolint:funlen
@@ -570,8 +481,8 @@ func TestRepoList(t *testing.T) { //nolint:funlen
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := setupTestConfig(t, config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Backends: []string{"git"}},
-					"repo2": {Path: "/tmp/repo2", Backends: []string{"git"}},
+					"repo1": {Path: "/tmp/repo1"},
+					"repo2": {Path: "/tmp/repo2"},
 				},
 				Groups: map[string]config.Group{
 					"work": {Repos: []string{"repo1"}},
