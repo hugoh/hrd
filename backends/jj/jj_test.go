@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hugoh/hrd/backends/git"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -438,6 +439,120 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 	// and returns whatever the working copy gave us.
 	require.NoError(t, err)
 	assert.NotEmpty(t, st.Ref)
+}
+
+func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		switch {
+		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
+			return "main: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
+				"  @git: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
+				"main@origin: opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil
+		case slices.Contains(args, "main::main@origin"):
+			return "opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil
+		case slices.Contains(args, "main@origin::main"):
+			return "", nil
+		default:
+			return "", nil
+		}
+	}
+
+	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
+	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+
+	assert.Equal(t, "origin", bm.Remote)
+	assert.Equal(t, 0, bm.Ahead)
+	assert.Equal(t, 1, bm.Behind)
+	assert.Equal(t, "behind", bm.State.String())
+}
+
+func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
+			return "main: sxoqvoon 2c688398\n  @git: sxoqvoon 2c688398\n", nil
+		}
+
+		return "", nil
+	}
+
+	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
+	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+
+	assert.Empty(t, bm.Remote)
+	assert.Equal(t, backend.RefStateNoRemote, bm.State)
+}
+
+func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
+			return "main: sxoqvoon 2c688398\n" +
+				"  @git: sxoqvoon 2c688398\n" +
+				"main@git: sxoqvoon 2c688398\n", nil
+		}
+
+		return "", nil
+	}
+
+	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
+	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+
+	assert.Empty(t, bm.Remote)
+	assert.Equal(t, backend.RefStateNoRemote, bm.State)
+}
+
+func TestEnrichWithRemoteBookmark_FetchError(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+		return "", assert.AnError
+	}
+
+	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
+	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+
+	assert.Empty(t, bm.Remote)
+}
+
+func TestCountRevs(t *testing.T) {
+	origRunJJ := runJJ
+	defer func() { runJJ = origRunJJ }()
+
+	tests := []struct {
+		name   string
+		output string
+		err    error
+		want   int
+	}{
+		{"no commits", "", nil, 0},
+		{"one commit", "opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil, 1},
+		{
+			"two commits",
+			"opxqzwyo e67b1a90 (empty) Merge pull request #17\nsxoqvoon 2c688398 (empty) Merge pull request #15\n",
+			nil,
+			2,
+		},
+		{"runJJ error", "", assert.AnError, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+				return tt.output, tt.err
+			}
+
+			assert.Equal(t, tt.want, countRevs(context.Background(), "/tmp", "main::main@origin"))
+		})
+	}
 }
 
 func TestBackend_Status_NotAJJRepo(t *testing.T) {

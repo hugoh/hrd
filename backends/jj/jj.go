@@ -72,9 +72,11 @@ func (*Backend) SubcommandArgs(op string) []string {
 // Status queries jj for the current change, all local bookmark tracking
 // states, working-copy cleanliness, and conflicts.
 //
-// Two subprocess calls are made:
+// Subprocess calls:
 //  1. jj log -r @ → change ID, dirty flag, conflict flag
-//  2. jj bookmark list --all-remotes → structured bookmark tracking data
+//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data
+//  3. jj bookmark list --all-remotes + jj log ×2 (only when HEAD bookmark
+//     has no tracking remote but a @remote counterpart exists — colocated repos)
 func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
 	const sep = "\x1f"
 
@@ -110,11 +112,79 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 			"bookmark", "list", "--all-remotes", headName,
 		})
 		status.Bookmarks = parseBookmarks(bmOut)
+
+		// For colocated repos the HEAD bookmark may have @git tracking
+		// but no @origin — look for a @remote counterpart.
+		if len(status.Bookmarks) > 0 && status.Bookmarks[0].Remote == "" {
+			enrichWithRemoteBookmark(ctx, path, headName, &status.Bookmarks[0])
+		}
 	}
 
 	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
 
 	return status, nil
+}
+
+// enrichWithRemoteBookmark looks for a @remote bookmark (e.g. main@origin)
+// matching headName and, if found, computes ahead/behind against it.
+//
+// This handles colocated jj/git repos where bookmarks don't have explicit
+// tracking remotes configured — the remote bookmark exists as a separate
+// @remote entry in jj's bookmark list.
+func enrichWithRemoteBookmark(
+	ctx context.Context,
+	path, headName string,
+	bm *backend.BookmarkStatus,
+) {
+	out, err := runJJ(ctx, path, []string{"bookmark", "list", "--all-remotes"})
+	if err != nil || strings.TrimSpace(out) == "" {
+		return
+	}
+
+	for line := range strings.SplitSeq(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, headName+"@") || !strings.Contains(trimmed, ":") {
+			continue
+		}
+
+		// "main@origin: opxqzwyo e67b1a90 (empty) Merge pull request ..."
+		before, _, _ := strings.Cut(trimmed, ":")
+
+		remoteName := strings.TrimPrefix(strings.TrimSpace(before), headName+"@")
+		if remoteName == "" || remoteName == cmdGit {
+			continue
+		}
+
+		remoteBm := headName + "@" + remoteName
+		behind := countRevs(ctx, path, headName+"::"+remoteBm)
+		ahead := countRevs(ctx, path, remoteBm+"::"+headName)
+
+		bm.Remote = remoteName
+		bm.Ahead = ahead
+		bm.Behind = behind
+		backend.ComputeBookmarkState(bm)
+
+		return
+	}
+}
+
+// countRevs runs jj log -r <revset> and returns the number of matching
+// revisions (one line per rev with --no-graph).
+func countRevs(ctx context.Context, path, revset string) int {
+	out, err := runJJ(ctx, path, []string{
+		cmdNameLog, "--no-graph", colorNeverFlag, ignoreWorkingCopyArg,
+		"-r", revset,
+	})
+	if err != nil {
+		return 0
+	}
+
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return 0
+	}
+
+	return strings.Count(trimmed, "\n") + 1
 }
 
 // Run executes jj args in path. Multi-step ops (pull, etc.) run each step
