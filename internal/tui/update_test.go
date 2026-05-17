@@ -715,6 +715,10 @@ func TestHandleModalKeyAlert(t *testing.T) {
 	if cmd != nil {
 		t.Error("expected nil cmd after closing alert")
 	}
+
+	if m.modal != modalNone {
+		t.Error("alert should be cleared after any key")
+	}
 }
 
 func TestHandleModalKeyAlertAt(t *testing.T) {
@@ -727,8 +731,8 @@ func TestHandleModalKeyAlertAt(t *testing.T) {
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: '@'})
 
-	if m.modal != modalGroup {
-		t.Errorf("modal should be modalGroup after @ in alert, got %v", m.modal)
+	if m.screen != screenGroup {
+		t.Errorf("screen should be screenGroup after @ in alert, got %v", m.screen)
 	}
 
 	if cmd != nil {
@@ -755,8 +759,8 @@ func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 		t.Errorf("groupFilter = %q, want %q", m.groupFilter, "work")
 	}
 
-	if m.modal != modalNone {
-		t.Errorf("modal = %d, want %d", m.modal, modalNone)
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
 	}
 
 	if !m.loading {
@@ -781,11 +785,12 @@ func TestHandleKeyMsgRefresh(t *testing.T) {
 
 func TestHandleKeyMsgHelp(t *testing.T) {
 	m := &model{}
+	m.initHelpViewport()
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: '?'})
 
-	if m.modal != modalHelp {
-		t.Errorf("modal = %d, want %d", m.modal, modalHelp)
+	if m.screen != screenHelp {
+		t.Errorf("screen = %d, want %d", m.screen, screenHelp)
 	}
 
 	if cmd != nil {
@@ -826,25 +831,33 @@ func TestHandleKeyMsgQOutputScreen(t *testing.T) {
 	}
 }
 
-func TestHandleKeyMsgQWithModal(t *testing.T) {
+func TestHandleKeyMsgQWithHelpScreen(t *testing.T) {
 	m := &model{
-		modal: modalHelp,
+		screen: screenHelp,
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
 	if cmd != nil {
-		t.Error("expected nil cmd when q pressed with modal")
+		t.Error("expected nil cmd when q pressed on help screen")
+	}
+
+	if m.screen != screenMain {
+		t.Error("should return to main screen after q on help")
 	}
 }
 
-func TestHandleKeyMsgQWithNonHelpModal(t *testing.T) {
+func TestHandleKeyMsgQWithAlert(t *testing.T) {
 	m := &model{
 		modal: modalAlert,
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
 	if cmd != nil {
-		t.Error("expected nil cmd when q pressed with non-help modal")
+		t.Error("expected nil cmd when q pressed with alert")
+	}
+
+	if m.modal != modalNone {
+		t.Error("alert should be dismissed on q")
 	}
 }
 
@@ -906,8 +919,8 @@ func TestOpenGroupPopup(t *testing.T) {
 
 	openGroupPopup(m)
 
-	if m.modal != modalGroup {
-		t.Errorf("modal = %d, want %d", m.modal, modalGroup)
+	if m.screen != screenGroup {
+		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
 	}
 
 	if len(m.groupPopupOptions) != 3 {
@@ -930,8 +943,8 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 
 	openGroupPopup(m)
 
-	if m.modal != modalGroup {
-		t.Errorf("modal = %d, want %d", m.modal, modalGroup)
+	if m.screen != screenGroup {
+		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
 	}
 
 	if m.groupPopupCursor != 0 {
@@ -965,9 +978,9 @@ repos = ["repo1"]
 	m.height = 24
 	m.ready = true
 
-	// Open group popup
+	// Open group screen
 	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: '@'})
-	require.Equal(t, modalGroup, m.modal, "modal should be group after pressing @")
+	require.Equal(t, screenGroup, m.screen, "screen should be group after pressing @")
 
 	// Move down
 	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'j'})
@@ -977,7 +990,7 @@ repos = ["repo1"]
 
 	// Close with Esc
 	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
-	require.Equal(t, modalNone, m.modal, "modal should be none after pressing Esc")
+	require.Equal(t, screenMain, m.screen, "screen should be main after pressing Esc")
 }
 
 func TestTuiCommandBarOpenClose(t *testing.T) {

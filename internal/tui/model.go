@@ -34,14 +34,14 @@ type screen int
 const (
 	screenMain screen = iota
 	screenOutput
+	screenHelp
+	screenGroup
 )
 
 type modal int
 
 const (
 	modalNone modal = iota
-	modalHelp
-	modalGroup
 	modalAlert
 )
 
@@ -142,6 +142,8 @@ type model struct {
 
 	output viewport.Model
 
+	helpViewport viewport.Model
+
 	stateFile string
 	persState PersistentState
 }
@@ -184,6 +186,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	m.updateTableRows()
 	m.initInput()
 	m.initOutput()
+	m.initHelpViewport()
 
 	return m, nil
 }
@@ -242,6 +245,14 @@ func (m *model) initInput() {
 
 func (m *model) initOutput() {
 	m.output = viewport.New(viewport.WithWidth(defaultViewW), viewport.WithHeight(initOutputH))
+}
+
+func (m *model) initHelpViewport() {
+	m.helpViewport = viewport.New(
+		viewport.WithWidth(defaultViewW),
+		viewport.WithHeight(initOutputH),
+	)
+	m.helpViewport.SetContent(m.helpContent())
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.
