@@ -25,24 +25,17 @@ func (m *model) View() tea.View {
 		return tea.NewView("")
 	}
 
-	var base string
-	if m.screen == screenOutput {
-		base = m.outputView()
-	} else {
-		base = m.mainView()
-	}
-
 	var content string
 
-	switch m.modal { //nolint:exhaustive // modalNone falls through to return base
-	case modalHelp:
-		content = m.overlayView(base, m.helpContent(), helpOverlayW, helpOverlayH)
-	case modalGroup:
-		content = m.overlayView(base, m.groupPopupContent(), groupOverlayW, groupOverlayH)
-	case modalAlert:
-		content = m.overlayView(base, m.alertContent(), alertOverlayW, alertOverlayH)
-	default:
-		content = base
+	switch m.screen {
+	case screenMain:
+		content = m.mainView()
+	case screenOutput:
+		content = m.outputView()
+	case screenHelp:
+		content = m.helpView()
+	case screenGroup:
+		content = m.groupView()
 	}
 
 	v := tea.NewView(content)
@@ -61,9 +54,21 @@ func (m *model) mainView() string {
 	m.repoTable.SetWidth(m.width)
 
 	var tableContent string
-	if len(m.repoTable.Rows()) == 0 && !m.selectMode {
+
+	switch {
+	case m.modal == modalAlert:
+		tableContent = lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.contentHeight()).
+			Align(lipgloss.Center).
+			AlignVertical(lipgloss.Center).
+			Render(
+				styleWarn.Render("No repos selected") + "\n" +
+					ui.Muted("Select a group with @ or specific repos with Space"),
+			)
+	case len(m.repoTable.Rows()) == 0 && !m.selectMode:
 		tableContent = m.emptyTableView()
-	} else {
+	default:
 		tableContent = m.repoTable.View()
 	}
 
@@ -189,69 +194,64 @@ func (m *model) coloredSummary() string {
 		Render("✓ " + text)
 }
 
-// --- Overlays ---------------------------------------------------------------
+// --- Full-screen views ------------------------------------------------------
 
-func (m *model) overlayView(base, content string, w, h int) string {
-	lines := strings.Split(base, "\n")
-	if len(lines) == 0 {
-		return base
-	}
+func (m *model) helpView() string {
+	m.helpViewport.SetWidth(m.width)
+	m.helpViewport.SetHeight(m.contentHeight())
 
-	x := (m.width - w) / 2    //nolint:mnd // centering
-	y := (len(lines) - h) / 2 //nolint:mnd // centering
+	header := styleHeader.Render(" Help ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" ↑/↓:scroll  j/k:scroll  Esc/q:close")
 
-	if x < 0 {
-		x = 0
-	}
-
-	switch {
-	case y < 0:
-		y = 0
-	case y+h > len(lines):
-		y = max(0, len(lines)-h)
-	}
-
-	boxLines := strings.Split(content, "\n")
-	composeOverlay(lines, boxLines, x, y, w, h, m.width)
-
-	return strings.Join(lines, "\n")
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.helpViewport.View(), sep, footer)
 }
 
-func composeOverlay(lines, boxLines []string, x, y, w, h, totalW int) {
-	for i := 0; i < h && y+i < len(lines); i++ {
-		line := lines[y+i]
+func (m *model) groupView() string {
+	items := m.renderGroupItems()
 
-		var overlayLine string
-		if i < len(boxLines) {
-			overlayLine = boxLines[i]
+	ch := m.contentHeight()
+
+	var visible []string
+
+	if len(items) <= ch {
+		visible = items
+	} else {
+		scrollOff := m.groupPopupCursor
+
+		if scrollOff+ch > len(items) {
+			scrollOff = len(items) - ch
 		}
 
-		olVis := lipgloss.Width(overlayLine)
-		if olVis > w {
-			overlayLine = truncateVis(overlayLine, w)
-			olVis = w
-		}
-
-		prefix := ansiPrefix(line, x)
-		rest := ansiSuffix(line, x+olVis)
-
-		// Pad with spaces if the base line is shorter than the overlay position.
-		prefVis := lipgloss.Width(prefix)
-		if prefVis < x {
-			prefix += strings.Repeat(" ", x-prefVis)
-		}
-
-		combined := prefix + overlayLine + rest
-
-		cVis := lipgloss.Width(combined)
-		if cVis > totalW {
-			combined = truncateVis(combined, totalW)
-		} else if cVis < totalW {
-			combined += strings.Repeat(" ", totalW-cVis)
-		}
-
-		lines[y+i] = combined
+		visible = items[scrollOff : scrollOff+ch]
 	}
+
+	content := strings.Join(visible, "\n")
+
+	header := styleHeader.Render(" Select group ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+}
+
+func (m *model) renderGroupItems() []string {
+	items := make([]string, 0, len(m.groupPopupOptions))
+	for i, opt := range m.groupPopupOptions {
+		marker := "  "
+		if i == m.groupPopupCursor {
+			marker = "▸ "
+		}
+
+		name := opt
+		if opt == m.groupFilter || opt == "@"+m.groupFilter {
+			name = styleBold.Render(opt)
+		}
+
+		items = append(items, marker+name)
+	}
+
+	return items
 }
 
 // ansiPrefix returns the prefix of s containing up to visCol visual columns,
@@ -333,13 +333,11 @@ func truncateVis(s string, maxVis int) string {
 }
 
 func (*model) helpContent() string {
-	content := " Help\n\n"
-	content += "Navigation:\n"
+	content := "Navigation:\n"
 	content += "  ↑/k  Move cursor up (select mode)\n"
 	content += "  ↓/j  Move cursor down (select mode)\n\n"
 	content += "Selection:\n"
-	content += "  Space  Enter/exit selection mode\n"
-	content += "  a    Select / deselect all\n"
+	content += "  Space  Enter selection mode\n"
 	content += "  a    Select / deselect all\n\n"
 	content += "Filtering:\n"
 	content += "  @    Select group filter\n\n"
@@ -358,12 +356,7 @@ func (*model) helpContent() string {
 	content += "  ?    Toggle this help\n"
 	content += "  q / Ctrl+C  Quit"
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("6")).
-		Padding(1, 2).           //nolint:mnd // style padding
-		Width(helpOverlayW - 4). //nolint:mnd // width minus padding
-		Render(content)
+	return content
 }
 
 func (m *model) groupPopupContent() string {

@@ -48,6 +48,8 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.repoTable.SetWidth(m.width)
 	m.output.SetWidth(msg.Width)
 	m.output.SetHeight(m.contentHeight())
+	m.helpViewport.SetWidth(m.width)
+	m.helpViewport.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
 
 	const (
@@ -78,60 +80,45 @@ func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 // --- Key messages -----------------------------------------------------------
 
 func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Global keys
 	if msg.String() == "ctrl+c" {
-		if m.executing {
-			m.execCancelAll()
-
-			return m, nil
-		}
-
-		m.quit()
-
-		return m, tea.Quit
+		return m.handleCtrlC()
 	}
 
 	if msg.String() == "q" {
 		return m.handleQKey()
 	}
 
-	// Modal mode
-	if m.modal != modalNone {
-		return m.handleModalKey(msg)
+	if msg.String() == keyEsc {
+		switch m.screen { //nolint:exhaustive
+		case screenHelp, screenGroup:
+			m.screen = screenMain
+
+			return m, nil
+		}
 	}
 
-	// Command input mode
 	if m.commandOpen {
 		return m.handleInputKey(msg)
 	}
 
-	// Screen-specific
-	if m.screen == screenOutput {
+	switch m.screen {
+	case screenMain:
+		return m.handleMainKey(msg)
+	case screenOutput:
 		return m.handleOutputKey(msg)
+	case screenHelp:
+		return m.handleHelpKey(msg)
+	case screenGroup:
+		return m.handleGroupKey(msg)
 	}
 
-	return m.handleMainKey(msg)
+	return m, nil
 }
 
-func (m *model) handleQKey() (tea.Model, tea.Cmd) {
-	if m.commandOpen {
-		return m, nil
-	}
+func (m *model) handleCtrlC() (tea.Model, tea.Cmd) {
+	if m.executing {
+		m.execCancelAll()
 
-	if m.screen == screenOutput {
-		m.screen = screenMain
-		m.output.SetContent("")
-
-		return m, nil
-	}
-
-	if m.modal == modalHelp {
-		m.modal = modalNone
-
-		return m, nil
-	}
-
-	if m.modal != modalNone {
 		return m, nil
 	}
 
@@ -140,41 +127,57 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
-func (m *model) handleModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch m.modal { //nolint:exhaustive // modalNone handled before calling this
-	case modalHelp:
+func (m *model) handleQKey() (tea.Model, tea.Cmd) {
+	if m.commandOpen {
+		return m, nil
+	}
+
+	if m.modal == modalAlert {
 		m.modal = modalNone
 
 		return m, nil
-	case modalAlert:
-		switch msg.String() {
-		case "space":
-			m.modal = modalNone
+	}
 
-			return m.handleSelectToggle()
-		case "@":
-			m.modal = modalNone
-			openGroupPopup(m)
+	switch m.screen {
+	case screenOutput:
+		m.screen = screenMain
+		m.output.SetContent("")
 
-			return m, nil
-		default:
-			m.modal = modalNone
+		return m, nil
+	case screenHelp, screenGroup:
+		m.screen = screenMain
 
-			return m, nil
-		}
-	case modalGroup:
-		return m.handleGroupKey(msg)
+		return m, nil
+	case screenMain:
+		m.quit()
+
+		return m, tea.Quit
 	}
 
 	return m, nil
 }
 
-func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case keyEsc, "q":
-		m.modal = modalNone
+	case "up", "k":
+		m.helpViewport.ScrollUp(1)
 
 		return m, nil
+	case "down", "j": //nolint:goconst
+		m.helpViewport.ScrollDown(1)
+
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+
+	m.helpViewport, cmd = m.helpViewport.Update(msg)
+
+	return m, cmd
+}
+
+func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
 	case "up", "k":
 		if m.groupPopupCursor > 0 {
 			m.groupPopupCursor--
@@ -202,7 +205,7 @@ func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.selected[name] = true
 		}
 
-		m.modal = modalNone
+		m.screen = screenMain
 		m.loading = true
 
 		return m, loadStatusesCmd(m)
@@ -265,6 +268,11 @@ func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	// Clear alert on any key.
+	if m.modal == modalAlert {
+		m.modal = modalNone
+	}
+
 	key := msg.String()
 
 	handler, ok := mainKeyHandlers[key]
@@ -289,7 +297,9 @@ var mainKeyHandlers = map[string]func(*model) (tea.Model, tea.Cmd){
 		return m, loadStatusesCmd(m)
 	},
 	"?": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
-		m.modal = modalHelp
+		m.helpViewport.SetContent(m.helpContent())
+		m.helpViewport.GotoTop()
+		m.screen = screenHelp
 
 		return m, nil
 	},
@@ -506,7 +516,7 @@ func openGroupPopup(m *model) {
 		}
 	}
 
-	m.modal = modalGroup
+	m.screen = screenGroup
 }
 
 func (m *model) updateTableRows() {

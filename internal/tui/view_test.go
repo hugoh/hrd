@@ -37,12 +37,15 @@ func testModel(opts ...func(*model)) *model {
 	return m
 }
 
-func TestViewHelpOverlay(t *testing.T) {
-	m := testModel(func(m *model) { m.modal = modalHelp })
+func TestViewHelpScreen(t *testing.T) {
+	m := testModel(func(m *model) {
+		m.screen = screenHelp
+		m.initHelpViewport()
+	})
 
 	view := m.View()
 	if view.Content == "" {
-		t.Fatal("View() with help modal returned empty")
+		t.Fatal("View() with help screen returned empty")
 	}
 
 	if !view.AltScreen {
@@ -69,25 +72,25 @@ func TestViewNotReady(t *testing.T) {
 	}
 }
 
-func TestViewGroupOverlay(t *testing.T) {
+func TestViewGroupScreen(t *testing.T) {
 	m := testModel(func(m *model) {
-		m.modal = modalGroup
+		m.screen = screenGroup
 		m.groupPopupOptions = []string{labelAllCap}
 		m.groupPopupCursor = 0
 	})
 
 	view := m.View()
 	if view.Content == "" {
-		t.Fatal("View() with group modal returned empty")
+		t.Fatal("View() with group screen returned empty")
 	}
 }
 
-func TestViewAlertOverlay(t *testing.T) {
+func TestViewAlertInline(t *testing.T) {
 	m := testModel(func(m *model) { m.modal = modalAlert })
 
 	view := m.View()
 	if view.Content == "" {
-		t.Fatal("View() with alert modal returned empty")
+		t.Fatal("View() with alert returned empty")
 	}
 }
 
