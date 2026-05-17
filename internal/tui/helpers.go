@@ -6,10 +6,6 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 )
 
-func (m *model) selectedPrefix() string {
-	return prefixLabels[m.cmdPrefix]
-}
-
 func (m *model) groupLabel() string {
 	if m.groupFilter != "" {
 		return "@" + m.groupFilter
@@ -108,16 +104,6 @@ func (m *model) allSelected() bool {
 	}
 
 	return true
-}
-
-func resolveInitialPrefix(lastPrefix string) int {
-	for i, label := range prefixLabels {
-		if label == lastPrefix {
-			return i
-		}
-	}
-
-	return int(prefixGit)
 }
 
 func sortedRepoKeys(repos map[string]config.Repo) []string {

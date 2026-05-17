@@ -19,17 +19,12 @@ func TestSavePersState(t *testing.T) {
 			History: []string{},
 		},
 		groupFilter: "work",
-		cmdPrefix:   prefixGit,
 	}
 
 	m.savePersState()
 
 	if m.persState.LastGroup != "work" {
 		t.Errorf("LastGroup = %q, want %q", m.persState.LastGroup, "work")
-	}
-
-	if m.persState.LastPrefix != "git" {
-		t.Errorf("LastPrefix = %q, want %q", m.persState.LastPrefix, "git")
 	}
 }
 

@@ -126,7 +126,7 @@ func TestShortcutCmdPrefixIndependent(t *testing.T) {
 			}
 
 			// shortcutCmd should always dispatch VCS subcommands with empty prefix.
-			cmd := shortcutCmd(m, "status")
+			cmd := shortcutCmd(m, "status", false)
 
 			if cmd == nil {
 				t.Fatal("shortcutCmd() returned nil")

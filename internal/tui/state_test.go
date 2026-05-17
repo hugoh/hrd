@@ -11,11 +11,10 @@ func TestSaveAndLoadState(t *testing.T) {
 	path := filepath.Join(dir, "state.json")
 
 	original := PersistentState{
-		Version:    1,
-		History:    []string{"git -- status", "jj -- log"},
-		LastRepos:  []string{"repo1", "repo2"},
-		LastGroup:  "work",
-		LastPrefix: "git",
+		Version:   1,
+		History:   []string{"git -- status", "jj -- log"},
+		LastRepos: []string{"repo1", "repo2"},
+		LastGroup: "work",
 	}
 
 	if err := saveState(path, original); err != nil {

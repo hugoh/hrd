@@ -335,7 +335,9 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenOutput
 		m.output.SetContent("running...")
 
-		return m, execCmd(m, selected, m.selectedPrefix(), cmdStr)
+		m.execSideEffect = true
+
+		return m, execCmd(m, selected, prefixLabels[m.cmdPrefix], cmdStr)
 	case keyEsc:
 		m.commandOpen = false
 
@@ -374,84 +376,6 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-//nolint:gochecknoglobals // effectively constant, key dispatch table
-var mainKeyHandlers = map[string]func(*model) (tea.Model, tea.Cmd){
-	"s": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "status") },
-	"l": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "log") },
-	"d": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "diff") },
-	"f": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "fetch") },
-	"p": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "pull") },
-	"P": func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "push") },
-	"r": func(m *model) (tea.Model, tea.Cmd) {
-		m.loading = true
-
-		return m, loadStatusesCmd(m)
-	},
-	"?": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
-		m.helpViewport.SetContent(m.helpContent())
-		m.helpViewport.GotoTop()
-		m.screen = screenHelp
-
-		return m, nil
-	},
-	keyEnter: func(m *model) (tea.Model, tea.Cmd) {
-		if m.selectMode {
-			return m.handleSelectToggle()
-		}
-
-		return m, nil
-	},
-	"space": func(m *model) (tea.Model, tea.Cmd) {
-		if m.selectMode {
-			return m.handleSelectOne()
-		}
-
-		return m.handleSelectToggle()
-	},
-	"a": (*model).handleSelectAll,
-	"up": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCursorUp()
-	},
-	"k": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCursorUp()
-	},
-	"down": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCursorDown()
-	},
-	"j": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCursorDown()
-	},
-	"G": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCmdBarOpen(prefixGit)
-	},
-	"J": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCmdBarOpen(prefixJj)
-	},
-	"S": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCmdBarOpen(prefixShell)
-	},
-	":": func(m *model) (tea.Model, tea.Cmd) {
-		return m.handleCmdBarOpen(m.cmdPrefix)
-	},
-	"@": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
-		openGroupPopup(m, groupFilterMode)
-
-		return m, nil
-	},
-	"g": func(m *model) (tea.Model, tea.Cmd) { //nolint:unparam
-		selected := m.selectedNames()
-		if len(selected) == 0 {
-			m.modal = modalAlert
-
-			return m, nil
-		}
-
-		openGroupPopup(m, groupAddMode)
-
-		return m, nil
-	},
 }
 
 func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
@@ -578,12 +502,19 @@ func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 	m.resultsCh = nil
 	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
 
+	if m.execSideEffect {
+		m.execSideEffect = false
+		m.loading = true
+
+		return m, loadStatusesCmd(m)
+	}
+
 	return m, nil
 }
 
 // --- Internal helpers -------------------------------------------------------
 
-func shortcutCmd(m *model, subcmd string) tea.Cmd {
+func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 	selected := m.selectedNames()
 	if len(selected) == 0 {
 		m.modal = modalAlert
@@ -593,6 +524,8 @@ func shortcutCmd(m *model, subcmd string) tea.Cmd {
 
 	m.screen = screenOutput
 	m.output.SetContent("running...")
+
+	m.execSideEffect = sideEffect
 
 	// VCS shortcuts always use empty prefix so they route through
 	// runner.VCSSubcmd, not the current command-bar prefix.
