@@ -85,7 +85,7 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 		`committer.timestamp().ago()`
 
 	wcArgs := append([]string{}, logBaseArgs...)
-	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl, ignoreWorkingCopyArg)
+	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
 
 	wcOut, err := runJJ(ctx, path, wcArgs)
 	if err != nil {
