@@ -319,6 +319,47 @@ func groupListConfig() config.Config {
 	}
 }
 
+func TestGroupCommandsBadConfig(t *testing.T) {
+	dir := t.TempDir()
+	badPath := dir + "/"
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "group rm", args: []string{"group", "rm", "work"}},
+		{name: "group add", args: []string{"group", "add", "work", "repo1"}},
+		{name: "context clear", args: []string{"context", "clear"}},
+		{name: "context show", args: []string{"context", "show"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runApp(t, badPath, tt.args)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestHasDuplicateRepos(t *testing.T) {
+	assert.True(t, hasDuplicateRepos([]string{"a", "b", "a"}))
+	assert.False(t, hasDuplicateRepos([]string{"a", "b", "c"}))
+	assert.False(t, hasDuplicateRepos(nil))
+}
+
+func TestGroupAddDuplicateRepos(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+		"repo2": {Path: "/tmp/repo2"},
+	}})
+	err := runApp(t, cfgPath, []string{"group", "add", "work", "repo1", "repo2", "repo1"})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"repo1", "repo2"}, cfg.Groups["work"].Repos)
+}
+
 func assertGroupRemoved(t *testing.T, cfgPath string) {
 	t.Helper()
 

@@ -245,6 +245,16 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 			},
 			wantErr: errNameSingleRepo,
 		},
+		{
+			name: "TestRepoAddNoVCS",
+			setup: func(t *testing.T) (string, []string) {
+				t.Helper()
+				emptyDir := t.TempDir()
+
+				return setupTestConfig(t, config.Config{}), []string{"repo", "add", emptyDir}
+			},
+			wantErr: errRepoNoVCS,
+		},
 	}
 
 	for _, tt := range tests {

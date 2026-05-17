@@ -78,6 +78,11 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 		Name:      cmdNameAdd,
 		Usage:     "create or append to a group",
 		ArgsUsage: "<name> <repo>...",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() > 0 {
+				reposOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() < minGroupAddArgs {
 				return errGroupAddUsage
@@ -111,6 +116,11 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 		Name:      "rm",
 		Usage:     "remove a group",
 		ArgsUsage: "<name>",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 1 {
 				return errGroupRmUsage
@@ -141,7 +151,12 @@ func groupListCmd(cfgPath *string) *cli.Command {
 		Name:      "ls",
 		Usage:     "list groups",
 		ArgsUsage: "[name]",
-		Action:    listGroupsAction(cfgPath),
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
+		Action: listGroupsAction(cfgPath),
 	}
 }
 
@@ -237,6 +252,11 @@ func contextSetCmd(cfgPath *string) *cli.Command {
 		Name:      cmdNameSet,
 		Usage:     "set active context to a group",
 		ArgsUsage: "<group>",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 1 {
 				return errContextSetUsage

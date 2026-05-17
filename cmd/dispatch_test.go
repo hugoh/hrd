@@ -561,6 +561,31 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestFilterMatchingUnknownBackend(t *testing.T) {
+	result := filterMatching([]string{"repo1"}, map[string]config.Repo{"repo1": {}}, "nonexistent")
+	assert.Nil(t, result)
+}
+
+func TestDispatchCommandsBadConfig(t *testing.T) {
+	dir := t.TempDir()
+	badPath := dir + "/"
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "ls", args: []string{"ls"}},
+		{name: "git", args: []string{"git", "--", "status"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runApp(t, badPath, tt.args)
+			assert.Error(t, err)
+		})
+	}
+}
+
 func TestCmdArgsFilter(t *testing.T) { //nolint:funlen
 	repos := map[string]config.Repo{
 		"repo1": {Path: "/tmp/repo1"},
