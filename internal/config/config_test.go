@@ -55,9 +55,6 @@ backends = ["git"]
 [groups.work]
 repos = ["myproject"]
 
-[context]
-current = "work"
-
 [settings]
 concurrency = 4
 `
@@ -67,7 +64,6 @@ concurrency = 4
 	cfg, err := Load(path)
 	require.NoError(t, err)
 	assert.Equal(t, 4, cfg.Settings.Concurrency)
-	assert.Equal(t, "work", cfg.Context.Current)
 	assert.Contains(t, cfg.Repos, "myproject")
 	assert.Equal(t, "/home/user/myproject", cfg.Repos["myproject"].Path)
 	assert.Contains(t, cfg.Groups, "work")
@@ -151,36 +147,6 @@ func TestResolveScope_NoNamesNoContext(t *testing.T) {
 	names, err := cfg.ResolveScope(nil)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"alpha", "beta", "zeta"}, names)
-}
-
-func TestResolveScope_WithContext(t *testing.T) {
-	cfg := &Config{
-		Repos: map[string]Repo{
-			"repo1": {Path: "/1"},
-			"repo2": {Path: "/2"},
-			"repo3": {Path: "/3"},
-		},
-		Groups: map[string]Group{
-			"work": {Repos: []string{"repo1", "repo2"}},
-		},
-		Context: Context{Current: "work"},
-	}
-
-	names, err := cfg.ResolveScope(nil)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"repo1", "repo2"}, names)
-}
-
-func TestResolveScope_ContextNotFound(t *testing.T) {
-	cfg := &Config{
-		Repos:   map[string]Repo{"r1": {Path: "/1"}},
-		Groups:  map[string]Group{},
-		Context: Context{Current: "nonexistent"},
-	}
-
-	_, err := cfg.ResolveScope(nil)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestResolveScope_SingleNameIsGroup(t *testing.T) {

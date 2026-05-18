@@ -66,7 +66,6 @@ var cfg = config.Config{
 		"work":     {Repos: []string{"a", "b"}},
 		"personal": {Repos: []string{"c", "d"}},
 	},
-	Context: config.Context{Current: "work"},
 }
 
 func TestResolveGroupFilterOptGroupTakesPriority(t *testing.T) {
@@ -83,24 +82,15 @@ func TestResolveGroupFilterFallsBackToLastGroup(t *testing.T) {
 	}
 }
 
-func TestResolveGroupFilterFallsBackToContext(t *testing.T) {
-	got := resolveGroupFilter("", "", cfg)
-	if got != "work" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "work")
-	}
-}
-
 func TestResolveGroupFilterLastGroupNotInConfig(t *testing.T) {
 	got := resolveGroupFilter("", "nonexistent", cfg)
-	if got != "work" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "work")
+	if got != "" {
+		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
 	}
 }
 
 func TestResolveGroupFilterAllEmpty(t *testing.T) {
-	emptyCfg := config.Config{Groups: map[string]config.Group{}, Context: config.Context{}}
-
-	got := resolveGroupFilter("", "", emptyCfg)
+	got := resolveGroupFilter("", "", config.Config{Groups: map[string]config.Group{}})
 	if got != "" {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
 	}

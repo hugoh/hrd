@@ -14,7 +14,7 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 - **Parallel execution** — commands run concurrently across all matched repos, with results streaming in as each one completes.
 - **Live status dashboard** — `hrd ls` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
 - **Interactive TUI** — `hrd` (or `hrd tui`) opens a full-screen terminal UI for browsing repos, filtering by group or name, and dispatching commands across multiple repos with live streaming output.
-- **Repo groups and context** — organize repos into named groups and set an active context so commands default to a focused scope.
+- **Repo groups** — organize repos into named groups for easier filtering.
 - **Three dispatch commands** — `git`, `jj`, and `shell`.
 - **Shell completion** — bash, zsh, and fish, with dynamic completion of repo and group names from your live config.
 - **Extensible backend system** — new VCS backends implement a single interface and self-register.
@@ -67,7 +67,6 @@ hrd repo add ~/dev/myproject ~/dev/dotfiles ~/dev/infra
 
 # Organize into groups
 hrd group add work myproject infra
-hrd context set work
 
 # Live status across all repos in context
 hrd ls
@@ -82,7 +81,7 @@ hrd jj --repos dotfiles -- log
 hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ```
 
-**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd context set work` and `hrd context set @work` both work.
+**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd ls @work` and `hrd ls work` both work.
 
 ## Status dashboard
 
@@ -119,23 +118,18 @@ Config lives at `~/.config/hrd/config.toml` (respects `$XDG_CONFIG_HOME`).
 ```toml
 [repos.dotfiles]
 path = "/home/hugo/.local/share/chezmoi"
-vcs = "jj"
 
 [repos.myproject]
 path = "/home/hugo/dev/myproject"
-vcs = "git"
 
 [groups.oss]
 repos = ["myproject", "infra"]
-
-[context]
-current = "oss"
 
 [settings]
 concurrency = 8
 ```
 
-**Note**: Group names in the CLI are prefixed with `@` (e.g., `hrd context set @oss`, `hrd group ls @work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. The config file stores group names without the `@` prefix.
+**Note**: Group names in the CLI are prefixed with `@` (e.g., `hrd ls @oss`, `hrd group ls @work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. The config file stores group names without the `@` prefix.
 
 ---
 

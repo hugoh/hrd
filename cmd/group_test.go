@@ -120,7 +120,7 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestGroupRemove(t *testing.T) { //nolint:funlen
+func TestGroupRemove(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     config.Config
@@ -151,24 +151,6 @@ func TestGroupRemove(t *testing.T) { //nolint:funlen
 			cfg:     config.Config{Repos: map[string]config.Repo{}},
 			args:    []string{"group", "rm"},
 			wantErr: errGroupRmUsage,
-		},
-		{
-			name: "TestGroupRemoveClearsContext",
-			cfg: config.Config{
-				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1"},
-				},
-				Groups:  map[string]config.Group{"work": {Repos: []string{"repo1"}}},
-				Context: config.Context{Current: "work"},
-			},
-			args: []string{"group", "rm", "work"},
-			check: func(t *testing.T, cfgPath string) {
-				t.Helper()
-
-				cfg, err := config.Load(cfgPath)
-				require.NoError(t, err)
-				assert.Empty(t, cfg.Context.Current)
-			},
 		},
 	}
 
@@ -329,8 +311,6 @@ func TestGroupCommandsBadConfig(t *testing.T) {
 	}{
 		{name: "group rm", args: []string{"group", "rm", "work"}},
 		{name: "group add", args: []string{"group", "add", "work", "repo1"}},
-		{name: "context clear", args: []string{"context", "clear"}},
-		{name: "context show", args: []string{"context", "show"}},
 	}
 
 	for _, tt := range tests {
