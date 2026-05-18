@@ -72,6 +72,14 @@ jobs:
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+      - name: Normalize coverage paths for DeepSource
+        run: sed "s|^$(go list -m)/||" cover.out > deepsource-cover.out
+      - name: Report test coverage to DeepSource
+        uses: deepsourcelabs/test-coverage-action@4284bb73a04adb39faaa6bfcc2d0e3dd137ffed7
+        with:
+          key: go
+          coverage-file: deepsource-cover.out
+          dsn: ${{ secrets.DEEPSOURCE_DSN }}
       - name: Coverage check
         run: mise covercheck
       - name: Build

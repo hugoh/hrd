@@ -39,8 +39,8 @@ description = "Run integration tests"
 run = "gotestsum -- -race -tags=integration ./internal/..."
 
 [tasks.coverage]
-description = "Generate test coverage"
-run = "go test ./... -coverprofile=${COVEROUT} -covermode=atomic -timeout 5m"
+description = "Generate test coverage (unit + integration)"
+run = "go test ./... -tags=integration -coverprofile=${COVEROUT} -covermode=atomic -timeout 5m"
 
 [tasks.covercheck]
 description = "Check test coverage"
