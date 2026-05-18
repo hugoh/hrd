@@ -7,14 +7,14 @@ goreleaser = "2.15.4"
 cocogitto = "7.0.0"
 gotestsum = "1.13.0"
 hk = "1.45.0"
-rumdl = "0.1.91"
-zizmor = "1.24.1"
+rumdl = "0.1.94"
+zizmor = "1.25.2"
 dprint = "0.54.0"
 ghalint = "1.5.6"
 gitleaks = "8.30.1"
 actionlint = "1.7.12"
 jj = "0.41.0"
-"npm:jscpd" = "4.1.0"
+"npm:jscpd" = "4.2.3"
 "go:golang.org/x/tools/cmd/deadcode" = "0.45.0"
 
 [env]
@@ -31,25 +31,21 @@ run = [
 ]
 
 [tasks.test]
-description = "Run tests"
-run = "gotestsum -- -race ./..."
+description = "Run tests with coverage"
+run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
 
 [tasks.test-int]
 description = "Run integration tests"
 run = "gotestsum -- -race -tags=integration ./internal/..."
 
-[tasks.coverage]
-description = "Generate test coverage"
-run = "go test ./... -coverprofile=${COVEROUT} -covermode=atomic -timeout 5m"
-
 [tasks.covercheck]
 description = "Check test coverage"
-depends = ["coverage"]
+depends = ["test"]
 run = "go-test-coverage -config .testcoverage.yml"
 
 [tasks.ci]
 description = "Run CI checks (lint, test, coverage)"
-depends = ["lint", "test", "test-int", "covercheck"]
+depends = ["lint", "test", "covercheck", "test-int"]
 
 [tasks.clean]
 description = "Clean the project"

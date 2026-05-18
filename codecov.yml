@@ -1,2 +1,20 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 80% # set lower than ./.testcoverage/coverage.txt because of different reporting
+
+component_management:
+  individual_components:
+    - component_id: backends_git
+      name: backends/git
+      paths:
+        - backends/git/**
+    - component_id: backends_jj
+      name: backends/jj
+      paths:
+        - backends/jj/**
+
 ignore:
-  - cmd/genreadme
+  - main.go
+  - cmd/genreadme/**

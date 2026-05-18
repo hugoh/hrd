@@ -4,9 +4,7 @@ threshold:
   total: 90
 
 override:
-  - path: backends/git
-    threshold: 100
-  - path: backends/jj
+  - path: backends/
     threshold: 100
 
 exclude:
