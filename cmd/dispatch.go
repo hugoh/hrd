@@ -121,6 +121,7 @@ func gitCmd(cfgPath *string) *cli.Command {
 		ArgsUsage:       "[repo|group...] -- <git args>",
 		SkipFlagParsing: false,
 		Flags:           dispatchFlags,
+		ShellComplete:   repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runDispatch(ctx, cmd, cfgPath, cmdNameGit)
 		},
@@ -134,6 +135,7 @@ func jjCmd(cfgPath *string) *cli.Command {
 		ArgsUsage:       "[repo|group...] -- <jj args>",
 		SkipFlagParsing: false,
 		Flags:           dispatchFlags,
+		ShellComplete:   repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return runDispatch(ctx, cmd, cfgPath, "jj")
 		},
@@ -200,6 +202,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				Usage:   "run with a real terminal (sequential, one repo at a time)",
 			},
 		},
+		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			cfg, names, err := loadAndResolve(cfgPath, cmd)
 			if err != nil {
@@ -228,10 +231,11 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 
 func shellCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      cmdNameShell,
-		Usage:     "run an arbitrary shell command across repos",
-		ArgsUsage: "[repo|group...] -- <shell command>",
-		Flags:     dispatchFlags,
+		Name:          cmdNameShell,
+		Usage:         "run an arbitrary shell command across repos",
+		ArgsUsage:     "[repo|group...] -- <shell command>",
+		Flags:         dispatchFlags,
+		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			return shellCmdAction(ctx, cmd, cfgPath)
 		},
@@ -319,7 +323,8 @@ func lsCmd(cfgPath *string) *cli.Command {
 				Usage:   "show repo dirs only, one per line",
 			},
 		},
-		Action: lsAction(cfgPath),
+		ShellComplete: repoGroupCompleter(cfgPath),
+		Action:        lsAction(cfgPath),
 	}
 }
 

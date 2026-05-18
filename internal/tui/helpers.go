@@ -11,10 +11,6 @@ func (m *model) groupLabel() string {
 		return "@" + m.groupFilter
 	}
 
-	if m.cfg.Context.Current != "" {
-		return "@" + m.cfg.Context.Current
-	}
-
 	return labelAll
 }
 
@@ -35,12 +31,6 @@ func (m *model) activeRepoOrder() []string {
 }
 
 func (m *model) allReposFallback() []string {
-	if m.cfg.Context.Current != "" {
-		if g, ok := m.cfg.Groups[m.cfg.Context.Current]; ok {
-			return g.Repos
-		}
-	}
-
 	return m.repoOrder
 }
 
@@ -137,12 +127,6 @@ func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) string {
 	if lastGroup != "" {
 		if _, ok := cfg.Groups[lastGroup]; ok {
 			return lastGroup
-		}
-	}
-
-	if cfg.Context.Current != "" {
-		if _, ok := cfg.Groups[cfg.Context.Current]; ok {
-			return cfg.Context.Current
 		}
 	}
 

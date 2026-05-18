@@ -50,8 +50,7 @@ func TestSortedGroupNamesEmpty(t *testing.T) {
 
 func TestGroupLabel(t *testing.T) {
 	m := &model{cfg: config.Config{
-		Groups:  map[string]config.Group{"work": {}},
-		Context: config.Context{Current: "work"},
+		Groups: map[string]config.Group{"work": {}},
 	}}
 
 	t.Run("with group filter", func(t *testing.T) {
@@ -61,17 +60,8 @@ func TestGroupLabel(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back to context", func(t *testing.T) {
+	t.Run("no filter", func(t *testing.T) {
 		m.groupFilter = ""
-		if got := m.groupLabel(); got != "@work" {
-			t.Errorf("groupLabel() = %q, want %q", got, "@work")
-		}
-	})
-
-	t.Run("no filter no context", func(t *testing.T) {
-		m.groupFilter = ""
-		m.cfg.Context.Current = ""
-
 		if got := m.groupLabel(); got != "all" {
 			t.Errorf("groupLabel() = %q, want %q", got, "all")
 		}
@@ -82,15 +72,14 @@ func TestActiveRepoOrder(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"c", "a", "b"},
 		cfg: config.Config{
-			Groups:  map[string]config.Group{"work": {Repos: []string{"b", "a"}}},
-			Context: config.Context{Current: "work"},
+			Groups: map[string]config.Group{"work": {Repos: []string{"b", "a"}}},
 		},
 	}
 
-	t.Run("no group filter uses context fallback", func(t *testing.T) {
+	t.Run("no group filter uses repoOrder", func(t *testing.T) {
 		m.groupFilter = ""
 		got := m.activeRepoOrder()
-		want := []string{"a", "b"}
+		want := []string{"a", "b", "c"}
 
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
@@ -117,9 +106,8 @@ func TestActiveRepoOrder(t *testing.T) {
 		}
 	})
 
-	t.Run("empty group filter with no context uses repoOrder", func(t *testing.T) {
+	t.Run("empty group filter uses repoOrder", func(t *testing.T) {
 		m.groupFilter = ""
-		m.cfg.Context.Current = ""
 		m.cfg.Groups = map[string]config.Group{}
 		got := m.activeRepoOrder()
 		want := []string{"a", "b", "c"}
@@ -133,40 +121,14 @@ func TestActiveRepoOrder(t *testing.T) {
 func TestAllReposFallback(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"x", "y"},
-		cfg: config.Config{
-			Groups:  map[string]config.Group{"work": {Repos: []string{"a", "b"}}},
-			Context: config.Context{Current: "work"},
-		},
 	}
 
-	t.Run("with context group", func(t *testing.T) {
-		got := m.allReposFallback()
-		want := []string{"a", "b"}
+	got := m.allReposFallback()
+	want := []string{"x", "y"}
 
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("allReposFallback() = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("context group not found", func(t *testing.T) {
-		m.cfg.Context.Current = "nonexistent"
-		got := m.allReposFallback()
-		want := []string{"x", "y"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("allReposFallback() = %v, want %v", got, want)
-		}
-	})
-
-	t.Run("no context", func(t *testing.T) {
-		m.cfg.Context.Current = ""
-		got := m.allReposFallback()
-		want := []string{"x", "y"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("allReposFallback() = %v, want %v", got, want)
-		}
-	})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("allReposFallback() = %v, want %v", got, want)
+	}
 }
 
 func TestSelectedNames(t *testing.T) {

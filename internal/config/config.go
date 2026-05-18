@@ -14,10 +14,7 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 )
 
-var (
-	errActiveContextNotFound = errors.New("active context group not found")
-	errUnknownRepo           = errors.New("unknown repo")
-)
+var errUnknownRepo = errors.New("unknown repo")
 
 const (
 	defaultConcurrency = 8
@@ -46,12 +43,6 @@ type Group struct {
 	Repos []string `toml:"repos"`
 }
 
-// Context holds the active scope used when no repos/group is specified.
-type Context struct {
-	// Current is a group name, or empty to mean all repos.
-	Current string `toml:"current,omitempty"`
-}
-
 // Settings holds global tunables.
 type Settings struct {
 	// Concurrency caps the number of parallel subprocess invocations.
@@ -62,7 +53,6 @@ type Settings struct {
 type Config struct {
 	Repos    map[string]Repo  `toml:"repos"`
 	Groups   map[string]Group `toml:"groups"`
-	Context  Context          `toml:"context"`
 	Settings Settings         `toml:"settings"`
 }
 
@@ -210,15 +200,6 @@ func (c *Config) AddGroup(name string, repos []string) error {
 }
 
 func (c *Config) allRepos() ([]string, error) {
-	if c.Context.Current != "" {
-		g, ok := c.Groups[c.Context.Current]
-		if !ok {
-			return nil, fmt.Errorf("%w %q", errActiveContextNotFound, c.Context.Current)
-		}
-
-		return g.Repos, nil
-	}
-
 	out := make([]string, 0, len(c.Repos))
 	for name := range c.Repos {
 		out = append(out, name)

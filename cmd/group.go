@@ -13,18 +13,15 @@ import (
 )
 
 const (
-	cmdNameGroup   = "group"
-	cmdNameAdd     = "add"
-	cmdNameContext = "context"
-	cmdNameSet     = "set"
-	cmdNameShow    = "show"
+	cmdNameGroup = "group"
+	cmdNameAdd   = "add"
+	cmdNameShow  = "show"
 )
 
 var (
-	errGroupAddUsage   = errors.New("usage: group add <name> <repo>")
-	errGroupRmUsage    = errors.New("usage: group rm <name>")
-	errContextSetUsage = errors.New("usage: context set <group>")
-	errUnknownGroup    = errors.New("unknown group")
+	errGroupAddUsage = errors.New("usage: group add <name> <repo>")
+	errGroupRmUsage  = errors.New("usage: group rm <name>")
+	errUnknownGroup  = errors.New("unknown group")
 )
 
 // stripGroupPrefix removes a leading '@' from a group name if present.
@@ -78,6 +75,11 @@ func groupAddCmd(cfgPath *string) *cli.Command {
 		Name:      cmdNameAdd,
 		Usage:     "create or append to a group",
 		ArgsUsage: "<name> <repo>...",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() > 0 {
+				reposOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() < minGroupAddArgs {
 				return errGroupAddUsage
@@ -111,6 +113,11 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 		Name:      "rm",
 		Usage:     "remove a group",
 		ArgsUsage: "<name>",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 1 {
 				return errGroupRmUsage
@@ -121,11 +128,6 @@ func groupRemoveCmd(cfgPath *string) *cli.Command {
 			cfg, err := loadGroupAndCheck(*cfgPath, name)
 			if err != nil {
 				return err
-			}
-
-			// Clear context if it points to this group.
-			if cfg.Context.Current == name {
-				cfg.Context.Current = ""
 			}
 
 			delete(cfg.Groups, name)
@@ -141,7 +143,12 @@ func groupListCmd(cfgPath *string) *cli.Command {
 		Name:      "ls",
 		Usage:     "list groups",
 		ArgsUsage: "[name]",
-		Action:    listGroupsAction(cfgPath),
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
+		Action: listGroupsAction(cfgPath),
 	}
 }
 
@@ -186,16 +193,11 @@ func renderGroupTable(cfg config.Config) error {
 
 	rows := make([][]string, 0, len(cfg.Groups))
 	for name, group := range cfg.Groups {
-		active := ""
-		if cfg.Context.Current == name {
-			active = ui.ColorSprint("green", "●")
-		}
-
-		rows = append(rows, []string{displayGroup(name), strings.Join(group.Repos, ", "), active})
+		rows = append(rows, []string{displayGroup(name), strings.Join(group.Repos, ", ")})
 	}
 
-	widths := []int{groupWidth, reposWidth, 1}
-	header := []string{"GROUP", "REPOS", ""}
+	widths := []int{groupWidth, reposWidth}
+	header := []string{"GROUP", "REPOS"}
 
 	_, _ = os.Stdout.WriteString(ui.RenderTable(
 		header, rows, ui.EffectiveWidths(header, rows, widths),
@@ -217,82 +219,4 @@ func hasDuplicateRepos(repos []string) bool {
 	}
 
 	return false
-}
-
-// contextCommands returns the `context` subcommand.
-func contextCommands(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  cmdNameContext,
-		Usage: "set or clear the active group scope",
-		Commands: []*cli.Command{
-			contextSetCmd(cfgPath),
-			contextClearCmd(cfgPath),
-			contextShowCmd(cfgPath),
-		},
-	}
-}
-
-func contextSetCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      cmdNameSet,
-		Usage:     "set active context to a group",
-		ArgsUsage: "<group>",
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != 1 {
-				return errContextSetUsage
-			}
-
-			name := stripGroupPrefix(cmd.Args().Get(0))
-
-			cfg, err := loadGroupAndCheck(*cfgPath, name)
-			if err != nil {
-				return err
-			}
-
-			cfg.Context.Current = name
-			ui.Success("context set to %q", displayGroup(name))
-
-			return config.Save(*cfgPath, cfg)
-		},
-	}
-}
-
-func contextClearCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  "clear",
-		Usage: "clear active context (all repos)",
-		Action: func(_ context.Context, _ *cli.Command) error {
-			cfg, err := config.Load(*cfgPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-
-			cfg.Context.Current = ""
-
-			ui.Outf("context cleared")
-
-			return config.Save(*cfgPath, cfg)
-		},
-	}
-}
-
-func contextShowCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  cmdNameShow,
-		Usage: "show active context",
-		Action: func(_ context.Context, _ *cli.Command) error {
-			cfg, err := config.Load(*cfgPath)
-			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
-			}
-
-			if cfg.Context.Current == "" {
-				ui.Outf("all repos")
-			} else {
-				ui.Outf("context: %s", displayGroup(cfg.Context.Current))
-			}
-
-			return nil
-		},
-	}
 }

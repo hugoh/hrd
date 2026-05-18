@@ -120,7 +120,7 @@ func TestGroupAdd(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestGroupRemove(t *testing.T) { //nolint:funlen
+func TestGroupRemove(t *testing.T) {
 	tests := []struct {
 		name    string
 		cfg     config.Config
@@ -151,24 +151,6 @@ func TestGroupRemove(t *testing.T) { //nolint:funlen
 			cfg:     config.Config{Repos: map[string]config.Repo{}},
 			args:    []string{"group", "rm"},
 			wantErr: errGroupRmUsage,
-		},
-		{
-			name: "TestGroupRemoveClearsContext",
-			cfg: config.Config{
-				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1"},
-				},
-				Groups:  map[string]config.Group{"work": {Repos: []string{"repo1"}}},
-				Context: config.Context{Current: "work"},
-			},
-			args: []string{"group", "rm", "work"},
-			check: func(t *testing.T, cfgPath string) {
-				t.Helper()
-
-				cfg, err := config.Load(cfgPath)
-				require.NoError(t, err)
-				assert.Empty(t, cfg.Context.Current)
-			},
 		},
 	}
 
@@ -317,6 +299,45 @@ func groupListConfig() config.Config {
 			"work": {Repos: []string{"repo1", "repo2"}},
 		},
 	}
+}
+
+func TestGroupCommandsBadConfig(t *testing.T) {
+	dir := t.TempDir()
+	badPath := dir + "/"
+
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "group rm", args: []string{"group", "rm", "work"}},
+		{name: "group add", args: []string{"group", "add", "work", "repo1"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runApp(t, badPath, tt.args)
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestHasDuplicateRepos(t *testing.T) {
+	assert.True(t, hasDuplicateRepos([]string{"a", "b", "a"}))
+	assert.False(t, hasDuplicateRepos([]string{"a", "b", "c"}))
+	assert.False(t, hasDuplicateRepos(nil))
+}
+
+func TestGroupAddDuplicateRepos(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+		"repo2": {Path: "/tmp/repo2"},
+	}})
+	err := runApp(t, cfgPath, []string{"group", "add", "work", "repo1", "repo2", "repo1"})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"repo1", "repo2"}, cfg.Groups["work"].Repos)
 }
 
 func assertGroupRemoved(t *testing.T, cfgPath string) {

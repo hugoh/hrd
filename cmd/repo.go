@@ -106,6 +106,9 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 		Name:      "rm",
 		Usage:     "remove one or more repositories",
 		ArgsUsage: "<name>...",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			reposOnlyCompleter(cfgPath)(ctx, cmd)
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() == 0 {
 				return errAtLeastOneName
@@ -203,6 +206,11 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 		Name:      cmdNameRename,
 		Usage:     "rename a repository",
 		ArgsUsage: "<old-name> <new-name>",
+		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
+			if cmd.Args().Len() == 0 {
+				reposOnlyCompleter(cfgPath)(ctx, cmd)
+			}
+		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 2 { //nolint:mnd
 				return errRepoRenameUsage
