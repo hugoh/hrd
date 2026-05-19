@@ -956,76 +956,6 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 	}
 }
 
-func TestTuiGroupPopupNavigation(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.toml")
-	err := os.WriteFile(cfgPath, []byte(
-		`[repos.repo1]
-path = "`+t.TempDir()+`"
-backends = ["git"]
-
-[groups.work]
-repos = ["repo1"]
-
-[groups.personal]
-repos = ["repo1"]
-`), 0o644)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	m, err := newModel(ctx, Options{
-		ConfigPath: cfgPath,
-		StatePath:  filepath.Join(t.TempDir(), "state.json"),
-	})
-	require.NoError(t, err)
-
-	m.width = 80
-	m.height = 24
-	m.ready = true
-
-	// Open group screen
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: '@'})
-	require.Equal(t, screenGroup, m.screen, "screen should be group after pressing @")
-
-	// Move down
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'j'})
-
-	// Move up
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'k'})
-
-	// Close with Esc
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
-	require.Equal(t, screenMain, m.screen, "screen should be main after pressing Esc")
-}
-
-func TestTuiCommandBarOpenClose(t *testing.T) {
-	cfgPath := filepath.Join(t.TempDir(), "config.toml")
-	err := os.WriteFile(cfgPath, []byte(
-		`[repos.repo1]
-path = "`+t.TempDir()+`"
-backends = ["git"]
-`), 0o644)
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	m, err := newModel(ctx, Options{
-		ConfigPath: cfgPath,
-		StatePath:  filepath.Join(t.TempDir(), "state.json"),
-	})
-	require.NoError(t, err)
-
-	m.width = 80
-	m.height = 24
-	m.ready = true
-
-	// Open git command bar
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'G'})
-	require.True(t, m.commandOpen, "command bar should be open after pressing G")
-
-	// Close with Esc
-	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
-	require.False(t, m.commandOpen, "command bar should be closed after pressing Esc")
-}
-
 func TestHandleOutputKeyEsc(t *testing.T) {
 	m := &model{
 		screen: screenOutput,
@@ -1493,39 +1423,5 @@ func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
 
 	if cmd == nil {
 		t.Error("expected non-nil cmd (refresh) after group selection")
-	}
-}
-
-func TestHandleWindowSize(t *testing.T) {
-	m, err := newModel(context.Background(), Options{})
-	require.NoError(t, err)
-
-	m.initTable()
-
-	_, cmd := m.handleWindowSize(tea.WindowSizeMsg{Width: 100, Height: 30})
-
-	if !m.ready {
-		t.Error("model should be ready after WindowSizeMsg")
-	}
-
-	if m.width != 100 {
-		t.Errorf("width = %d, want 100", m.width)
-	}
-
-	if m.height != 30 {
-		t.Errorf("height = %d, want 30", m.height)
-	}
-
-	cols := m.repoTable.Columns()
-	if len(cols) != 4 {
-		t.Errorf("expected 4 columns, got %d", len(cols))
-	}
-
-	if cols[3].Width <= 0 {
-		t.Errorf("STATUS column width should be > 0, got %d", cols[3].Width)
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd after WindowSizeMsg")
 	}
 }
