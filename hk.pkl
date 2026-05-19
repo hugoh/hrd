@@ -2,9 +2,6 @@ amends "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Config.
 import "package://github.com/jdx/hk/releases/download/v1.45.0/hk@1.45.0#/Builtins.pkl"
 
 local linters = new Mapping<String, Step> {
-  ["golangci-lint"] = (Builtins.golangci_lint) {
-    profiles = List("!ci")
-  }
   ["gomod-tidy"] = Builtins.gomod_tidy
   ["actionlint"] = Builtins.actionlint
   ["conflicts"] = Builtins.check_merge_conflict
@@ -30,9 +27,14 @@ hooks {
     stash = "git"
     steps = linters
   }
-["pre-push"] {
-        steps = linters
+  ["pre-push"] {
+    steps = new Mapping<String, Step> {
+      ... linters
+      ["go-ci"] {
+        check = "mise ci"
+      }
     }
+  }
   ["fix"] {
     fix = true
     steps = linters
