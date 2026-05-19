@@ -14,26 +14,11 @@ mise dev      # Run in development mode (go run .)
 ### Testing
 
 ```bash
-mise test # Run tests using gotestsum
-mise coverage # Generate test coverage report (cover.out)
-mise covercheck # Check coverage meets threshold (80%)
+mise test       # Run tests with coverage using gotestsum
+mise covercheck # Check coverage meets threshold
 ```
 
-### Linting & Formatting
-
-#### Go Codebase
-
-```bash
-mise lint   # Run all lint checks (go mod tidy -diff, golangci-lint, goreleaser)
-mise format # Format code (w/ golangci-lint)
-mise fix    # Auto-fix lint issues (w/ golangci-lint)
-```
-
-#### Other Files
-
-```bash
-hk check --all # Runs all linters
-```
+Individual tasks (`mise lint`, `mise format`, `mise fix`, `hk check --all`) are all wrapped by `mise full-check` / `mise ci`.
 
 ### Module Maintenance
 
@@ -46,21 +31,18 @@ mise clean # Clean build artifacts
 ### CI
 
 ```bash
-mise ci # Run full CI checks (lint, test, covercheck)
-hk check # Run hooks
+mise full-check # Run full pre-commit validation (format, fix, core CI including tests) during development
+mise ci         # Full CI pipeline (lint, tests, coverage, integration, readme check) run in the pipeline
+hk check        # Run hooks
 ```
 
 ## Agent Workflow
 
 When making changes to this codebase:
 
-1. **Before editing**: Run `mise lint` to understand current state
-2. **After editing**:
-   - Run `mise format` to format code
-   - Run `mise test` to verify tests pass
-   - Run `mise lint` to check for remaining issues
-3. **If lint or formatting issues remain**: Run `mise fix` and `mise format` to auto-fix, then re-run lint
-4. **Before completion**: Run `mise ci` to ensure all checks pass
+1. **Before editing**: Run `mise full-check` to establish a clean baseline
+2. **After editing**: Run `mise full-check` — auto-formats, auto-fixes lint, runs tests+coverage+integration
+3. **Before completion**: Run `mise ci` for the full CI pipeline (fresh lint from scratch + readme check)
 
 Always use `mise` tasks rather than calling tools directly
 

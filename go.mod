@@ -6,6 +6,7 @@ require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.3
 	github.com/BurntSushi/toml v1.6.0
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260519012233-798e623c8447
 	github.com/muesli/reflow v0.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.9.0
@@ -15,6 +16,7 @@ require (
 )
 
 require (
+	github.com/aymanbagabas/go-udiff v0.4.1 // indirect
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260511121909-c840852527f3 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
