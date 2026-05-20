@@ -193,7 +193,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 			widths := []int{nameWidth, vcsWidth, pathWidth}
 			header := []string{NameLabel, "VCS", "PATH"}
 
-			_, _ = os.Stdout.WriteString(ui.RenderTable(
+			_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
 				header, rows, ui.EffectiveWidths(header, rows, widths),
 			))
 
