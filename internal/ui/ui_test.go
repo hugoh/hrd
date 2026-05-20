@@ -108,13 +108,6 @@ func TestSuccess(t *testing.T) {
 	assert.Contains(t, out, "done ok")
 }
 
-func TestWarn(t *testing.T) {
-	out := capturer.CaptureStderr(func() {
-		ui.Warn("warning %d", 1)
-	})
-	assert.Contains(t, out, "warning 1")
-}
-
 func TestFail(t *testing.T) {
 	out := capturer.CaptureStderr(func() {
 		ui.Fail("fail %s", "err")

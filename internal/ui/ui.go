@@ -34,7 +34,7 @@ func ApplyColor(colorName, symbol string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
 }
 
-func ColorSprint(colorName string, s string) string {
+func ColorSprint(colorName, s string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(s)
 }
 
@@ -126,14 +126,6 @@ func Success(msg string, args ...any) {
 		os.Stderr,
 		"%s\n",
 		lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf(msg, args...)),
-	)
-}
-
-func Warn(msg string, args ...any) {
-	fmt.Fprintf(
-		os.Stderr,
-		"%s\n",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(fmt.Sprintf(msg, args...)),
 	)
 }
 

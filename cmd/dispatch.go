@@ -52,7 +52,7 @@ func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string,
 
 	names, err := resolveScope(cmd, &cfg)
 	if err != nil {
-		return config.Config{}, nil, fmt.Errorf("resolving scope: %w", err)
+		return config.Config{}, nil, err
 	}
 
 	if len(names) == 0 {
@@ -363,20 +363,15 @@ func lsGatherCallback(
 
 func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
-		cfg, err := config.Load(*cfgPath)
-		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
-		}
-
-		names, err := resolveScope(cmd, &cfg)
-		if err != nil {
-			return fmt.Errorf("resolving scope: %w", err)
-		}
-
-		if len(names) == 0 {
+		cfg, names, err := loadAndResolve(cfgPath, cmd)
+		if errors.Is(err, errNoReposMatched) {
 			ui.Outf("no repos tracked")
 
 			return nil
+		}
+
+		if err != nil {
+			return err
 		}
 
 		switch {

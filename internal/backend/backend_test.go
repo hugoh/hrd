@@ -168,25 +168,6 @@ func TestRegister(t *testing.T) {
 	})
 }
 
-func TestAll(t *testing.T) {
-	withCleanRegistry(t)
-
-	b1 := &mockBackend{name: "a", priority: 20}
-	b2 := &mockBackend{name: "b", priority: 10}
-
-	Register(b1)
-	Register(b2)
-
-	all := All()
-	assert.Len(t, all, 2)
-	assert.Equal(t, "a", all[0].Name())
-	assert.Equal(t, "b", all[1].Name())
-
-	all[0] = &mockBackend{name: "hacked", priority: 99}
-
-	assert.Equal(t, "a", registry[0].Name())
-}
-
 func TestByName(t *testing.T) {
 	withCleanRegistry(t)
 

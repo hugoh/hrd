@@ -27,7 +27,7 @@ sources = ["go.mod", "**/*.go"]
 usage = 'flag "--fix" help="Automatically fix issues"'
 run = [
   "go mod tidy -diff",
-  "deadcode -test ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true",
+  "deadcode ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true",
   "golangci-lint run ${usage_fix:+--fix} ./...",
 ]
 
