@@ -21,19 +21,37 @@ jj = "0.41.0"
 COVEROUT = "cover.out"
 HK_PKL_BACKEND = "pklr"
 
+[settings]
+task.timings = false
+
+[tasks."lint:mod"]
+description = "Check go.mod tidiness"
+sources = ["go.mod", "**/*.go"]
+run = "go mod tidy -diff"
+
+[tasks."lint:deadcode"]
+description = "Check for dead code"
+usage = 'flag "--test" help="Include test files"'
+sources = ["**/*.go"]
+run = "deadcode ${usage_test:+-test}  ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true"
+
+[tasks."lint:go"]
+description = "Lint Go source"
+sources = ["**/*.go"]
+usage = 'flag "--fix" help="Automatically fix issues"'
+run = "golangci-lint run ${usage_fix:+--fix} ./..."
+
 [tasks.lint]
 description = "Lint code, check dead code"
-sources = ["go.mod", "**/*.go"]
-usage = 'flag "--fix" help="Automatically fix issues"'
-run = [
-  "go mod tidy -diff",
-  "deadcode ./... 2>&1 | grep . && { echo 'dead code found'; exit 1; } || true",
-  "golangci-lint run ${usage_fix:+--fix} ./...",
-]
+depends = ["lint:mod", { task = "lint:deadcode", args = ["--test"] }, "lint:go"]
 
 [tasks.fix]
 description = "Lint and fix code"
-depends = [{ task = "lint", args = ["--fix"] }]
+run = [
+  "mise run lint:mod",
+  "mise run lint:deadcode -- --test",
+  "mise run lint:go -- --fix",
+]
 
 [tasks.test]
 description = "Run tests with coverage"
@@ -45,14 +63,14 @@ description = "Run integration tests"
 sources = ["**/*.go"]
 run = "gotestsum -- -race -tags=integration ./internal/..."
 
-[tasks.covercheck]
+[tasks.coverage]
 description = "Check test coverage"
 depends = ["test"]
 run = "go-test-coverage -config .testcoverage.yml"
 
 [tasks.ci-core]
 description = "Run core CI checks (test, coverage, integration)"
-depends = ["test", "covercheck", "test-int"]
+depends = ["test", "coverage", "test-int"]
 
 [tasks.ci]
 description = "Run full CI pipeline (lint, tests, coverage, readme check)"

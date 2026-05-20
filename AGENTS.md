@@ -14,8 +14,8 @@ mise dev      # Run in development mode (go run .)
 ### Testing
 
 ```bash
-mise test       # Run tests with coverage using gotestsum
-mise covercheck # Check coverage meets threshold
+mise test     # Run tests with coverage using gotestsum
+mise coverage # Check coverage meets threshold
 ```
 
 Individual tasks (`mise lint`, `mise format`, `mise fix`, `hk check --all`) are all wrapped by `mise full-check` / `mise ci`.

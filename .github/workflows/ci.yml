@@ -60,6 +60,8 @@ jobs:
       - *mise
       - name: Mise CI
         run: mise ci
+        env:
+          MISE_TASK_TIMINGS: true
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
