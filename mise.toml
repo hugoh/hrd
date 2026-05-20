@@ -95,7 +95,7 @@ run = "go build -o dist/hrd ."
 description = "Development mode"
 run = "go run ."
 
-[tasks.readme]
+[tasks.gen]
 description = "Regenerate README.md from template"
 sources = ["README.md.tmpl", "cmd/**/*.go"]
 outputs = ["README.md"]
@@ -103,7 +103,7 @@ run = ["go generate ./...", "dprint fmt README.md"]
 
 [tasks.readmecheck]
 description = "Check README.md is in sync with template"
-depends = ["readme"]
+depends = ["gen"]
 run = "git diff --exit-code README.md"
 
 [tasks.depup]

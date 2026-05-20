@@ -491,7 +491,7 @@ func TestRepoList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := setupTestConfig(t, config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Tags: []string{"work"}},
+					"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
 					"repo2": {Path: "/tmp/repo2"},
 				},
 			})

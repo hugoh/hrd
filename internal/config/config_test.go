@@ -50,7 +50,7 @@ func TestLoad_ValidFile(t *testing.T) {
 
 	content := `[repos."myproject"]
 path = "/home/user/myproject"
-tags = ["work"]
+groups = ["work"]
 
 [settings]
 concurrency = 4
@@ -110,7 +110,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 	cfg := Config{
 		Repos: map[string]Repo{
-			"myproject": {Path: "/home/user/myproject", Tags: []string{"work"}},
+			"myproject": {Path: "/home/user/myproject", Groups: []string{"work"}},
 		},
 		Settings: Settings{
 			Concurrency: 16,
@@ -149,7 +149,7 @@ func TestResolveScope_NoNamesNoContext(t *testing.T) {
 func TestResolveScope_SingleNameIsGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Path: "/1", Tags: []string{"work"}},
+			"r1": {Path: "/1", Groups: []string{"work"}},
 			"r2": {Path: "/2"},
 		},
 	}
@@ -196,8 +196,8 @@ func TestAddRepo(t *testing.T) {
 func TestRemoveRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Path: "/1", Tags: []string{"work", "all"}},
-			"r2": {Path: "/2", Tags: []string{"work", "all"}},
+			"r1": {Path: "/1", Groups: []string{"work", "all"}},
+			"r2": {Path: "/2", Groups: []string{"work", "all"}},
 		},
 	}
 	cfg.rebuildGroupsCache()
@@ -209,89 +209,89 @@ func TestRemoveRepo(t *testing.T) {
 	assert.Equal(t, []string{"r2"}, cfg.Groups["all"].Repos)
 }
 
-func TestTagRepo(t *testing.T) {
+func TestAddRepoToGroupNew(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
 			"r1": {Path: "/1"},
-			"r2": {Path: "/2", Tags: []string{"work"}},
+			"r2": {Path: "/2", Groups: []string{"work"}},
 		},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.TagRepo("r1", "work")
+	cfg.AddRepoToGroup("r1", "work")
 
-	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Groups)
 	require.Contains(t, cfg.Groups, "work")
 	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
 }
 
-func TestTagRepoExistingTag(t *testing.T) {
+func TestAddRepoToGroupExisting(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Tags: []string{"work"}},
+			"r1": {Groups: []string{"work"}},
 		},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.TagRepo("r1", "work")
+	cfg.AddRepoToGroup("r1", "work")
 
-	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Groups)
 	assert.Len(t, cfg.Groups["work"].Repos, 1)
 }
 
-func TestTagRepoNewGroup(t *testing.T) {
+func TestAddRepoToGroupNewGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{"r1": {}},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.TagRepo("r1", "newgroup")
+	cfg.AddRepoToGroup("r1", "newgroup")
 
-	assert.Equal(t, []string{"newgroup"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"newgroup"}, cfg.Repos["r1"].Groups)
 	require.Contains(t, cfg.Groups, "newgroup")
 	assert.Equal(t, []string{"r1"}, cfg.Groups["newgroup"].Repos)
 }
 
-func TestUntagRepo(t *testing.T) {
+func TestRemoveRepoFromGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Tags: []string{"work", "oss"}},
-			"r2": {Tags: []string{"work"}},
+			"r1": {Groups: []string{"work", "oss"}},
+			"r2": {Groups: []string{"work"}},
 		},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.UntagRepo("r1", "work")
+	cfg.RemoveRepoFromGroup("r1", "work")
 
-	assert.Equal(t, []string{"oss"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"oss"}, cfg.Repos["r1"].Groups)
 	assert.Equal(t, []string{"r2"}, cfg.Groups["work"].Repos)
 	require.Contains(t, cfg.Groups, "oss")
 	assert.Equal(t, []string{"r1"}, cfg.Groups["oss"].Repos)
 }
 
-func TestUntagRepoRemovesEmptyGroup(t *testing.T) {
+func TestRemoveRepoFromGroupRemovesEmptyGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Tags: []string{"sole"}},
+			"r1": {Groups: []string{"sole"}},
 		},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.UntagRepo("r1", "sole")
+	cfg.RemoveRepoFromGroup("r1", "sole")
 
-	assert.Empty(t, cfg.Repos["r1"].Tags)
+	assert.Empty(t, cfg.Repos["r1"].Groups)
 	assert.NotContains(t, cfg.Groups, "sole")
 }
 
-func TestUntagRepoNotExists(t *testing.T) {
+func TestRemoveRepoFromGroupNotExists(t *testing.T) {
 	cfg := &Config{
-		Repos: map[string]Repo{"r1": {Tags: []string{"work"}}},
+		Repos: map[string]Repo{"r1": {Groups: []string{"work"}}},
 	}
 	cfg.rebuildGroupsCache()
 
-	cfg.UntagRepo("r1", "nonexistent")
+	cfg.RemoveRepoFromGroup("r1", "nonexistent")
 
-	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Groups)
 	assert.Contains(t, cfg.Groups, "work")
 }
 
@@ -320,8 +320,8 @@ func TestSaveMkdirError(t *testing.T) {
 func TestRebuildsGroupsCache(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Tags: []string{"work", "oss"}},
-			"r2": {Tags: []string{"work"}},
+			"r1": {Groups: []string{"work", "oss"}},
+			"r2": {Groups: []string{"work"}},
 			"r3": {},
 		},
 	}
@@ -341,11 +341,11 @@ func TestLoad_DerivesGroupsFromRepos(t *testing.T) {
 
 	content := `[repos.a]
 path = "/a"
-tags = ["work"]
+groups = ["work"]
 
 [repos.b]
 path = "/b"
-tags = ["work", "personal"]
+groups = ["work", "personal"]
 
 [repos.c]
 path = "/c"

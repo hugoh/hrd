@@ -275,7 +275,7 @@ func (m *model) groupView() string {
 
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
-		headerTxt = " Tag repo "
+		headerTxt = " Add to group "
 	}
 
 	header := styleHeader.Render(headerTxt)

@@ -24,8 +24,8 @@ const (
 // Repo represents a single tracked repository.
 type Repo struct {
 	// Path is the absolute path to the repository root.
-	Path string   `toml:"path"`
-	Tags []string `toml:"tags,omitempty"`
+	Path   string   `toml:"path"`
+	Groups []string `toml:"groups,omitempty"`
 }
 
 // ActiveBackend detects and returns the active VCS backend for this repo.
@@ -53,7 +53,7 @@ type Settings struct {
 // Config is the top-level config structure that maps directly to the TOML file.
 type Config struct {
 	Repos    map[string]Repo  `toml:"repos"`
-	Groups   map[string]Group `toml:"-"` // derived from Repos[].Tags, not persisted
+	Groups   map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
 	Settings Settings         `toml:"settings"`
 }
 
@@ -176,40 +176,40 @@ func (c *Config) RemoveRepo(name string) {
 	}
 }
 
-// TagRepo adds a tag to a repo and updates the groups cache.
-func (c *Config) TagRepo(name, tag string) {
+// AddRepoToGroup adds a repo to a group and updates the groups cache.
+func (c *Config) AddRepoToGroup(name, group string) {
 	repo := c.Repos[name]
 
-	if slices.Contains(repo.Tags, tag) {
+	if slices.Contains(repo.Groups, group) {
 		return
 	}
 
-	repo.Tags = append(repo.Tags, tag)
+	repo.Groups = append(repo.Groups, group)
 	c.Repos[name] = repo
 
-	g, ok := c.Groups[tag]
+	g, ok := c.Groups[group]
 	if !ok {
 		g = Group{}
 	}
 
 	g.Repos = append(g.Repos, name)
 	slices.Sort(g.Repos)
-	c.Groups[tag] = g
+	c.Groups[group] = g
 }
 
-// UntagRepo removes a tag from a repo and updates the groups cache.
-func (c *Config) UntagRepo(name, tag string) {
+// RemoveRepoFromGroup removes a repo from a group and updates the groups cache.
+func (c *Config) RemoveRepoFromGroup(name, group string) {
 	repo := c.Repos[name]
-	before := len(repo.Tags)
-	repo.Tags = slices.DeleteFunc(repo.Tags, func(t string) bool { return t == tag })
+	before := len(repo.Groups)
+	repo.Groups = slices.DeleteFunc(repo.Groups, func(g string) bool { return g == group })
 
-	if len(repo.Tags) == before {
+	if len(repo.Groups) == before {
 		return
 	}
 
 	c.Repos[name] = repo
 
-	g, ok := c.Groups[tag]
+	g, ok := c.Groups[group]
 	if !ok {
 		return
 	}
@@ -217,9 +217,9 @@ func (c *Config) UntagRepo(name, tag string) {
 	g.Repos = slices.DeleteFunc(g.Repos, func(r string) bool { return r == name })
 
 	if len(g.Repos) == 0 {
-		delete(c.Groups, tag)
+		delete(c.Groups, group)
 	} else {
-		c.Groups[tag] = g
+		c.Groups[group] = g
 	}
 }
 
@@ -227,7 +227,7 @@ func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
 	for repoName, repo := range c.Repos {
-		for _, tag := range repo.Tags {
+		for _, tag := range repo.Groups {
 			g := c.Groups[tag]
 			g.Repos = append(g.Repos, repoName)
 			c.Groups[tag] = g

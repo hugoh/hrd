@@ -10,11 +10,11 @@ import (
 	"github.com/zenizh/go-capturer"
 )
 
-func tagListConfig() config.Config {
+func groupListConfig() config.Config {
 	return config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Tags: []string{"work"}},
-			"repo2": {Path: "/tmp/repo2", Tags: []string{"work"}},
+			"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
+			"repo2": {Path: "/tmp/repo2", Groups: []string{"work"}},
 			"repo3": {Path: "/tmp/repo3"},
 		},
 	}
@@ -32,7 +32,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 	}{
 		{
 			name:        "TestGroupListWithPanel",
-			cfg:         tagListConfig(),
+			cfg:         groupListConfig(),
 			args:        []string{"group", "ls"},
 			wantContent: "work",
 		},
@@ -44,13 +44,13 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 		},
 		{
 			name:       "TestGroupListWithName",
-			cfg:        tagListConfig(),
+			cfg:        groupListConfig(),
 			args:       []string{"group", "ls", "work"},
 			wantOutput: "repo1\nrepo2\n",
 		},
 		{
 			name:       "TestGroupListWithNameAtPrefix",
-			cfg:        tagListConfig(),
+			cfg:        groupListConfig(),
 			args:       []string{"group", "ls", "@work"},
 			wantOutput: "repo1\nrepo2\n",
 		},
@@ -58,7 +58,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 			name: "TestGroupListUnknownName",
 			cfg: config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Tags: []string{"work"}},
+					"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
 				},
 			},
 			args:    []string{"group", "ls", "nonexistent"},
@@ -68,7 +68,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 			name: "TestGroupListUnknownAtName",
 			cfg: config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1", Tags: []string{"work"}},
+					"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
 				},
 			},
 			args:        []string{"group", "ls", "@nonexistent"},
@@ -113,7 +113,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestRepoTags(t *testing.T) {
+func TestRepoGroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
 			"repo1": {Path: "/tmp/repo1"},
@@ -121,61 +121,61 @@ func TestRepoTags(t *testing.T) {
 		},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "tag", "repo1", "work"})
+	err := runApp(t, cfgPath, []string{"repo", "group", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Tags)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
 	assert.Contains(t, cfg.Groups, "work")
 	assert.Equal(t, []string{"repo1"}, cfg.Groups["work"].Repos)
 
-	// Tag same repo again — should warn, not duplicate
-	err = runApp(t, cfgPath, []string{"repo", "tag", "repo1", "work"})
+	// Add same group again — should no-op
+	err = runApp(t, cfgPath, []string{"repo", "group", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err = config.Load(cfgPath)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Tags)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
 }
 
-func TestRepoTagsUnknownRepo(t *testing.T) {
+func TestRepoGroupUnknownRepo(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "tag", "nonexistent", "work"})
+	err := runApp(t, cfgPath, []string{"repo", "group", "nonexistent", "work"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
 }
 
-func TestRepoUntag(t *testing.T) {
+func TestRepoUngroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1", Tags: []string{"work", "oss"}},
-			"repo2": {Path: "/tmp/repo2", Tags: []string{"work"}},
+			"repo1": {Path: "/tmp/repo1", Groups: []string{"work", "oss"}},
+			"repo2": {Path: "/tmp/repo2", Groups: []string{"work"}},
 		},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "untag", "repo1", "work"})
+	err := runApp(t, cfgPath, []string{"repo", "ungroup", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"oss"}, cfg.Repos["repo1"].Tags)
+	assert.Equal(t, []string{"oss"}, cfg.Repos["repo1"].Groups)
 	assert.NotContains(t, cfg.Groups["work"].Repos, "repo1")
 
-	// Untag non-existent tag — should warn, not error
-	err = runApp(t, cfgPath, []string{"repo", "untag", "repo1", "nonexistent"})
+	// Ungroup non-existent group — should no-op
+	err = runApp(t, cfgPath, []string{"repo", "ungroup", "repo1", "nonexistent"})
 	require.NoError(t, err)
 }
 
-func TestRepoUntagUnknownRepo(t *testing.T) {
+func TestRepoUngroupUnknownRepo(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "untag", "nonexistent", "work"})
+	err := runApp(t, cfgPath, []string{"repo", "ungroup", "nonexistent", "work"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
 }
