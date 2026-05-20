@@ -62,8 +62,12 @@ go build -o hrd .
 ## Quick start
 
 ```sh
-# Track some repos (VCS is auto-detected)
-hrd repo add ~/dev/myproject ~/dev/dotfiles ~/dev/infra
+# Track some repos
+hrd repo add ~/dev/myproject ~/dev/infra
+hrd repo add -n dotfiles ~/.local/share/chezmoi
+
+# Start the TUI
+hrd
 
 # Organize into groups
 hrd group add work myproject infra
@@ -72,10 +76,10 @@ hrd group add work myproject infra
 hrd ls
 
 # Run a command across all repos
-hrd git -- fetch --all
+hrd fetch
 
 # Or just the ones you care about right now
-hrd jj --repos dotfiles -- log
+hrd jj dotfiles log
 
 # Arbitrary shell commands
 hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
@@ -117,12 +121,15 @@ Config lives at `~/.config/hrd/config.toml` (respects `$XDG_CONFIG_HOME`).
 
 ```toml
 [repos.dotfiles]
-path = "/home/hugo/.local/share/chezmoi"
+path = "/home/alice/.local/share/chezmoi"
 
 [repos.myproject]
-path = "/home/hugo/dev/myproject"
+path = "/home/alice/dev/myproject"
 
-[groups.oss]
+[repos.infra]
+path = "/home/alice/dev/infra"
+
+[groups.work]
 repos = ["myproject", "infra"]
 
 [settings]
