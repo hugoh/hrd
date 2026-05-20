@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -97,25 +96,10 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 }
 
 func renderGroupTable(cfg config.Config) error {
-	const (
-		groupWidth    = 20
-		reposMinWidth = 20
-	)
-
-	termWidth := ui.GetTermWidth()
-	reposWidth := ui.ComputeRemainderWidth(termWidth, reposMinWidth, 1, groupWidth)
-
-	rows := make([][]string, 0, len(cfg.Groups))
 	for name, group := range cfg.Groups {
-		rows = append(rows, []string{displayGroup(name), strings.Join(group.Repos, ", ")})
+		ui.Outf(displayGroup(name))
+		ui.Outf("  " + strings.Join(group.Repos, ", "))
 	}
-
-	widths := []int{groupWidth, reposWidth}
-	header := []string{"GROUP", "REPOS"}
-
-	_, _ = os.Stdout.WriteString(ui.RenderTable(
-		header, rows, ui.EffectiveWidths(header, rows, widths),
-	))
 
 	return nil
 }
