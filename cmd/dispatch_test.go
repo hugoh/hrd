@@ -1,13 +1,16 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"testing"
 	"time"
 
+	"charm.land/log/v2"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/hugoh/hrd/internal/ui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zenizh/go-capturer"
@@ -542,20 +545,25 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			run := func() {
+			if tt.checkStderr != nil {
+				var buf bytes.Buffer
+				ui.SetLogger(log.New(&buf))
+				t.Cleanup(func() { ui.SetLogger(nil) })
+
 				err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
 					for _, result := range tt.results {
 						resultCh <- result
 					}
 				})
-				assert.NoError(t, err)
-			}
-
-			if tt.checkStderr != nil {
-				stderr := capturer.CaptureStderr(run)
-				tt.checkStderr(t, stderr)
+				require.NoError(t, err)
+				tt.checkStderr(t, buf.String())
 			} else {
-				run()
+				err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
+					for _, result := range tt.results {
+						resultCh <- result
+					}
+				})
+				require.NoError(t, err)
 			}
 		})
 	}

@@ -1167,7 +1167,7 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 	m := &model{
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
-				"r1": {Tags: []string{"work", "personal"}},
+				"r1": {Groups: []string{"work", "personal"}},
 			},
 			Groups: map[string]config.Group{
 				"personal": {Repos: []string{"r1"}},
@@ -1199,7 +1199,7 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 	m := &model{
 		ctx: context.Background(),
 		cfg: config.Config{
-			Repos:  map[string]config.Repo{"r1": {Tags: []string{"work"}}},
+			Repos:  map[string]config.Repo{"r1": {Groups: []string{"work"}}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
 		repoOrder:         []string{"r1"},
@@ -1230,7 +1230,7 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 		ctx: context.Background(),
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
-				"repo1": {Tags: []string{"work"}},
+				"repo1": {Groups: []string{"work"}},
 				"repo2": {},
 			},
 			Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},

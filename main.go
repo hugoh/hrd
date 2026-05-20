@@ -5,12 +5,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/cmd"
+	"github.com/hugoh/hrd/internal/ui"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func Run(args []string) int {
 
 	err := app.Run(context.Background(), args)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
+		ui.Errf("error: %v", err)
 
 		return 1
 	}

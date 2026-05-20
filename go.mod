@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	charm.land/bubbles/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.3
+	charm.land/log/v2 v2.0.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260519012233-798e623c8447
 	github.com/muesli/reflow v0.3.0
@@ -21,6 +22,8 @@ require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260511121909-c840852527f3 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
+	github.com/go-logfmt/logfmt v0.6.1 // indirect
+	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 )
 
 require (

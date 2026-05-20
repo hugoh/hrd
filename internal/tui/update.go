@@ -260,7 +260,7 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 	}
 
 	for _, repoName := range m.selectedNames() {
-		m.cfg.TagRepo(repoName, selected)
+		m.cfg.AddRepoToGroup(repoName, selected)
 	}
 
 	if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
@@ -285,7 +285,7 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 		for _, repoName := range m.selectedNames() {
-			m.cfg.TagRepo(repoName, name)
+			m.cfg.AddRepoToGroup(repoName, name)
 		}
 
 		if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {

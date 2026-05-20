@@ -6,13 +6,43 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"charm.land/lipgloss/v2"
+	"charm.land/log/v2"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
 	"golang.org/x/term"
 )
+
+//nolint:gochecknoglobals // lazily initialized logger, effectively package-level singleton
+var (
+	loggerInit sync.Once
+	loggerVal  *log.Logger
+)
+
+func logLogger() *log.Logger {
+	if loggerVal != nil {
+		return loggerVal
+	}
+
+	loggerInit.Do(func() {
+		loggerVal = log.NewWithOptions(os.Stderr, log.Options{
+			ReportTimestamp: false,
+			ReportCaller:    false,
+		})
+	})
+
+	return loggerVal
+}
+
+// SetLogger sets the package-level logger. Used in tests to redirect output.
+// Passing nil restores the default logger.
+func SetLogger(l *log.Logger) {
+	loggerVal = l
+	loggerInit = sync.Once{}
+}
 
 func lipglossColor(colorName string) color.Color {
 	return lipgloss.Color(theme.ColorCode(colorName))
@@ -34,7 +64,7 @@ func ApplyColor(colorName, symbol string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
 }
 
-func ColorSprint(colorName string, s string) string {
+func ColorSprint(colorName, s string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(s)
 }
 
@@ -118,31 +148,15 @@ func Outf(format string, args ...any) {
 }
 
 func Errf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
+	logLogger().Errorf(format, args...)
 }
 
 func Success(msg string, args ...any) {
-	fmt.Fprintf(
-		os.Stderr,
-		"%s\n",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render(fmt.Sprintf(msg, args...)),
-	)
-}
-
-func Warn(msg string, args ...any) {
-	fmt.Fprintf(
-		os.Stderr,
-		"%s\n",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render(fmt.Sprintf(msg, args...)),
-	)
+	logLogger().Infof(msg, args...)
 }
 
 func Fail(msg string, args ...any) {
-	fmt.Fprintf(
-		os.Stderr,
-		"%s\n",
-		lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render(fmt.Sprintf(msg, args...)),
-	)
+	logLogger().Errorf(msg, args...)
 }
 
 func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {

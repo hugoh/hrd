@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
@@ -275,7 +274,7 @@ func (m *model) groupView() string {
 
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
-		headerTxt = " Tag repo "
+		headerTxt = " Add to group "
 	}
 
 	header := styleHeader.Render(headerTxt)
@@ -313,84 +312,6 @@ func (m *model) renderGroupItems() []string {
 	}
 
 	return items
-}
-
-// ansiPrefix returns the prefix of s containing up to visCol visual columns,
-// preserving ANSI escape codes and multi-byte runes intact.
-func ansiPrefix(s string, visCol int) string {
-	return s[:ansiByteOff(s, visCol)]
-}
-
-// ansiSuffix returns the suffix of s starting after visCol visual columns.
-func ansiSuffix(s string, visCol int) string {
-	return s[ansiByteOff(s, visCol):]
-}
-
-// ansiByteOff returns the byte offset in s that corresponds to the given
-// visual column position, skipping ANSI escape sequences.
-func ansiByteOff(s string, visCol int) int {
-	off := 0
-
-	col := 0
-	for col < visCol && off < len(s) {
-		r, size := utf8.DecodeRuneInString(s[off:])
-		if r != '\x1b' {
-			off += size
-			col++
-
-			continue
-		}
-
-		off++ // skip ESC
-		if off >= len(s) {
-			continue
-		}
-
-		b := s[off]
-
-		switch {
-		case b == '[':
-			off = skipCSIParams(s, off+1)
-		case b >= 0x40 && b <= 0x5F:
-			off++ // two-character escape
-		default:
-			off = skipUntilFinal(s, off)
-		}
-	}
-
-	return off
-}
-
-// skipCSIParams advances off past a CSI parameter sequence.
-func skipCSIParams(s string, off int) int {
-	for off < len(s) && s[off] >= 0x20 && s[off] <= 0x3E {
-		off++
-	}
-
-	if off < len(s) {
-		off++ // final byte (0x40-0x7E)
-	}
-
-	return off
-}
-
-// skipUntilFinal advances off past an escape sequence ending at 0x30-0x7E.
-func skipUntilFinal(s string, off int) int {
-	for off < len(s) && s[off] >= 0x20 && s[off] <= 0x2F {
-		off++
-	}
-
-	if off < len(s) && s[off] >= 0x30 && s[off] <= 0x7E {
-		off++
-	}
-
-	return off
-}
-
-// truncateVis truncates s to at most maxVis visual columns,
-// preserving ANSI escape codes and multi-byte runes intact.
-func truncateVis(s string, maxVis int) string {
-	return s[:ansiByteOff(s, maxVis)]
 }
 
 func buildHelp(bindings []binding) string {
@@ -456,42 +377,4 @@ func init() { //nolint:gochecknoinits
 
 func (*model) helpContent() string {
 	return helpStr
-}
-
-func (m *model) groupPopupContent() string {
-	items := make([]string, 0, len(m.groupPopupOptions))
-	for i, opt := range m.groupPopupOptions {
-		marker := "  "
-		if i == m.groupPopupCursor {
-			marker = "▸ "
-		}
-
-		name := opt
-		if opt == m.groupFilter || opt == "@"+m.groupFilter {
-			name = styleBold.Render(opt)
-		}
-
-		items = append(items, marker+name)
-	}
-
-	content := styleHeader.Render(" Select group ") + "\n" + strings.Join(items, "\n")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("4")).
-		Padding(1, 2).            //nolint:mnd // style padding
-		Width(groupOverlayW - 4). //nolint:mnd // width minus padding
-		Render(content)
-}
-
-func (*model) alertContent() string {
-	content := styleWarn.Render("No repos selected") + "\n" +
-		ui.Muted("Select a group with @ or specific repos with Space")
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("3")).
-		Padding(1, 2).            //nolint:mnd // style padding
-		Width(alertOverlayW - 4). //nolint:mnd // width minus padding
-		Render(content)
 }

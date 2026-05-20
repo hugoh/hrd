@@ -35,7 +35,7 @@ func TestCompleteReposNil(t *testing.T) {
 func TestCompleteGroups(t *testing.T) {
 	cfg := &config.Config{
 		Repos: map[string]config.Repo{
-			"a": {Tags: []string{"work", "personal"}},
+			"a": {Groups: []string{"work", "personal"}},
 		},
 		Groups: map[string]config.Group{
 			"personal": {Repos: []string{"a"}},
@@ -59,7 +59,7 @@ func TestCompleteGroupsNil(t *testing.T) {
 func TestRepoGroupCompleterWritesReposAndGroups(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
-			"repo-a": {Path: "/tmp/repo-a", Tags: []string{"work"}},
+			"repo-a": {Path: "/tmp/repo-a", Groups: []string{"work"}},
 			"repo-b": {Path: "/tmp/repo-b"},
 		},
 	})
@@ -115,7 +115,7 @@ func TestReposOnlyCompleter(t *testing.T) {
 func TestGroupsOnlyCompleter(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
-			"repo1": {Tags: []string{"mygroup"}},
+			"repo1": {Groups: []string{"mygroup"}},
 		},
 	})
 

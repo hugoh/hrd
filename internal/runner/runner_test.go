@@ -22,9 +22,7 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	if len(backend.All()) == 0 {
-		backend.Register(&gitBackend{})
-	}
+	backend.Register(&gitBackend{})
 
 	os.Exit(m.Run())
 }

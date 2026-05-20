@@ -92,13 +92,6 @@ const (
 
 	initInputW = 40
 
-	helpOverlayW  = 60
-	helpOverlayH  = 33
-	groupOverlayW = 40
-	groupOverlayH = 15
-	alertOverlayW = 50
-	alertOverlayH = 6
-
 	vcsGit      = "git"
 	vcsJj       = "jj"
 	labelAll    = "all"

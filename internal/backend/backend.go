@@ -260,14 +260,6 @@ func Register(backend Backend) {
 	registry[idx] = backend
 }
 
-// All returns a copy of all registered backends in priority order.
-func All() []Backend {
-	out := make([]Backend, len(registry))
-	copy(out, registry)
-
-	return out
-}
-
 // ByName returns the backend with the given name, or an error if not found.
 //
 //nolint:ireturn // returning interface is intentional for plugin architecture

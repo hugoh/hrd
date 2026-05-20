@@ -1,8 +1,10 @@
 package ui_test
 
 import (
+	"bytes"
 	"testing"
 
+	"charm.land/log/v2"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
@@ -95,31 +97,33 @@ func TestOutf(t *testing.T) {
 }
 
 func TestErrf(t *testing.T) {
-	out := capturer.CaptureStderr(func() {
-		ui.Errf("error %s", "msg")
-	})
-	assert.Contains(t, out, "error msg")
+	var buf bytes.Buffer
+
+	ui.SetLogger(log.New(&buf))
+	defer ui.SetLogger(nil)
+
+	ui.Errf("error %s", "msg")
+	assert.Contains(t, buf.String(), "error msg")
 }
 
 func TestSuccess(t *testing.T) {
-	out := capturer.CaptureStderr(func() {
-		ui.Success("done %s", "ok")
-	})
-	assert.Contains(t, out, "done ok")
-}
+	var buf bytes.Buffer
 
-func TestWarn(t *testing.T) {
-	out := capturer.CaptureStderr(func() {
-		ui.Warn("warning %d", 1)
-	})
-	assert.Contains(t, out, "warning 1")
+	ui.SetLogger(log.New(&buf))
+	defer ui.SetLogger(nil)
+
+	ui.Success("done %s", "ok")
+	assert.Contains(t, buf.String(), "done ok")
 }
 
 func TestFail(t *testing.T) {
-	out := capturer.CaptureStderr(func() {
-		ui.Fail("fail %s", "err")
-	})
-	assert.Contains(t, out, "fail err")
+	var buf bytes.Buffer
+
+	ui.SetLogger(log.New(&buf))
+	defer ui.SetLogger(nil)
+
+	ui.Fail("fail %s", "err")
+	assert.Contains(t, buf.String(), "fail err")
 }
 
 func TestApplyColor(t *testing.T) {
