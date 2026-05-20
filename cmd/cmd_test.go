@@ -464,7 +464,7 @@ func TestGitCommandNoArgs(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestRepoList(t *testing.T) { //nolint:funlen
+func TestRepoList(t *testing.T) {
 	tests := []struct {
 		name         string
 		group        string
@@ -491,11 +491,8 @@ func TestRepoList(t *testing.T) { //nolint:funlen
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := setupTestConfig(t, config.Config{
 				Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1"},
+					"repo1": {Path: "/tmp/repo1", Tags: []string{"work"}},
 					"repo2": {Path: "/tmp/repo2"},
-				},
-				Groups: map[string]config.Group{
-					"work": {Repos: []string{"repo1"}},
 				},
 			})
 			app := NewApp()

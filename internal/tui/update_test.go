@@ -1166,9 +1166,12 @@ func TestHandleExecDoneWithSideEffect(t *testing.T) {
 func TestOpenGroupPopupAddMode(t *testing.T) {
 	m := &model{
 		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"r1": {Tags: []string{"work", "personal"}},
+			},
 			Groups: map[string]config.Group{
-				"work":     {},
-				"personal": {},
+				"personal": {Repos: []string{"r1"}},
+				"work":     {Repos: []string{"r1"}},
 			},
 		},
 	}
@@ -1196,7 +1199,7 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 	m := &model{
 		ctx: context.Background(),
 		cfg: config.Config{
-			Repos:  map[string]config.Repo{"r1": {}},
+			Repos:  map[string]config.Repo{"r1": {Tags: []string{"work"}}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
 		repoOrder:         []string{"r1"},
@@ -1227,12 +1230,10 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 		ctx: context.Background(),
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
-				"repo1": {},
+				"repo1": {Tags: []string{"work"}},
 				"repo2": {},
 			},
-			Groups: map[string]config.Group{
-				"work": {Repos: []string{"repo1"}},
-			},
+			Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},
 		},
 		opts:              Options{ConfigPath: cfgPath},
 		repoOrder:         []string{"repo1", "repo2"},

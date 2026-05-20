@@ -259,9 +259,8 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	repos := m.selectedNames()
-	if err := m.cfg.AddGroup(selected, repos); err != nil {
-		return m, nil
+	for _, repoName := range m.selectedNames() {
+		m.cfg.TagRepo(repoName, selected)
 	}
 
 	if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
@@ -285,9 +284,8 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		repos := m.selectedNames()
-		if err := m.cfg.AddGroup(name, repos); err != nil {
-			return m, nil
+		for _, repoName := range m.selectedNames() {
+			m.cfg.TagRepo(repoName, name)
 		}
 
 		if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
