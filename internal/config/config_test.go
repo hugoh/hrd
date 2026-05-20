@@ -50,10 +50,7 @@ func TestLoad_ValidFile(t *testing.T) {
 
 	content := `[repos."myproject"]
 path = "/home/user/myproject"
-backends = ["git"]
-
-[groups.work]
-repos = ["myproject"]
+tags = ["work"]
 
 [settings]
 concurrency = 4
@@ -67,6 +64,7 @@ concurrency = 4
 	assert.Contains(t, cfg.Repos, "myproject")
 	assert.Equal(t, "/home/user/myproject", cfg.Repos["myproject"].Path)
 	assert.Contains(t, cfg.Groups, "work")
+	assert.Equal(t, []string{"myproject"}, cfg.Groups["work"].Repos)
 }
 
 func TestLoad_InvalidToml(t *testing.T) {
@@ -112,10 +110,7 @@ func TestSaveAndLoad(t *testing.T) {
 
 	cfg := Config{
 		Repos: map[string]Repo{
-			"myproject": {Path: "/home/user/myproject"},
-		},
-		Groups: map[string]Group{
-			"work": {Repos: []string{"myproject"}},
+			"myproject": {Path: "/home/user/myproject", Tags: []string{"work"}},
 		},
 		Settings: Settings{
 			Concurrency: 16,
@@ -131,8 +126,9 @@ func TestSaveAndLoad(t *testing.T) {
 	loaded, err := Load(path)
 	require.NoError(t, err)
 	assert.Equal(t, cfg.Repos, loaded.Repos)
-	assert.Equal(t, cfg.Groups, loaded.Groups)
 	assert.Equal(t, 16, loaded.Settings.Concurrency)
+	assert.Contains(t, loaded.Groups, "work")
+	assert.Equal(t, []string{"myproject"}, loaded.Groups["work"].Repos)
 }
 
 func TestResolveScope_NoNamesNoContext(t *testing.T) {
@@ -143,6 +139,7 @@ func TestResolveScope_NoNamesNoContext(t *testing.T) {
 			"beta":  {Path: "/b"},
 		},
 	}
+	cfg.rebuildGroupsCache()
 
 	names, err := cfg.ResolveScope(nil)
 	require.NoError(t, err)
@@ -152,13 +149,11 @@ func TestResolveScope_NoNamesNoContext(t *testing.T) {
 func TestResolveScope_SingleNameIsGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Path: "/1"},
+			"r1": {Path: "/1", Tags: []string{"work"}},
 			"r2": {Path: "/2"},
 		},
-		Groups: map[string]Group{
-			"work": {Repos: []string{"r1"}},
-		},
 	}
+	cfg.rebuildGroupsCache()
 
 	names, err := cfg.ResolveScope([]string{"work"})
 	require.NoError(t, err)
@@ -173,6 +168,7 @@ func TestResolveScope_ExplicitRepos(t *testing.T) {
 			"r3": {Path: "/3"},
 		},
 	}
+	cfg.rebuildGroupsCache()
 
 	names, err := cfg.ResolveScope([]string{"r1", "r3"})
 	require.NoError(t, err)
@@ -183,6 +179,7 @@ func TestResolveScope_UnknownRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{"r1": {Path: "/1"}},
 	}
+	cfg.rebuildGroupsCache()
 
 	_, err := cfg.ResolveScope([]string{"r1", "nonexistent"})
 	require.Error(t, err)
@@ -199,14 +196,11 @@ func TestAddRepo(t *testing.T) {
 func TestRemoveRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Path: "/1"},
-			"r2": {Path: "/2"},
-		},
-		Groups: map[string]Group{
-			"work": {Repos: []string{"r1", "r2"}},
-			"all":  {Repos: []string{"r1", "r2"}},
+			"r1": {Path: "/1", Tags: []string{"work", "all"}},
+			"r2": {Path: "/2", Tags: []string{"work", "all"}},
 		},
 	}
+	cfg.rebuildGroupsCache()
 
 	cfg.RemoveRepo("r1")
 	assert.NotContains(t, cfg.Repos, "r1")
@@ -215,64 +209,90 @@ func TestRemoveRepo(t *testing.T) {
 	assert.Equal(t, []string{"r2"}, cfg.Groups["all"].Repos)
 }
 
-func TestAddGroup(t *testing.T) {
+func TestTagRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
 			"r1": {Path: "/1"},
-			"r2": {Path: "/2"},
+			"r2": {Path: "/2", Tags: []string{"work"}},
 		},
-		Groups: map[string]Group{},
 	}
+	cfg.rebuildGroupsCache()
 
-	err := cfg.AddGroup("work", []string{"r1", "r2"})
-	require.NoError(t, err)
-	assert.Contains(t, cfg.Groups, "work")
+	cfg.TagRepo("r1", "work")
+
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	require.Contains(t, cfg.Groups, "work")
 	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
 }
 
-func newTestConfigWith3Repos() *Config {
-	return &Config{
+func TestTagRepoExistingTag(t *testing.T) {
+	cfg := &Config{
 		Repos: map[string]Repo{
-			"r1": {Path: "/1"},
-			"r2": {Path: "/2"},
-			"r3": {Path: "/3"},
+			"r1": {Tags: []string{"work"}},
 		},
-		Groups: map[string]Group{},
 	}
+	cfg.rebuildGroupsCache()
+
+	cfg.TagRepo("r1", "work")
+
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	assert.Len(t, cfg.Groups["work"].Repos, 1)
 }
 
-func TestAddGroup_Append(t *testing.T) {
-	cfg := newTestConfigWith3Repos()
+func TestTagRepoNewGroup(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{"r1": {}},
+	}
+	cfg.rebuildGroupsCache()
 
-	require.NoError(t, cfg.AddGroup("work", []string{"r1", "r2"}))
-	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
+	cfg.TagRepo("r1", "newgroup")
 
-	require.NoError(t, cfg.AddGroup("work", []string{"r3"}))
-	assert.Equal(t, []string{"r1", "r2", "r3"}, cfg.Groups["work"].Repos)
+	assert.Equal(t, []string{"newgroup"}, cfg.Repos["r1"].Tags)
+	require.Contains(t, cfg.Groups, "newgroup")
+	assert.Equal(t, []string{"r1"}, cfg.Groups["newgroup"].Repos)
 }
 
-func TestAddGroup_AppendDedup(t *testing.T) {
-	cfg := newTestConfigWith3Repos()
+func TestUntagRepo(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Tags: []string{"work", "oss"}},
+			"r2": {Tags: []string{"work"}},
+		},
+	}
+	cfg.rebuildGroupsCache()
 
-	require.NoError(t, cfg.AddGroup("work", []string{"r1"}))
-	require.NoError(t, cfg.AddGroup("work", []string{"r1", "r2"}))
-	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
+	cfg.UntagRepo("r1", "work")
+
+	assert.Equal(t, []string{"oss"}, cfg.Repos["r1"].Tags)
+	assert.Equal(t, []string{"r2"}, cfg.Groups["work"].Repos)
+	require.Contains(t, cfg.Groups, "oss")
+	assert.Equal(t, []string{"r1"}, cfg.Groups["oss"].Repos)
 }
 
-func TestAddGroup_Dedup(t *testing.T) {
-	cfg := newTestConfigWith3Repos()
+func TestUntagRepoRemovesEmptyGroup(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Tags: []string{"sole"}},
+		},
+	}
+	cfg.rebuildGroupsCache()
 
-	err := cfg.AddGroup("work", []string{"r1", "r2", "r1", "r3", "r2"})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"r1", "r2", "r3"}, cfg.Groups["work"].Repos)
+	cfg.UntagRepo("r1", "sole")
+
+	assert.Empty(t, cfg.Repos["r1"].Tags)
+	assert.NotContains(t, cfg.Groups, "sole")
 }
 
-func TestAddGroup_UnknownRepo(t *testing.T) {
-	cfg := &Config{Repos: map[string]Repo{"r1": {Path: "/1"}}}
+func TestUntagRepoNotExists(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{"r1": {Tags: []string{"work"}}},
+	}
+	cfg.rebuildGroupsCache()
 
-	err := cfg.AddGroup("work", []string{"r1", "nonexistent"})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown repo")
+	cfg.UntagRepo("r1", "nonexistent")
+
+	assert.Equal(t, []string{"work"}, cfg.Repos["r1"].Tags)
+	assert.Contains(t, cfg.Groups, "work")
 }
 
 func TestStripGroupPrefix(t *testing.T) {
@@ -280,35 +300,6 @@ func TestStripGroupPrefix(t *testing.T) {
 	assert.Equal(t, "work", stripGroupPrefix("@work"))
 	assert.Empty(t, stripGroupPrefix(""))
 	assert.Equal(t, "@work", stripGroupPrefix("@@work"))
-}
-
-func TestGroupReposDirect(t *testing.T) {
-	cfg := &Config{
-		Repos:  map[string]Repo{"a": {}, "b": {}},
-		Groups: map[string]Group{"work": {Repos: []string{"a", "b"}}},
-	}
-
-	repos, ok := cfg.groupRepos("work")
-	require.True(t, ok)
-	assert.Equal(t, []string{"a", "b"}, repos)
-}
-
-func TestGroupReposWithAtPrefix(t *testing.T) {
-	cfg := &Config{
-		Repos:  map[string]Repo{"a": {}},
-		Groups: map[string]Group{"work": {Repos: []string{"a"}}},
-	}
-
-	repos, ok := cfg.groupRepos("@work")
-	require.True(t, ok)
-	assert.Equal(t, []string{"a"}, repos)
-}
-
-func TestGroupReposNotFound(t *testing.T) {
-	cfg := &Config{Groups: map[string]Group{}}
-
-	_, ok := cfg.groupRepos("nonexistent")
-	assert.False(t, ok)
 }
 
 func TestLoadFileReadError(t *testing.T) {
@@ -324,4 +315,50 @@ func TestSaveMkdirError(t *testing.T) {
 	err := Save("/nonexistent-dir-12345/config.toml", Config{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "creating config dir")
+}
+
+func TestRebuildsGroupsCache(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Tags: []string{"work", "oss"}},
+			"r2": {Tags: []string{"work"}},
+			"r3": {},
+		},
+	}
+
+	cfg.rebuildGroupsCache()
+
+	require.Contains(t, cfg.Groups, "work")
+	assert.Equal(t, []string{"r1", "r2"}, cfg.Groups["work"].Repos)
+	require.Contains(t, cfg.Groups, "oss")
+	assert.Equal(t, []string{"r1"}, cfg.Groups["oss"].Repos)
+	assert.NotContains(t, cfg.Groups, "r3")
+}
+
+func TestLoad_DerivesGroupsFromRepos(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+
+	content := `[repos.a]
+path = "/a"
+tags = ["work"]
+
+[repos.b]
+path = "/b"
+tags = ["work", "personal"]
+
+[repos.c]
+path = "/c"
+`
+	err := os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+
+	require.Contains(t, cfg.Groups, "work")
+	assert.Equal(t, []string{"a", "b"}, cfg.Groups["work"].Repos)
+	require.Contains(t, cfg.Groups, "personal")
+	assert.Equal(t, []string{"b"}, cfg.Groups["personal"].Repos)
+	assert.NotContains(t, cfg.Groups, "c")
 }

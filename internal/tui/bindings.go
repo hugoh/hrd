@@ -66,7 +66,7 @@ var mainBindings = []binding{
 
 		return m, nil
 	}, label: "filter", desc: "Filter by group", hrd: true, section: secGroups, order: 10},
-	{key: "g", handler: func(m *model) (tea.Model, tea.Cmd) {
+	{key: "t", handler: func(m *model) (tea.Model, tea.Cmd) {
 		selected := m.selectedNames()
 		if len(selected) == 0 {
 			m.modal = modalAlert
@@ -77,7 +77,7 @@ var mainBindings = []binding{
 		openGroupPopup(m, groupAddMode)
 
 		return m, nil
-	}, label: "group", desc: "Add selected repos to group", hrd: true, section: secGroups, order: 20},
+	}, label: "tag", desc: "Add tag to selected repos", hrd: true, section: secGroups, order: 20},
 
 	// Commands
 	{

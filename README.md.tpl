@@ -2,7 +2,7 @@
 
 Herd your repos. Run commands across them in parallel. Watch results stream in live.
 
-`hrd` is a multi-repo manager for developers who work across many repositories and use both **git** and **jj** (Jujutsu). It keeps your repos organized into groups, runs VCS commands across all of them at once, and shows a live unified status dashboard — with full awareness of branches, bookmarks, remote tracking, ahead/behind counts, and conflicts.
+`hrd` is a multi-repo manager for developers who work across many repositories and use both **git** and **jj** (Jujutsu). It keeps your repos organized with tags, runs VCS commands across all of them at once, and shows a live unified status dashboard — with full awareness of branches, bookmarks, remote tracking, ahead/behind counts, and conflicts.
 
 [![CI](https://github.com/hugoh/hrd/actions/workflows/ci.yml/badge.svg)](https://github.com/hugoh/hrd/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/github/hugoh/hrd/graph/badge.svg?token=91HAIC8SER)](https://codecov.io/github/hugoh/hrd)
@@ -14,7 +14,7 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 - **Parallel execution** — commands run concurrently across all matched repos, with results streaming in as each one completes.
 - **Live status dashboard** — `hrd ls` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
 - **Interactive TUI** — `hrd` (or `hrd tui`) opens a full-screen terminal UI for browsing repos, filtering by group or name, and dispatching commands across multiple repos with live streaming output.
-- **Repo groups** — organize repos into named groups for easier filtering.
+- **Repo tags** — tag repos and group by tag for easier filtering.
 - **Three dispatch commands** — `git`, `jj`, and `shell`.
 - **Shell completion** — bash, zsh, and fish, with dynamic completion of repo and group names from your live config.
 - **Extensible backend system** — new VCS backends implement a single interface and self-register.
@@ -69,8 +69,9 @@ hrd repo add -n dotfiles ~/.local/share/chezmoi
 # Start the TUI
 hrd
 
-# Organize into groups
-hrd group add work myproject infra
+# Tag repos into groups
+hrd repo tag myproject work
+hrd repo tag infra work
 
 # Live status across all repos in context
 hrd ls
@@ -85,7 +86,7 @@ hrd jj dotfiles log
 hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ```
 
-**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd ls @work` and `hrd ls work` both work.
+**Tip**: Group names (derived from repo tags) are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd ls @work` and `hrd ls work` both work.
 
 ## Status dashboard
 
@@ -102,7 +103,7 @@ Status symbols at a glance:
 Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
-- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`.
+- Filter by tag group with `@` — type `@work` to show only work repos, or select individual repos with `Space`.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.
 - Shortcuts: `s` (status), `l` (log), `d` (diff), `f` (fetch), `p` (pull), `P` (push), `@` (group picker), `q` or `Esc` (quit).
@@ -125,18 +126,17 @@ path = "/home/alice/.local/share/chezmoi"
 
 [repos.myproject]
 path = "/home/alice/dev/myproject"
+tags = ["work"]
 
 [repos.infra]
 path = "/home/alice/dev/infra"
-
-[groups.work]
-repos = ["myproject", "infra"]
+tags = ["work"]
 
 [settings]
 concurrency = 8
 ```
 
-**Note**: Group names in the CLI are prefixed with `@` (e.g., `hrd ls @oss`, `hrd group ls @work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. The config file stores group names without the `@` prefix.
+**Note**: Groups are derived from repo tags. Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.
 
 ---
 

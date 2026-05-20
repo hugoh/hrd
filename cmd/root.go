@@ -53,7 +53,7 @@ func NewApp() *cli.Command {
 		Commands: []*cli.Command{
 			// Repo and group management
 			repoCommands(&cfgPath),
-			groupCommands(&cfgPath),
+			tagCommands(&cfgPath),
 
 			// Status
 			lsCmd(&cfgPath),

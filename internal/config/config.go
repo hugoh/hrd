@@ -24,7 +24,8 @@ const (
 // Repo represents a single tracked repository.
 type Repo struct {
 	// Path is the absolute path to the repository root.
-	Path string `toml:"path"`
+	Path string   `toml:"path"`
+	Tags []string `toml:"tags,omitempty"`
 }
 
 // ActiveBackend detects and returns the active VCS backend for this repo.
@@ -52,7 +53,7 @@ type Settings struct {
 // Config is the top-level config structure that maps directly to the TOML file.
 type Config struct {
 	Repos    map[string]Repo  `toml:"repos"`
-	Groups   map[string]Group `toml:"groups"`
+	Groups   map[string]Group `toml:"-"` // derived from Repos[].Tags, not persisted
 	Settings Settings         `toml:"settings"`
 }
 
@@ -101,6 +102,8 @@ func Load(path string) (Config, error) {
 	if cfg.Settings.Concurrency == 0 {
 		cfg.Settings.Concurrency = defaultConcurrency
 	}
+
+	cfg.rebuildGroupsCache()
 
 	return cfg, nil
 }
@@ -163,40 +166,78 @@ func (c *Config) AddRepo(name string, repo Repo) {
 func (c *Config) RemoveRepo(name string) {
 	delete(c.Repos, name)
 
-	for gname, g := range c.Groups {
+	for gName, g := range c.Groups {
 		filtered := slices.DeleteFunc(g.Repos, func(r string) bool { return r == name })
-		c.Groups[gname] = Group{Repos: filtered}
+		if len(filtered) == 0 {
+			delete(c.Groups, gName)
+		} else {
+			c.Groups[gName] = Group{Repos: filtered}
+		}
 	}
 }
 
-// AddGroup creates or replaces a group.
-func (c *Config) AddGroup(name string, repos []string) error {
-	seen := make(map[string]bool)
-	unique := make([]string, 0, len(repos))
+// TagRepo adds a tag to a repo and updates the groups cache.
+func (c *Config) TagRepo(name, tag string) {
+	repo := c.Repos[name]
 
-	if existing, ok := c.Groups[name]; ok {
-		for _, repo := range existing.Repos {
-			seen[repo] = true
-			unique = append(unique, repo)
+	if slices.Contains(repo.Tags, tag) {
+		return
+	}
+
+	repo.Tags = append(repo.Tags, tag)
+	c.Repos[name] = repo
+
+	g, ok := c.Groups[tag]
+	if !ok {
+		g = Group{}
+	}
+
+	g.Repos = append(g.Repos, name)
+	slices.Sort(g.Repos)
+	c.Groups[tag] = g
+}
+
+// UntagRepo removes a tag from a repo and updates the groups cache.
+func (c *Config) UntagRepo(name, tag string) {
+	repo := c.Repos[name]
+	before := len(repo.Tags)
+	repo.Tags = slices.DeleteFunc(repo.Tags, func(t string) bool { return t == tag })
+
+	if len(repo.Tags) == before {
+		return
+	}
+
+	c.Repos[name] = repo
+
+	g, ok := c.Groups[tag]
+	if !ok {
+		return
+	}
+
+	g.Repos = slices.DeleteFunc(g.Repos, func(r string) bool { return r == name })
+
+	if len(g.Repos) == 0 {
+		delete(c.Groups, tag)
+	} else {
+		c.Groups[tag] = g
+	}
+}
+
+func (c *Config) rebuildGroupsCache() {
+	c.Groups = make(map[string]Group, len(c.Repos))
+
+	for repoName, repo := range c.Repos {
+		for _, tag := range repo.Tags {
+			g := c.Groups[tag]
+			g.Repos = append(g.Repos, repoName)
+			c.Groups[tag] = g
 		}
 	}
 
-	for _, repo := range repos {
-		if seen[repo] {
-			continue
-		}
-
-		if _, ok := c.Repos[repo]; !ok {
-			return fmt.Errorf("%w %q", errUnknownRepo, repo)
-		}
-
-		seen[repo] = true
-		unique = append(unique, repo)
+	for name, group := range c.Groups {
+		slices.Sort(group.Repos)
+		c.Groups[name] = group
 	}
-
-	c.Groups[name] = Group{Repos: unique}
-
-	return nil
 }
 
 func (c *Config) allRepos() ([]string, error) {

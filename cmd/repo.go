@@ -34,6 +34,8 @@ func repoCommands(cfgPath *string) *cli.Command {
 			repoRemoveCmd(cfgPath),
 			repoListCmd(cfgPath),
 			repoRenameCmd(cfgPath),
+			repoTagCmd(cfgPath),
+			repoUntagCmd(cfgPath),
 		},
 	}
 }
@@ -198,6 +200,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 
 const (
 	cmdNameRepo   = "repo"
+	cmdNameAdd    = "add"
 	cmdNameRename = "rename"
 )
 
@@ -234,16 +237,6 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 
 			cfg.RemoveRepo(oldName)
 			cfg.AddRepo(newName, repo)
-			// Fixup group references.
-			for gname, group := range cfg.Groups {
-				for i, r := range group.Repos {
-					if r == oldName {
-						group.Repos[i] = newName
-					}
-				}
-
-				cfg.Groups[gname] = group
-			}
 
 			ui.Success("renamed %q → %q", oldName, newName)
 
