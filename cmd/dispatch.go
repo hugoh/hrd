@@ -47,7 +47,7 @@ var dispatchFlags = []cli.Flag{
 func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
-		return config.Config{}, nil, fmt.Errorf("loading config: %w", err)
+		return config.Config{}, nil, fmt.Errorf("dispatch: %w", err)
 	}
 
 	names, err := resolveScope(cmd, &cfg)

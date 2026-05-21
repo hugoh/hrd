@@ -72,7 +72,7 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
+			return fmt.Errorf("repo add: %w", err)
 		}
 
 		for _, arg := range cmd.Args().Slice() {
@@ -122,7 +122,7 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return fmt.Errorf("repo rm: %w", err)
 			}
 
 			for _, name := range cmd.Args().Slice() {
@@ -153,7 +153,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return fmt.Errorf("repo ls: %w", err)
 			}
 
 			names := make([]string, 0, len(cfg.Repos))
@@ -229,7 +229,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return fmt.Errorf("repo rename: %w", err)
 			}
 
 			repo, ok := cfg.Repos[oldName]
@@ -312,7 +312,7 @@ func groupActionCmd(
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
-				return fmt.Errorf("loading config: %w", err)
+				return fmt.Errorf("%s: %w", name, err)
 			}
 
 			if _, ok := cfg.Repos[repoName]; !ok {
@@ -355,7 +355,7 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 	return func(_ context.Context, cmd *cli.Command) error {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
-			return fmt.Errorf("loading config: %w", err)
+			return fmt.Errorf("group ls: %w", err)
 		}
 
 		if name := stripGroupPrefix(cmd.Args().First()); name != "" {
