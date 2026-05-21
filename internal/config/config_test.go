@@ -76,7 +76,7 @@ func TestLoad_InvalidToml(t *testing.T) {
 
 	_, err = Load(path)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "parsing")
+	assert.Contains(t, err.Error(), "loading config")
 }
 
 func TestLoad_NilMaps(t *testing.T) {

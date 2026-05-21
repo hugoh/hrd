@@ -88,7 +88,7 @@ func Load(path string) (Config, error) {
 	}
 
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		return cfg, fmt.Errorf("parsing config %q: %w", path, err)
+		return cfg, fmt.Errorf("loading config %q: %w", path, err)
 	}
 	// Ensure maps are non-nil even if the TOML sections were absent.
 	if cfg.Repos == nil {
