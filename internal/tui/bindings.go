@@ -34,7 +34,7 @@ var mainBindings = []binding{
 
 	// Selection
 	{
-		key: " ", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
+		key: "space", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
 			if m.selectMode {
 				return m.handleSelectOne()
 			}

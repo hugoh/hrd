@@ -676,6 +676,82 @@ func TestHandleSelectAll(t *testing.T) {
 	}
 }
 
+func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if !m.selectMode {
+		t.Error("selectMode should be true after space (entered select mode)")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if !m.selectMode {
+		t.Error("selectMode should remain true after another space (stays in select mode)")
+	}
+
+	if m.selected["a"] {
+		t.Error("repo 'a' should be deselected after space in select mode")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.selectMode {
+		t.Error("selectMode should be false after enter (exited select mode)")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeySpaceSelectsOne(t *testing.T) {
+	m := &model{
+		repoOrder:  []string{"a", "b"},
+		selected:   map[string]bool{"a": true, "b": false},
+		cfg:        config.Config{Settings: config.Settings{Concurrency: 1}},
+		selectMode: true,
+		ready:      true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if m.selected["a"] {
+		t.Error("repo 'a' should be deselected after space in select mode")
+	}
+
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1", m.cursor)
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if !m.selected["b"] {
+		t.Error("repo 'b' should be selected after second space")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
 func TestHandleCursorUpDown(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b", "c"},
