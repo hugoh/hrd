@@ -59,6 +59,15 @@ func (m *model) tableRepos() []string {
 }
 
 func (m *model) selectedNames() []string {
+	if m.singleMode {
+		names := m.tableRepos()
+		if m.cursor >= 0 && m.cursor < len(names) {
+			return []string{names[m.cursor]}
+		}
+
+		return nil
+	}
+
 	var names []string
 
 	for _, name := range m.activeRepoOrder() {

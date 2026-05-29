@@ -157,6 +157,50 @@ func TestSelectedNamesEmpty(t *testing.T) {
 	}
 }
 
+func TestSelectedNames_SingleModeReturnsCursorRepo(t *testing.T) {
+	m := &model{
+		repoOrder:  []string{"a", "b", "c"},
+		selected:   map[string]bool{"a": true, "c": true},
+		singleMode: true,
+	}
+	m.cursor = 1
+
+	got := m.selectedNames()
+	want := []string{"c"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("selectedNames() = %v, want %v", got, want)
+	}
+}
+
+func TestSelectedNames_SingleModeNoneWhenCursorOutOfRange(t *testing.T) {
+	m := &model{
+		repoOrder:  []string{"a"},
+		selected:   map[string]bool{"a": true},
+		singleMode: true,
+	}
+	m.cursor = 5
+
+	got := m.selectedNames()
+	if len(got) != 0 {
+		t.Errorf("selectedNames() = %v, want empty", got)
+	}
+}
+
+func TestSelectedNames_SingleModeReturnsEmptyWhenNoneSelected(t *testing.T) {
+	m := &model{
+		repoOrder:  []string{"a", "b"},
+		selected:   map[string]bool{},
+		singleMode: true,
+	}
+	m.cursor = 1
+
+	got := m.selectedNames()
+	if len(got) != 0 {
+		t.Errorf("selectedNames() = %v, want empty when no repos selected", got)
+	}
+}
+
 func TestAllSelected(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b", "c"},

@@ -101,6 +101,10 @@ func (m *model) renderHeader() string {
 		left += styleSelectMarker.Render(" x:select")
 	}
 
+	if m.singleMode {
+		left += styleSelectMarker.Render(" x:single")
+	}
+
 	if cnt := m.selectedCount(); cnt > 0 {
 		var repoCount string
 		if total := m.totalCount(); cnt == total {

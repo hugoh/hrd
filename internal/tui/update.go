@@ -122,6 +122,15 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.selectMode || m.singleMode {
+		m.selectMode = false
+		m.singleMode = false
+		m.repoTable.SetStyles(tableStyles(false))
+		m.updateTableRows()
+
+		return m, nil
+	}
+
 	switch m.screen { //nolint:exhaustive
 	case screenHelp, screenGroup:
 		m.screen = screenMain
@@ -386,7 +395,11 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 	}
 
 	m.selectMode = !m.selectMode
-	m.repoTable.SetStyles(tableStyles(m.selectMode))
+	if m.selectMode {
+		m.singleMode = false
+	}
+
+	m.repoTable.SetStyles(tableStyles(m.selectMode || m.singleMode))
 	m.updateTableRows()
 
 	// Restore cursor to the same repo by name.
@@ -415,6 +428,36 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 	if m.cursor < len(names)-1 {
 		m.cursor++
 		m.repoTable.SetCursor(m.cursor)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleSingleToggle() (tea.Model, tea.Cmd) {
+	cur := m.tableRepos()
+
+	saved := ""
+	if m.cursor >= 0 && m.cursor < len(cur) {
+		saved = cur[m.cursor]
+	}
+
+	m.singleMode = !m.singleMode
+	if m.singleMode {
+		m.selectMode = false
+	}
+
+	m.repoTable.SetStyles(tableStyles(m.selectMode || m.singleMode))
+	m.updateTableRows()
+
+	if saved != "" {
+		for i, name := range m.tableRepos() {
+			if name == saved {
+				m.cursor = i
+				m.repoTable.SetCursor(i)
+
+				break
+			}
+		}
 	}
 
 	return m, nil

@@ -59,6 +59,15 @@ var mainBindings = []binding{
 		section: secSelection,
 		order:   20,
 	},
+	{
+		key:     "x",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleSingleToggle() },
+		label:   "single",
+		desc:    "Focus commands on one repo",
+		hrd:     true,
+		section: secSelection,
+		order:   25,
+	},
 
 	// Groups
 	{key: "@", handler: func(m *model) (tea.Model, tea.Cmd) {

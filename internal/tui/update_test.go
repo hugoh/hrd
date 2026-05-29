@@ -691,6 +691,10 @@ func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
 		t.Error("selectMode should be true after space (entered select mode)")
 	}
 
+	if m.singleMode {
+		t.Error("singleMode should be false after entering select mode")
+	}
+
 	if cmd != nil {
 		t.Error("expected nil cmd")
 	}
@@ -749,6 +753,130 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 
 	if cmd != nil {
 		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeyXSingleToggle(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	if !m.singleMode {
+		t.Error("singleMode should be true after pressing x")
+	}
+
+	if m.selectMode {
+		t.Error("selectMode should be false after entering single mode")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	if m.singleMode {
+		t.Error("singleMode should be false after pressing x again")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.singleMode = true
+
+	names := m.selectedNames()
+	if len(names) != 1 {
+		t.Fatalf("selectedNames() = %v, want [a]", names)
+	}
+
+	if names[0] != "a" {
+		t.Errorf("selectedNames()[0] = %q, want %q", names[0], "a")
+	}
+}
+
+func TestEscExitsSelectMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.selectMode = true
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.selectMode {
+		t.Error("selectMode should be false after esc")
+	}
+
+	if m.singleMode {
+		t.Error("singleMode should be false after esc")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestEscExitsSingleMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.singleMode = true
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.singleMode {
+		t.Error("singleMode should be false after esc")
+	}
+
+	if m.selectMode {
+		t.Error("selectMode should be false after esc")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestHandleSingleToggle(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, _ = m.handleSingleToggle()
+	if !m.singleMode {
+		t.Error("singleMode should be true after first toggle")
+	}
+
+	_, _ = m.handleSingleToggle()
+	if m.singleMode {
+		t.Error("singleMode should be false after second toggle")
 	}
 }
 

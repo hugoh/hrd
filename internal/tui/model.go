@@ -138,6 +138,7 @@ type model struct {
 	cursor      int
 	selected    map[string]bool
 	selectMode  bool
+	singleMode  bool
 	groupFilter string
 
 	repoOrder []string
