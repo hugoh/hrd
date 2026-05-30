@@ -122,9 +122,8 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.selectMode || m.singleMode {
-		m.selectMode = false
-		m.singleMode = false
+	if m.mode != modeNormal {
+		m.mode = modeNormal
 		m.repoTable.SetStyles(tableStyles(false))
 		m.updateTableRows()
 
@@ -394,12 +393,13 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 		saved = cur[m.cursor]
 	}
 
-	m.selectMode = !m.selectMode
-	if m.selectMode {
-		m.singleMode = false
+	if m.mode == modeSelect {
+		m.mode = modeNormal
+	} else {
+		m.mode = modeSelect
 	}
 
-	m.repoTable.SetStyles(tableStyles(m.selectMode || m.singleMode))
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
 	m.updateTableRows()
 
 	// Restore cursor to the same repo by name.
@@ -441,12 +441,13 @@ func (m *model) handleSingleToggle() (tea.Model, tea.Cmd) {
 		saved = cur[m.cursor]
 	}
 
-	m.singleMode = !m.singleMode
-	if m.singleMode {
-		m.selectMode = false
+	if m.mode == modeSingle {
+		m.mode = modeNormal
+	} else {
+		m.mode = modeSingle
 	}
 
-	m.repoTable.SetStyles(tableStyles(m.selectMode || m.singleMode))
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
 	m.updateTableRows()
 
 	if saved != "" {
@@ -622,7 +623,7 @@ func (m *model) updateTableRows() {
 	for _, name := range names {
 		chk := ""
 
-		if m.selectMode {
+		if m.mode == modeSelect {
 			if m.selected[name] {
 				chk = checkboxSelected
 			} else {

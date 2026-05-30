@@ -198,7 +198,7 @@ func TestEmptyTableView(t *testing.T) {
 
 func TestRenderHeaderSingleMode(t *testing.T) {
 	m := testModel(func(m *model) {
-		m.singleMode = true
+		m.mode = modeSingle
 		m.repoOrder = []string{"a"}
 		m.selected = map[string]bool{"a": true}
 	})

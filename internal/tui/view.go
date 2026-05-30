@@ -65,7 +65,7 @@ func (m *model) mainView() string {
 				styleWarn.Render("No repos selected") + "\n" +
 					ui.Muted("Select a group with @ or specific repos with Space"),
 			)
-	case len(m.repoTable.Rows()) == 0 && !m.selectMode:
+	case len(m.repoTable.Rows()) == 0 && m.mode != modeSelect:
 		tableContent = m.emptyTableView()
 	default:
 		tableContent = m.repoTable.View()
@@ -97,12 +97,12 @@ func (m *model) renderHeader() string {
 		left += styleGroupLabel.Render(" " + gl)
 	}
 
-	if m.selectMode {
+	switch m.mode {
+	case modeSelect:
 		left += styleSelectMarker.Render(" x:select")
-	}
-
-	if m.singleMode {
+	case modeSingle:
 		left += styleSelectMarker.Render(" x:single")
+	case modeNormal:
 	}
 
 	if cnt := m.selectedCount(); cnt > 0 {
@@ -138,7 +138,7 @@ func (m *model) renderHeaderRight() string {
 			continue
 		}
 
-		if b.key == "a" && !m.selectMode {
+		if b.key == "a" && m.mode != modeSelect {
 			continue
 		}
 

@@ -35,7 +35,7 @@ var mainBindings = []binding{
 	// Selection
 	{
 		key: "space", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
-			if m.selectMode {
+			if m.mode == modeSelect {
 				return m.handleSelectOne()
 			}
 
@@ -44,7 +44,7 @@ var mainBindings = []binding{
 		section: secSelection, order: 10,
 	},
 	{key: "enter", handler: func(m *model) (tea.Model, tea.Cmd) {
-		if m.selectMode {
+		if m.mode == modeSelect {
 			return m.handleSelectToggle()
 		}
 

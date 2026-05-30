@@ -38,6 +38,14 @@ const (
 	screenGroup
 )
 
+type mode int
+
+const (
+	modeNormal mode = iota
+	modeSelect
+	modeSingle
+)
+
 type modal int
 
 const (
@@ -137,8 +145,7 @@ type model struct {
 	repoTable   table.Model
 	cursor      int
 	selected    map[string]bool
-	selectMode  bool
-	singleMode  bool
+	mode        mode
 	groupFilter string
 
 	repoOrder []string
