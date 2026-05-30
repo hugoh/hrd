@@ -85,16 +85,16 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleCtrlC()
 	}
 
-	if msg.String() == "q" {
-		return m.handleQKey()
-	}
-
 	if m.commandOpen {
 		return m.handleInputKey(msg)
 	}
 
 	if m.groupNewInput {
 		return m.handleGroupNewInput(msg)
+	}
+
+	if msg.String() == "q" {
+		return m.handleQKey()
 	}
 
 	if msg.String() == keyEsc {
