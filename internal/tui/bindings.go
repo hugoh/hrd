@@ -34,8 +34,8 @@ var mainBindings = []binding{
 
 	// Selection
 	{
-		key: " ", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
-			if m.selectMode {
+		key: "space", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
+			if m.mode == modeSelect {
 				return m.handleSelectOne()
 			}
 
@@ -44,7 +44,7 @@ var mainBindings = []binding{
 		section: secSelection, order: 10,
 	},
 	{key: "enter", handler: func(m *model) (tea.Model, tea.Cmd) {
-		if m.selectMode {
+		if m.mode == modeSelect {
 			return m.handleSelectToggle()
 		}
 
@@ -58,6 +58,15 @@ var mainBindings = []binding{
 		hrd:     true,
 		section: secSelection,
 		order:   20,
+	},
+	{
+		key:     "x",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleSingleToggle() },
+		label:   "single",
+		desc:    "Focus commands on one repo",
+		hrd:     true,
+		section: secSelection,
+		order:   25,
 	},
 
 	// Groups

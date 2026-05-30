@@ -217,7 +217,7 @@ func TestRowAlignmentNoSelectMode(t *testing.T) {
 	}
 
 	t.Run("normal mode shows selected repos", func(t *testing.T) {
-		m.selectMode = false
+		m.mode = modeNormal
 		m.selected = map[string]bool{"alpha": true, "beta": true}
 		m.cursor = 0
 		m.updateTableRows()
@@ -231,7 +231,7 @@ func TestRowAlignmentNoSelectMode(t *testing.T) {
 	})
 
 	t.Run("empty table when no repos selected", func(t *testing.T) {
-		m.selectMode = false
+		m.mode = modeNormal
 		m.selected = map[string]bool{}
 		m.updateTableRows()
 
@@ -240,7 +240,7 @@ func TestRowAlignmentNoSelectMode(t *testing.T) {
 	})
 
 	t.Run("select mode shows checkbox", func(t *testing.T) {
-		m.selectMode = true
+		m.mode = modeSelect
 		m.selected = map[string]bool{"alpha": true, "beta": false}
 		m.updateTableRows()
 
@@ -312,7 +312,7 @@ func TestCheckboxPlainText(t *testing.T) {
 	}
 	m.repoOrder = []string{"alpha", "beta"}
 	m.selected = map[string]bool{"alpha": true, "beta": false}
-	m.selectMode = true
+	m.mode = modeSelect
 	m.updateTableRows()
 
 	rows := m.repoTable.Rows()
@@ -631,13 +631,13 @@ func TestHandleSelectToggle(t *testing.T) {
 	m.initTable()
 
 	_, _ = m.handleSelectToggle()
-	if !m.selectMode {
-		t.Error("selectMode should be true after first toggle")
+	if m.mode != modeSelect {
+		t.Error("mode should be modeSelect after first toggle")
 	}
 
 	_, _ = m.handleSelectToggle()
-	if m.selectMode {
-		t.Error("selectMode should be false after second toggle")
+	if m.mode == modeSelect {
+		t.Error("mode should be modeNormal after second toggle")
 	}
 }
 
@@ -673,6 +673,210 @@ func TestHandleSelectAll(t *testing.T) {
 	_, _ = m.handleSelectAll()
 	if m.selected["a"] || m.selected["b"] {
 		t.Error("no repos should be selected after second handleSelectAll")
+	}
+}
+
+func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if m.mode != modeSelect {
+		t.Error("mode should be modeSelect after space (entered select mode)")
+	}
+
+	if m.mode == modeSingle {
+		t.Error("mode should not be modeSingle after entering select mode")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if m.mode != modeSelect {
+		t.Error("mode should remain modeSelect after another space (stays in select mode)")
+	}
+
+	if m.selected["a"] {
+		t.Error("repo 'a' should be deselected after space in select mode")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.mode == modeSelect {
+		t.Error("mode should be modeNormal after enter (exited select mode)")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeySpaceSelectsOne(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		mode:      modeSelect,
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if m.selected["a"] {
+		t.Error("repo 'a' should be deselected after space in select mode")
+	}
+
+	if m.cursor != 1 {
+		t.Errorf("cursor = %d, want 1", m.cursor)
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	if !m.selected["b"] {
+		t.Error("repo 'b' should be selected after second space")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeyXSingleToggle(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	if m.mode != modeSingle {
+		t.Error("mode should be modeSingle after pressing x")
+	}
+
+	if m.mode == modeSelect {
+		t.Error("mode should not be modeSelect after entering single mode")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	if m.mode == modeSingle {
+		t.Error("mode should be modeNormal after pressing x again")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.mode = modeSingle
+
+	names := m.selectedNames()
+	if len(names) != 1 {
+		t.Fatalf("selectedNames() = %v, want [a]", names)
+	}
+
+	if names[0] != "a" {
+		t.Errorf("selectedNames()[0] = %q, want %q", names[0], "a")
+	}
+}
+
+func TestEscExitsSelectMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.mode = modeSelect
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.mode == modeSelect {
+		t.Error("mode should be modeNormal after esc")
+	}
+
+	if m.mode == modeSingle {
+		t.Error("mode should not be modeSingle after esc")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestEscExitsSingleMode(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.mode = modeSingle
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+	if m.mode == modeSingle {
+		t.Error("mode should be modeNormal after esc")
+	}
+
+	if m.mode == modeSelect {
+		t.Error("mode should not be modeSelect after esc")
+	}
+
+	if cmd != nil {
+		t.Error("expected nil cmd")
+	}
+}
+
+func TestHandleSingleToggle(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, _ = m.handleSingleToggle()
+	if m.mode != modeSingle {
+		t.Error("mode should be modeSingle after first toggle")
+	}
+
+	_, _ = m.handleSingleToggle()
+	if m.mode == modeSingle {
+		t.Error("mode should be modeNormal after second toggle")
 	}
 }
 

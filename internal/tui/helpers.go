@@ -39,11 +39,11 @@ func (m *model) filteredRepos() []string {
 }
 
 // tableRepos returns the repos that should be shown in the table.
-// In selectMode all group repos are shown; otherwise only repos
+// In modeSelect all group repos are shown; otherwise only repos
 // that are in the selected map are visible.
 func (m *model) tableRepos() []string {
 	all := m.filteredRepos()
-	if m.selectMode {
+	if m.mode == modeSelect {
 		return all
 	}
 
@@ -59,6 +59,15 @@ func (m *model) tableRepos() []string {
 }
 
 func (m *model) selectedNames() []string {
+	if m.mode == modeSingle {
+		names := m.tableRepos()
+		if m.cursor >= 0 && m.cursor < len(names) {
+			return []string{names[m.cursor]}
+		}
+
+		return nil
+	}
+
 	var names []string
 
 	for _, name := range m.activeRepoOrder() {

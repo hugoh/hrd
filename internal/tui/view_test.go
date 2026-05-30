@@ -196,6 +196,19 @@ func TestEmptyTableView(t *testing.T) {
 	}
 }
 
+func TestRenderHeaderSingleMode(t *testing.T) {
+	m := testModel(func(m *model) {
+		m.mode = modeSingle
+		m.repoOrder = []string{"a"}
+		m.selected = map[string]bool{"a": true}
+	})
+
+	view := m.mainView()
+	if !strings.Contains(view, "x:single") {
+		t.Errorf("mainView() should show 'x:single' indicator in single mode, got %q", view)
+	}
+}
+
 func TestHelpContent(t *testing.T) {
 	m := &model{}
 	content := m.helpContent()

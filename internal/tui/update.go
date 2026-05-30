@@ -122,6 +122,14 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.mode != modeNormal {
+		m.mode = modeNormal
+		m.repoTable.SetStyles(tableStyles(false))
+		m.updateTableRows()
+
+		return m, nil
+	}
+
 	switch m.screen { //nolint:exhaustive
 	case screenHelp, screenGroup:
 		m.screen = screenMain
@@ -385,8 +393,13 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 		saved = cur[m.cursor]
 	}
 
-	m.selectMode = !m.selectMode
-	m.repoTable.SetStyles(tableStyles(m.selectMode))
+	if m.mode == modeSelect {
+		m.mode = modeNormal
+	} else {
+		m.mode = modeSelect
+	}
+
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
 	m.updateTableRows()
 
 	// Restore cursor to the same repo by name.
@@ -415,6 +428,37 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 	if m.cursor < len(names)-1 {
 		m.cursor++
 		m.repoTable.SetCursor(m.cursor)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleSingleToggle() (tea.Model, tea.Cmd) {
+	cur := m.tableRepos()
+
+	saved := ""
+	if m.cursor >= 0 && m.cursor < len(cur) {
+		saved = cur[m.cursor]
+	}
+
+	if m.mode == modeSingle {
+		m.mode = modeNormal
+	} else {
+		m.mode = modeSingle
+	}
+
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
+	m.updateTableRows()
+
+	if saved != "" {
+		for i, name := range m.tableRepos() {
+			if name == saved {
+				m.cursor = i
+				m.repoTable.SetCursor(i)
+
+				break
+			}
+		}
 	}
 
 	return m, nil
@@ -579,7 +623,7 @@ func (m *model) updateTableRows() {
 	for _, name := range names {
 		chk := ""
 
-		if m.selectMode {
+		if m.mode == modeSelect {
 			if m.selected[name] {
 				chk = checkboxSelected
 			} else {
