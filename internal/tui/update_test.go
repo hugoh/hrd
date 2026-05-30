@@ -1013,14 +1013,17 @@ func TestHandleKeyMsgCtrlCExecuting(t *testing.T) {
 	}
 }
 
-func TestHandleKeyMsgQQCommandOpen(t *testing.T) {
+func TestHandleKeyMsgQCommandOpen(t *testing.T) {
 	m := &model{
 		commandOpen: true,
 	}
+	m.initInput()
+	m.input.Focus()
 
-	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
-	if cmd != nil {
-		t.Error("expected nil cmd when q pressed in command mode")
+	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'q', Text: "q"})
+
+	if got := m.input.Value(); got != "q" {
+		t.Errorf("expected input value to be 'q', got %q", got)
 	}
 }
 
