@@ -252,6 +252,7 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 
 	m.screen = screenMain
 	m.loading = true
+	m.savePersState()
 
 	return m, loadStatusesCmd(m)
 }
@@ -423,6 +424,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 		name := names[m.cursor]
 		m.selected[name] = !m.selected[name]
 		m.updateTableRows()
+		m.savePersState()
 	}
 
 	if m.cursor < len(names)-1 {
@@ -475,6 +477,7 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	}
 
 	m.updateTableRows()
+	m.savePersState()
 
 	return m, nil
 }

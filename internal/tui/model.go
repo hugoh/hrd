@@ -196,6 +196,15 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		return nil, fmt.Errorf("loading tui state: %w", err)
 	}
 
+	repoOrder := sortedRepoKeys(cfg.Repos)
+
+	selected := restoreSelected(persState.LastRepos, cfg.Repos)
+	if persState.LastRepos == nil {
+		for _, name := range repoOrder {
+			selected[name] = true
+		}
+	}
+
 	m := &model{
 		ctx:     ctx,
 		cfg:     cfg,
@@ -206,8 +215,8 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithStyle(ui.MutedStyle()),
 		),
 		statuses:    make(map[string]runner.StatusResult),
-		repoOrder:   sortedRepoKeys(cfg.Repos),
-		selected:    restoreSelected(persState.LastRepos, cfg.Repos),
+		repoOrder:   repoOrder,
+		selected:    selected,
 		groupFilter: resolveGroupFilter(opts.Group, persState.LastGroup, cfg),
 		stateFile:   statePath,
 		persState:   persState,
