@@ -322,6 +322,17 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	switch msg.String() {
+	case "up":
+		m.historyPrev()
+
+		return m, nil
+	case "down":
+		m.historyNext()
+
+		return m, nil
+	}
+
 	m.input, cmd = m.input.Update(msg)
 
 	switch msg.String() {
@@ -589,6 +600,7 @@ func openCommandBar(m *model, p cmdPrefix) {
 	m.input.SetValue("")
 	m.input.Focus()
 	m.input.SetWidth(m.inputWidth())
+	m.historyReset()
 }
 
 func openGroupPopup(m *model, mode groupMode) {

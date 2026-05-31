@@ -16,7 +16,7 @@ func TestSavePersState(t *testing.T) {
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true},
 		persState: PersistentState{
-			History: []string{},
+			History: []HistoryEntry{},
 		},
 		groupFilter: "work",
 	}
@@ -66,7 +66,7 @@ func TestQuit(t *testing.T) {
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true},
 		persState: PersistentState{
-			History: []string{},
+			History: []HistoryEntry{},
 		},
 	}
 
