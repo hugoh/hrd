@@ -8,46 +8,6 @@ import (
 	"github.com/hugoh/hrd/internal/runner"
 )
 
-func TestPushHistory(t *testing.T) {
-	m := &model{persState: PersistentState{}}
-
-	m.pushHistory("git", "status")
-
-	if len(m.persState.History) != 1 {
-		t.Fatalf("expected 1 history entry, got %d", len(m.persState.History))
-	}
-
-	if m.persState.History[0] != "git -- status" {
-		t.Errorf("history[0] = %q, want %q", m.persState.History[0], "git -- status")
-	}
-
-	m.pushHistory("jj", "log")
-
-	if len(m.persState.History) != 2 {
-		t.Fatalf("expected 2 history entries, got %d", len(m.persState.History))
-	}
-
-	if m.persState.History[0] != "jj -- log" {
-		t.Errorf("history[0] = %q, want %q", m.persState.History[0], "jj -- log")
-	}
-
-	if m.persState.History[1] != "git -- status" {
-		t.Errorf("history[1] = %q, want %q", m.persState.History[1], "git -- status")
-	}
-}
-
-func TestPushHistoryCap(t *testing.T) {
-	m := &model{persState: PersistentState{}}
-
-	for range maxHistoryLen + 5 {
-		m.pushHistory("git", "")
-	}
-
-	if len(m.persState.History) > maxHistoryLen {
-		t.Errorf("history length %d exceeds max %d", len(m.persState.History), maxHistoryLen)
-	}
-}
-
 func TestStartExecEmptyPrefix(t *testing.T) {
 	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "", "status", 1)
 	if err != nil {
@@ -86,7 +46,7 @@ func TestExecCmd(t *testing.T) {
 		cfg:      config.Config{Settings: config.Settings{Concurrency: 1}},
 		selected: map[string]bool{},
 		persState: PersistentState{
-			History: []string{},
+			History: []HistoryEntry{},
 		},
 	}
 
@@ -121,7 +81,7 @@ func TestShortcutCmdPrefixIndependent(t *testing.T) {
 				repoOrder: []string{"test-repo"},
 				selected:  map[string]bool{"test-repo": true},
 				persState: PersistentState{
-					History: []string{},
+					History: []HistoryEntry{},
 				},
 			}
 

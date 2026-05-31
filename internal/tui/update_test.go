@@ -1082,7 +1082,7 @@ func TestShortcutCmdSuccess(t *testing.T) {
 		repoOrder: []string{"a"},
 		selected:  map[string]bool{"a": true},
 		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		persState: PersistentState{History: []string{}},
+		persState: PersistentState{History: []HistoryEntry{}},
 		output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 	}
 

@@ -131,6 +131,11 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	}
 
 	switch m.screen { //nolint:exhaustive
+	case screenOutput:
+		m.screen = screenMain
+		m.output.SetContent("")
+
+		return m, nil
 	case screenHelp, screenGroup:
 		m.screen = screenMain
 
@@ -252,6 +257,7 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 
 	m.screen = screenMain
 	m.loading = true
+	m.savePersState()
 
 	return m, loadStatusesCmd(m)
 }
@@ -315,6 +321,17 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
+	switch msg.String() {
+	case "up":
+		m.historyPrev()
+
+		return m, nil
+	case "down":
+		m.historyNext()
+
+		return m, nil
+	}
 
 	m.input, cmd = m.input.Update(msg)
 
@@ -423,6 +440,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 		name := names[m.cursor]
 		m.selected[name] = !m.selected[name]
 		m.updateTableRows()
+		m.savePersState()
 	}
 
 	if m.cursor < len(names)-1 {
@@ -475,6 +493,7 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	}
 
 	m.updateTableRows()
+	m.savePersState()
 
 	return m, nil
 }
@@ -581,6 +600,7 @@ func openCommandBar(m *model, p cmdPrefix) {
 	m.input.SetValue("")
 	m.input.Focus()
 	m.input.SetWidth(m.inputWidth())
+	m.historyReset()
 }
 
 func openGroupPopup(m *model, mode groupMode) {

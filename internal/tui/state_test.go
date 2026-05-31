@@ -11,8 +11,11 @@ func TestSaveAndLoadState(t *testing.T) {
 	path := filepath.Join(dir, "state.json")
 
 	original := PersistentState{
-		Version:   1,
-		History:   []string{"git -- status", "jj -- log"},
+		Version: currentStateVersion,
+		History: []HistoryEntry{
+			{Prefix: "git", Command: "status"},
+			{Prefix: "jj", Command: "log"},
+		},
 		LastRepos: []string{"repo1", "repo2"},
 		LastGroup: "work",
 	}
@@ -93,7 +96,7 @@ func TestSaveStateCreatesDir(t *testing.T) {
 	base := t.TempDir()
 	path := filepath.Join(base, "subdir", "state.json")
 
-	state := PersistentState{Version: 1, History: []string{}}
+	state := PersistentState{Version: currentStateVersion, History: []HistoryEntry{}}
 	if err := saveState(path, state); err != nil {
 		t.Fatalf("saveState() error = %v", err)
 	}
@@ -122,8 +125,13 @@ func TestLoadStateVersionMismatchResetsHistory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "old_version.json")
 
-	// Manually create a file with a different version (saveState would override it)
-	if err := os.WriteFile(path, []byte(`{"version":0,"history":["old cmd"]}`), 0o600); err != nil {
+	// Version 1 used the same struct format, so this exercises the version
+	// mismatch path (not the corrupt-file path).
+	if err := os.WriteFile(
+		path,
+		[]byte(`{"version":1,"history":[{"p":"git","c":"old cmd"}]}`),
+		0o600,
+	); err != nil {
 		t.Fatal(err)
 	}
 

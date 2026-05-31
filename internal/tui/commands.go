@@ -140,15 +140,3 @@ func streamNextResult(m *model) tea.Cmd {
 		return execResultMsg{result: execRes}
 	}
 }
-
-func (m *model) pushHistory(prefix, cmdStr string) {
-	entry := prefix + " -- " + cmdStr
-	hist := m.persState.History
-
-	hist = append([]string{entry}, hist...)
-	if len(hist) > maxHistoryLen {
-		hist = hist[:maxHistoryLen]
-	}
-
-	m.persState.History = hist
-}

@@ -82,12 +82,17 @@ func (m *model) mainView() string {
 }
 
 func (m *model) emptyTableView() string {
+	msg := "No repos selected\nSelect a group with @ or specific repos with Space"
+	if len(m.repoOrder) == 0 {
+		msg = "No repos configured\nUse `hrd repo add <path>` to add one"
+	}
+
 	return lipgloss.NewStyle().
 		Width(m.width).
 		Height(m.contentHeight()).
 		Align(lipgloss.Center).
 		Foreground(lipgloss.Color("8")).
-		Render("No repos selected\nSelect a group with @ or specific repos with Space")
+		Render(msg)
 }
 
 func (m *model) renderHeader() string {

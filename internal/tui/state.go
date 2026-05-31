@@ -10,19 +10,25 @@ import (
 	"path/filepath"
 )
 
-const currentStateVersion = 1
+const currentStateVersion = 2
 
 const (
 	stateDirPerm  = 0o750
 	stateFilePerm = 0o600
 )
 
+// HistoryEntry is a single typed command in execution history.
+type HistoryEntry struct {
+	Prefix  string `json:"p"`
+	Command string `json:"c"`
+}
+
 // PersistentState holds TUI session state saved between runs.
 type PersistentState struct {
-	Version   int      `json:"version"`
-	History   []string `json:"history"`
-	LastRepos []string `json:"lastRepos"`
-	LastGroup string   `json:"lastGroup"`
+	Version   int            `json:"version"`
+	History   []HistoryEntry `json:"history"`
+	LastRepos []string       `json:"lastRepos"`
+	LastGroup string         `json:"lastGroup"`
 }
 
 // defaultStatePath returns the default path for the TUI state file.
@@ -64,7 +70,7 @@ func loadState(
 	}
 
 	if state.History == nil {
-		state.History = []string{}
+		state.History = []HistoryEntry{}
 	}
 
 	return state, nil

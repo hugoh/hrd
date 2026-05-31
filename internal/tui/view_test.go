@@ -178,8 +178,25 @@ func TestRenderInputLineShell(t *testing.T) {
 	}
 }
 
-func TestEmptyTableView(t *testing.T) {
+func TestEmptyTableViewNoRepos(t *testing.T) {
 	m := testModel()
+
+	view := m.mainView()
+
+	if !strings.Contains(view, "No repos configured") {
+		t.Errorf("empty mainView() should contain 'No repos configured', got %q", view)
+	}
+
+	if !strings.Contains(view, "hrd repo add") {
+		t.Errorf("empty mainView() should mention 'hrd repo add', got %q", view)
+	}
+}
+
+func TestEmptyTableViewNothingSelected(t *testing.T) {
+	m := testModel(func(m *model) {
+		m.repoOrder = []string{"a", "b"}
+		m.selected = map[string]bool{}
+	})
 
 	view := m.mainView()
 
