@@ -8,6 +8,7 @@ require (
 	charm.land/log/v2 v2.0.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260531005911-0ca8ababeab2
+	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/muesli/reflow v0.3.0
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v3 v3.9.0
