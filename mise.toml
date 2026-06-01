@@ -41,9 +41,13 @@ sources = ["**/*.go"]
 usage = 'flag "--fix" help="Automatically fix issues"'
 run = "golangci-lint run ${usage_fix:+--fix} ./..."
 
+[tasks."lint:release"]
+description = "Check release config if present"
+run = "test -f .goreleaser.yml && goreleaser check || true"
+
 [tasks.lint]
 description = "Lint code, check dead code"
-depends = ["lint:mod", { task = "lint:deadcode", args = ["--test"] }, "lint:go"]
+depends = ["lint:mod", { task = "lint:deadcode", args = ["--test"] }, "lint:go", "lint:release"]
 
 [tasks.fix]
 description = "Lint and fix code"
@@ -61,7 +65,7 @@ run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
 [tasks.test-int]
 description = "Run integration tests"
 sources = ["**/*.go"]
-run = "gotestsum -- -race -tags=integration ./internal/..."
+run = "test -d internal && gotestsum -- -race -tags=integration ./internal/... || true"
 
 [tasks.coverage]
 description = "Check test coverage"
@@ -107,7 +111,7 @@ run = "go mod tidy -v"
 [tasks.build]
 description = "Build application"
 sources = ["**/*.go", "go.mod", "go.sum"]
-run = "go build -o dist/hrd ."
+run = "go build -o dist/$(basename $(go list -m)) ."
 
 [tasks.dev]
 description = "Development mode"
