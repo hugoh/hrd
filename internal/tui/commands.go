@@ -3,9 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/google/shlex"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
@@ -61,7 +61,10 @@ func startExec(
 ) (<-chan runner.Result, error) {
 	switch prefix {
 	case vcsGit, vcsJj:
-		args := strings.Fields(cmdStr)
+		args, err := shlex.Split(cmdStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse command: %w", err)
+		}
 
 		res, err := runner.Dispatch(ctx, repos, selected, prefix, args, concurrency)
 		if err != nil {

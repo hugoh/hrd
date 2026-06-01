@@ -199,7 +199,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	repoOrder := sortedRepoKeys(cfg.Repos)
 
 	selected := restoreSelected(persState.LastRepos, cfg.Repos)
-	if persState.LastRepos == nil {
+	if len(persState.LastRepos) == 0 {
 		for _, name := range repoOrder {
 			selected[name] = true
 		}
