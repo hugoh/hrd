@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"errors"
+	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
 )
+
+var errUnknownGroup = errors.New("unknown group")
 
 func (m *model) groupLabel() string {
 	if m.groupFilter != "" {
@@ -129,22 +134,23 @@ func restoreSelected(lastRepos []string, repos map[string]config.Repo) map[strin
 	return selected
 }
 
-func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) string {
+func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) (string, error) {
 	if optGroup != "" {
-		if _, ok := cfg.Groups[optGroup]; ok {
-			return optGroup
+		stripped := strings.TrimPrefix(optGroup, "@")
+		if _, ok := cfg.Groups[stripped]; ok {
+			return stripped, nil
 		}
 
-		return ""
+		return "", fmt.Errorf("%w: %s", errUnknownGroup, optGroup)
 	}
 
 	if lastGroup != "" {
 		if _, ok := cfg.Groups[lastGroup]; ok {
-			return lastGroup
+			return lastGroup, nil
 		}
 	}
 
-	return ""
+	return "", nil
 }
 
 func sortedGroupNames(groups map[string]config.Group) []string {
