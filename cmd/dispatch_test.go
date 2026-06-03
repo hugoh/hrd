@@ -451,6 +451,21 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestLsCmdUnknownScope(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+	}})
+
+	err := runApp(t, cfgPath, []string{"ls", "@nonexistent"})
+	assert.ErrorIs(t, err, errUnknownScope)
+
+	err = runApp(t, cfgPath, []string{"ls", "nonexistent"})
+	assert.ErrorIs(t, err, errUnknownScope)
+
+	err = runApp(t, cfgPath, []string{"status", "@nonexistent"})
+	assert.ErrorIs(t, err, errUnknownScope)
+}
+
 func assertContains(needle string) func(t *testing.T, stdout string) { //nolint:unparam
 	return func(t *testing.T, stdout string) {
 		t.Helper()
