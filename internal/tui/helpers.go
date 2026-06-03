@@ -22,7 +22,8 @@ func (m *model) activeRepoOrder() []string {
 	} else if g, ok := m.cfg.Groups[m.groupFilter]; ok {
 		names = g.Repos
 	} else {
-		names = m.repoOrder
+		m.groupFilter = ""
+		names = m.allReposFallback()
 	}
 
 	sort.Strings(names)
