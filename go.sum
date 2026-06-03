@@ -20,10 +20,10 @@ github.com/charmbracelet/ultraviolet v0.0.0-20260601155805-6cf7526a1b3f h1:vKsPS
 github.com/charmbracelet/ultraviolet v0.0.0-20260601155805-6cf7526a1b3f/go.mod h1:hFpumms29Smx3LStRfku8vcCTBe1Kq8aCXtHUJa3mjY=
 github.com/charmbracelet/x/ansi v0.11.7 h1:kzv1kJvjg2S3r9KHo8hDdHFQLEqn4RBCb39dAYC84jI=
 github.com/charmbracelet/x/ansi v0.11.7/go.mod h1:9qGpnAVYz+8ACONkZBUWPtL7lulP9No6p1epAihUZwQ=
-github.com/charmbracelet/x/exp/golden v0.0.0-20260601140041-e36ca9b00c4e h1:lnQ7vb36GesIqIP+ycKHpmxiGJ7J+RDIHFzCPvoGy8I=
-github.com/charmbracelet/x/exp/golden v0.0.0-20260601140041-e36ca9b00c4e/go.mod h1:6fMpcW6iwN/kX+xJ52eqVWsDiBTe0UJD24JLoHFe+P0=
-github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260601140041-e36ca9b00c4e h1:x4hfEM4W9nEJWnoh7SDjty9l7uj/YCMRJnTQFbbwCv4=
-github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260601140041-e36ca9b00c4e/go.mod h1:aRoQwQWmN9LBG2xi3sVByMFt2fdkPCagd0GAJ1qwOfw=
+github.com/charmbracelet/x/exp/golden v0.0.0-20260602025833-85a30b5e440a h1:LcbQgAoPEgid0TswGFxeiaagOFXDamBjsSl3OvoZrCU=
+github.com/charmbracelet/x/exp/golden v0.0.0-20260602025833-85a30b5e440a/go.mod h1:6fMpcW6iwN/kX+xJ52eqVWsDiBTe0UJD24JLoHFe+P0=
+github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260602025833-85a30b5e440a h1:XosSHv4TkKB/lwedWOnt2ijCQqurJP9xTQDVN3g+cag=
+github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260602025833-85a30b5e440a/go.mod h1:aRoQwQWmN9LBG2xi3sVByMFt2fdkPCagd0GAJ1qwOfw=
 github.com/charmbracelet/x/term v0.2.2 h1:xVRT/S2ZcKdhhOuSP4t5cLi5o+JxklsoEObBSgfgZRk=
 github.com/charmbracelet/x/term v0.2.2/go.mod h1:kF8CY5RddLWrsgVwpw4kAa6TESp6EB5y3uxGLeCqzAI=
 github.com/charmbracelet/x/termios v0.1.1 h1:o3Q2bT8eqzGnGPOYheoYS8eEleT5ZVNYNy8JawjaNZY=
@@ -65,8 +65,8 @@ github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavM
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/zenizh/go-capturer v0.0.0-20211219060012-52ea6c8fed04 h1:qXafrlZL1WsJW5OokjraLLRURHiw0OzKHD/RNdspp4w=
 github.com/zenizh/go-capturer v0.0.0-20211219060012-52ea6c8fed04/go.mod h1:FiwNQxz6hGoNFBC4nIx+CxZhI3nne5RmIOlT/MXcSD4=
-golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9 h1:4d4PbuBNwaxMXkXI8yiIYjydtMU+04RHeuSxJdgKftM=
-golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9/go.mod h1:d2fgXJLVs4dYDHUk5lwMIfzRzSrWCfGZb0ZqeLa/Vcw=
+golang.org/x/exp v0.0.0-20260603202125-055de637280b h1:v1uXiEBHo8QA0LiGCo7UgHMzHT4Kdfpl2zmtH5vaP1Q=
+golang.org/x/exp v0.0.0-20260603202125-055de637280b/go.mod h1:d2fgXJLVs4dYDHUk5lwMIfzRzSrWCfGZb0ZqeLa/Vcw=
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
 golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sys v0.45.0 h1:dO4czNzziLiiXplLQgBCEpCvXQ3dnkn0SdaZSYdQ+FY=

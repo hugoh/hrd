@@ -26,6 +26,7 @@ var (
 	errNoArgsFmt          = errors.New("no args provided")
 	errNoReposWithBackend = errors.New("no repos with backend")
 	errNonZeroExit        = errors.New("non-zero exit")
+	errUnknownScope       = errors.New("unknown repo or group")
 )
 
 //nolint:gochecknoglobals // CLI flag definitions are package-level by nature
@@ -73,6 +74,8 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 			names = append(names, arg)
 		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
 			names = append(names, stripGroupPrefix(arg))
+		} else if strings.HasPrefix(arg, "@") {
+			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 	}
 
@@ -365,8 +368,6 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
 		cfg, names, err := loadAndResolve(cfgPath, cmd)
 		if errors.Is(err, errNoReposMatched) {
-			ui.Outf("no repos tracked")
-
 			return nil
 		}
 

@@ -96,13 +96,17 @@ func TestActiveRepoOrder(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown group filter falls back to repoOrder", func(t *testing.T) {
+	t.Run("unknown group filter cleared", func(t *testing.T) {
 		m.groupFilter = "nonexistent"
 		got := m.activeRepoOrder()
 		want := []string{"a", "b", "c"}
 
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
+		}
+
+		if m.groupFilter != "" {
+			t.Errorf("groupFilter = %q, want empty", m.groupFilter)
 		}
 	})
 

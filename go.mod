@@ -7,7 +7,7 @@ require (
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
 	github.com/BurntSushi/toml v1.6.0
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260601140041-e36ca9b00c4e
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260602025833-85a30b5e440a
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/muesli/reflow v0.3.0
 	github.com/stretchr/testify v1.11.1
@@ -24,7 +24,7 @@ require (
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
-	golang.org/x/exp v0.0.0-20260529124908-c761662dc8c9 // indirect
+	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
 )
 
 require (
@@ -32,7 +32,7 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
-	github.com/charmbracelet/x/exp/golden v0.0.0-20260601140041-e36ca9b00c4e // indirect
+	github.com/charmbracelet/x/exp/golden v0.0.0-20260602025833-85a30b5e440a // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect

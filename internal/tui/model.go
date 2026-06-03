@@ -205,6 +205,11 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		}
 	}
 
+	groupFilter, err := resolveGroupFilter(opts.Group, persState.LastGroup, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	m := &model{
 		ctx:     ctx,
 		cfg:     cfg,
@@ -217,7 +222,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		statuses:    make(map[string]runner.StatusResult),
 		repoOrder:   repoOrder,
 		selected:    selected,
-		groupFilter: resolveGroupFilter(opts.Group, persState.LastGroup, cfg),
+		groupFilter: groupFilter,
 		stateFile:   statePath,
 		persState:   persState,
 		historyIdx:  -1,

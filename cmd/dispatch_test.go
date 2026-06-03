@@ -252,7 +252,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 					args:    []string{"ls"},
 					assert: func(t *testing.T, stdout string) {
 						t.Helper()
-						assert.Contains(t, stdout, "no repos tracked")
+						assert.Empty(t, stdout)
 					},
 				}
 			},
@@ -449,6 +449,18 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 			result.assert(t, stdout)
 		})
 	}
+}
+
+func TestLsCmdUnknownScope(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+	}})
+
+	err := runApp(t, cfgPath, []string{"ls", "@nonexistent"})
+	require.ErrorIs(t, err, errUnknownScope)
+
+	err = runApp(t, cfgPath, []string{"status", "@nonexistent"})
+	require.ErrorIs(t, err, errUnknownScope)
 }
 
 func assertContains(needle string) func(t *testing.T, stdout string) { //nolint:unparam

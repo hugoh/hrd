@@ -69,29 +69,70 @@ var cfg = config.Config{
 }
 
 func TestResolveGroupFilterOptGroupTakesPriority(t *testing.T) {
-	got := resolveGroupFilter("personal", "work", cfg)
+	got, err := resolveGroupFilter("personal", "work", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if got != "personal" {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
 	}
 }
 
 func TestResolveGroupFilterFallsBackToLastGroup(t *testing.T) {
-	got := resolveGroupFilter("", "personal", cfg)
+	got, err := resolveGroupFilter("", "personal", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if got != "personal" {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
 	}
 }
 
 func TestResolveGroupFilterLastGroupNotInConfig(t *testing.T) {
-	got := resolveGroupFilter("", "nonexistent", cfg)
+	got, err := resolveGroupFilter("", "nonexistent", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if got != "" {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
 	}
 }
 
 func TestResolveGroupFilterAllEmpty(t *testing.T) {
-	got := resolveGroupFilter("", "", config.Config{Groups: map[string]config.Group{}})
+	got, err := resolveGroupFilter("", "", config.Config{Groups: map[string]config.Group{}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
 	if got != "" {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
+	}
+}
+
+func TestResolveGroupFilterOptGroupUnknown(t *testing.T) {
+	_, err := resolveGroupFilter("nonexistent", "", cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown group, got nil")
+	}
+}
+
+func TestResolveGroupFilterOptGroupWithAtPrefix(t *testing.T) {
+	got, err := resolveGroupFilter("@personal", "", cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got != "personal" {
+		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
+	}
+}
+
+func TestResolveGroupFilterAtPrefixUnknown(t *testing.T) {
+	_, err := resolveGroupFilter("@nonexistent", "", cfg)
+	if err == nil {
+		t.Fatal("expected error for unknown group with @ prefix, got nil")
 	}
 }
