@@ -74,7 +74,7 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 			names = append(names, arg)
 		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
 			names = append(names, stripGroupPrefix(arg))
-		} else {
+		} else if strings.HasPrefix(arg, "@") {
 			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 	}

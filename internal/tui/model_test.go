@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/hugoh/hrd/internal/config"
 )
 
 func TestSavePersState(t *testing.T) {
@@ -15,6 +17,9 @@ func TestSavePersState(t *testing.T) {
 		stateFile: statePath,
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true},
+		cfg: config.Config{
+			Groups: map[string]config.Group{"work": {Repos: []string{"a", "b"}}},
+		},
 		persState: PersistentState{
 			History: []HistoryEntry{},
 		},

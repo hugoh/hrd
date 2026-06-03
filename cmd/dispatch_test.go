@@ -457,13 +457,10 @@ func TestLsCmdUnknownScope(t *testing.T) {
 	}})
 
 	err := runApp(t, cfgPath, []string{"ls", "@nonexistent"})
-	assert.ErrorIs(t, err, errUnknownScope)
-
-	err = runApp(t, cfgPath, []string{"ls", "nonexistent"})
-	assert.ErrorIs(t, err, errUnknownScope)
+	require.ErrorIs(t, err, errUnknownScope)
 
 	err = runApp(t, cfgPath, []string{"status", "@nonexistent"})
-	assert.ErrorIs(t, err, errUnknownScope)
+	require.ErrorIs(t, err, errUnknownScope)
 }
 
 func assertContains(needle string) func(t *testing.T, stdout string) { //nolint:unparam

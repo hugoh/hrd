@@ -104,6 +104,7 @@ func TestActiveRepoOrder(t *testing.T) {
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
 		}
+
 		if m.groupFilter != "" {
 			t.Errorf("groupFilter = %q, want empty", m.groupFilter)
 		}
