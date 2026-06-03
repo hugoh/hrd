@@ -252,7 +252,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 					args:    []string{"ls"},
 					assert: func(t *testing.T, stdout string) {
 						t.Helper()
-						assert.Contains(t, stdout, "no repos tracked")
+						assert.Empty(t, stdout)
 					},
 				}
 			},

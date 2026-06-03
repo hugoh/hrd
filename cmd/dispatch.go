@@ -365,8 +365,6 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
 		cfg, names, err := loadAndResolve(cfgPath, cmd)
 		if errors.Is(err, errNoReposMatched) {
-			ui.Outf("no repos tracked")
-
 			return nil
 		}
 
