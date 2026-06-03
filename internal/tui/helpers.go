@@ -130,7 +130,11 @@ func restoreSelected(lastRepos []string, repos map[string]config.Repo) map[strin
 
 func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) string {
 	if optGroup != "" {
-		return optGroup
+		if _, ok := cfg.Groups[optGroup]; ok {
+			return optGroup
+		}
+
+		return ""
 	}
 
 	if lastGroup != "" {

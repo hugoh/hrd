@@ -95,3 +95,10 @@ func TestResolveGroupFilterAllEmpty(t *testing.T) {
 		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
 	}
 }
+
+func TestResolveGroupFilterOptGroupUnknown(t *testing.T) {
+	got := resolveGroupFilter("nonexistent", "", cfg)
+	if got != "" {
+		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
+	}
+}
