@@ -47,7 +47,12 @@ run = "test -f .goreleaser.yml && goreleaser check || true"
 
 [tasks.lint]
 description = "Lint code, check dead code"
-depends = ["lint:mod", { task = "lint:deadcode", args = ["--test"] }, "lint:go", "lint:release"]
+depends = [
+  "lint:mod",
+  { task = "lint:deadcode", args = ["--test"] },
+  "lint:go",
+  "lint:release"
+]
 
 [tasks.fix]
 description = "Lint and fix code"
@@ -59,12 +64,12 @@ run = [
 
 [tasks.test]
 description = "Run tests with coverage"
-sources = ["**/*.go"]
+sources = ["go.mod", "**/*.go"]
 run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
 
 [tasks.test-int]
 description = "Run integration tests"
-sources = ["**/*.go"]
+sources = ["go.mod", "**/*.go"]
 run = "test -d internal && gotestsum -- -race -tags=integration ./internal/... || true"
 
 [tasks.coverage]
