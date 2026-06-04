@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/pelletier/go-toml/v2"
 )
 
 var errUnknownRepo = errors.New("unknown repo")
@@ -19,13 +19,14 @@ var errUnknownRepo = errors.New("unknown repo")
 const (
 	defaultConcurrency = 8
 	defaultDirPerm     = 0o750
+	defaultFilePerm    = 0o600
 )
 
 // Repo represents a single tracked repository.
 type Repo struct {
 	// Path is the absolute path to the repository root.
 	Path   string   `toml:"path"`
-	Groups []string `toml:"groups,omitempty"`
+	Groups []string `toml:"groups"`
 }
 
 // ActiveBackend detects and returns the active VCS backend for this repo.
@@ -83,12 +84,18 @@ func DefaultPath() string {
 // config is returned without error — the file is created on first write.
 func Load(path string) (Config, error) {
 	cfg := defaultConfig()
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return cfg, nil
+
+	data, err := os.ReadFile(path) //nolint:gosec // trusted config path
+	if err != nil {
+		if os.IsNotExist(err) {
+			return cfg, nil
+		}
+
+		return cfg, fmt.Errorf("loading config %q: %w", path, err)
 	}
 
-	if _, err := toml.DecodeFile(path, &cfg); err != nil {
-		return cfg, fmt.Errorf("loading config %q: %w", path, err)
+	if err := toml.Unmarshal(data, &cfg); err != nil {
+		return cfg, fmt.Errorf("decoding config %q: %w", path, err)
 	}
 	// Ensure maps are non-nil even if the TOML sections were absent.
 	if cfg.Repos == nil {
@@ -109,7 +116,7 @@ func Load(path string) (Config, error) {
 }
 
 // Save writes cfg to path, creating parent directories as needed.
-func Save(path string, cfg Config) (err error) {
+func Save(path string, cfg Config) error {
 	if err := os.MkdirAll(
 		filepath.Dir(path),
 		defaultDirPerm,
@@ -117,19 +124,13 @@ func Save(path string, cfg Config) (err error) {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	file, err := os.Create(path) //nolint:gosec // trusted config path
+	data, err := toml.Marshal(cfg)
 	if err != nil {
-		return fmt.Errorf("creating config file: %w", err)
-	}
-	defer func() {
-		if cerr := file.Close(); err == nil {
-			err = cerr
-		}
-	}()
-
-	enc := toml.NewEncoder(file)
-	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("encoding config: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, defaultFilePerm); err != nil {
+		return fmt.Errorf("writing config: %w", err)
 	}
 
 	return nil
