@@ -4,13 +4,9 @@ import "strings"
 
 const maxHistoryLen = 100
 
-// pushHistory prepends a history entry. Shortcut commands (empty prefix)
-// are not saved to avoid polluting typed-command history.
+// pushHistory prepends a history entry. Only called for typed commands
+// (via handleInputKey), not for keyboard shortcuts.
 func (m *model) pushHistory(prefix, cmdStr string) {
-	if prefix == "" {
-		return
-	}
-
 	entry := HistoryEntry{Prefix: prefix, Command: cmdStr}
 
 	m.persState.History = append([]HistoryEntry{entry}, m.persState.History...)

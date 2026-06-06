@@ -329,6 +329,15 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	if m.suggestionsActive() {
+		switch msg.String() {
+		case "up", "down":
+			m.input, cmd = m.input.Update(msg)
+
+			return m, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "up":
 		m.updateHistoryFilter()
@@ -343,40 +352,11 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.input, cmd = m.input.Update(msg)
+	m.updateCompletions()
 
 	switch msg.String() {
 	case keyEnter:
-		cmdStr := strings.TrimSpace(m.input.Value())
-		if cmdStr == "" {
-			return m, nil
-		}
-
-		if m.executing {
-			return m, nil
-		}
-
-		selected := m.selectedNames()
-		if len(selected) == 0 {
-			m.modal = modalAlert
-			m.commandOpen = false
-
-			return m, nil
-		}
-
-		m.commandOpen = false
-		m.screen = screenOutput
-		m.output.SetContent("running...")
-
-		m.execSideEffect = true
-
-		prefix := prefixLabels[m.cmdPrefix]
-		cmd := cmdStr
-
-		if m.cmdPrefix == prefixNone {
-			prefix, cmd = parseUnifiedCmd(cmdStr)
-		}
-
-		return m, execCmd(m, selected, prefix, cmd)
+		return m.handleInputEnter()
 	case keyEsc:
 		m.commandOpen = false
 
@@ -384,6 +364,101 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+func (m *model) handleInputEnter() (tea.Model, tea.Cmd) {
+	cmdStr := strings.TrimSpace(m.input.Value())
+	if cmdStr == "" {
+		return m, nil
+	}
+
+	if m.executing {
+		return m, nil
+	}
+
+	selected := m.selectedNames()
+	if len(selected) == 0 {
+		m.modal = modalAlert
+		m.commandOpen = false
+
+		return m, nil
+	}
+
+	m.commandOpen = false
+	m.screen = screenOutput
+	m.output.SetContent("running...")
+
+	m.execSideEffect = true
+
+	prefix := prefixLabels[m.cmdPrefix]
+	cmd := cmdStr
+
+	if m.cmdPrefix == prefixNone {
+		prefix, cmd = parseUnifiedCmd(cmdStr)
+	}
+
+	m.pushHistory(prefix, cmd)
+
+	return m, execCmd(m, selected, prefix, cmd)
+}
+
+func (m *model) suggestionsActive() bool {
+	return m.input.ShowSuggestions && len(m.input.MatchedSuggestions()) > 0
+}
+
+func (m *model) updateCompletions() {
+	input := m.input.Value()
+	m.input.ShowSuggestions = false
+
+	if m.setPrefixCompletions(input, "git ", &m.gitCompletions, loadGitCompletions) {
+		return
+	}
+
+	if m.setPrefixCompletions(input, "jj ", &m.jjCompletions, loadJjCompletions) {
+		return
+	}
+
+	if m.cmdPrefix == prefixNone && input != "" && !strings.HasPrefix(input, "!") &&
+		len(vcsSubcommands) > 0 {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions(vcsSubcommands)
+	}
+}
+
+func (m *model) setPrefixCompletions(
+	input, prefix string,
+	dest *[]string,
+	loader func() []string,
+) bool {
+	if input == "" {
+		return false
+	}
+
+	// Match when input has typed the full prefix (e.g. "git status"),
+	// or when input is a partial prefix of "git "/"jj " (e.g. "g" or "gi").
+	if !strings.HasPrefix(input, prefix) && !strings.HasPrefix(prefix, input) {
+		return false
+	}
+
+	// Phase 1: partial prefix ("g" / "gi" / "git") → suggest the prefix name itself.
+	if strings.HasPrefix(prefix, input) && prefix != input {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions([]string{strings.TrimSpace(prefix)})
+
+		return true
+	}
+
+	// Phase 2: full prefix typed → load and suggest all subcommands.
+	if *dest == nil {
+		*dest = loader()
+	}
+
+	if len(*dest) > 0 {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions(*dest)
+	}
+
+	return true
 }
 
 func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -746,6 +821,7 @@ func openCommandBar(m *model, p cmdPrefix) {
 	m.cmdPrefix = p
 	m.commandOpen = true
 	m.input.SetValue("")
+	m.input.ShowSuggestions = false
 	m.input.Focus()
 	m.input.SetWidth(m.inputWidth())
 	m.historyReset()

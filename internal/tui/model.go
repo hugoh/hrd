@@ -71,6 +71,12 @@ const (
 	numPrefixes
 )
 
+// VCS subcommands known by the TUI, used for tab completion in the unified
+// command bar.
+//
+//nolint:gochecknoglobals,goconst // command names are effectively constant
+var vcsSubcommands = []string{"status", "diff", "log", "fetch", "pull", "push"}
+
 //nolint:gochecknoglobals // effectively constant, prefix label lookup
 var prefixLabels = [numPrefixes]string{
 	"",
@@ -167,6 +173,8 @@ type model struct {
 	cmdPrefix           cmdPrefix
 	historyIdx          int
 	historyFilterPrefix string
+	gitCompletions      []string
+	jjCompletions       []string
 
 	executing      bool
 	execSideEffect bool

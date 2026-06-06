@@ -91,7 +91,6 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.executing = true
 	m.execTotal = len(selected)
 	m.execResults = nil
-	m.pushHistory(prefix, cmdStr)
 
 	concurrency := int64(m.cfg.Settings.Concurrency)
 	if concurrency < 1 {

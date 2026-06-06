@@ -65,14 +65,22 @@ func TestPushHistoryCap(t *testing.T) {
 	}
 }
 
-func TestPushHistorySkipsEmptyPrefix(t *testing.T) {
+func TestPushHistorySavesEmptyPrefix(t *testing.T) {
 	m := &model{persState: PersistentState{}}
 
 	m.pushHistory("", "status")
 	m.pushHistory("", "log")
 
-	if len(m.persState.History) != 0 {
-		t.Errorf("expected empty history, got %d entries", len(m.persState.History))
+	if len(m.persState.History) != 2 {
+		t.Fatalf("expected 2 history entries, got %d", len(m.persState.History))
+	}
+
+	if m.persState.History[0] != (HistoryEntry{Prefix: "", Command: "log"}) {
+		t.Errorf("history[0] = %v, want {Prefix: '' Command: 'log'}", m.persState.History[0])
+	}
+
+	if m.persState.History[1] != (HistoryEntry{Prefix: "", Command: "status"}) {
+		t.Errorf("history[1] = %v, want {Prefix: '' Command: 'status'}", m.persState.History[1])
 	}
 }
 
