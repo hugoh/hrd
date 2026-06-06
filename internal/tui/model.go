@@ -335,16 +335,12 @@ func (m *model) initHistoryList() {
 		allRepoSet[name] = struct{}{}
 	}
 
-	m.historyList = initHistoryList(
-		m.persState.SelectionHistory,
-		m.cfg.Groups,
-		allRepoSet,
-		defaultViewW,
-	)
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
+	m.historyList = initList(defaultItemDelegate(0), items, defaultViewW)
 }
 
 func (m *model) initGroupList() {
-	m.groupList = initGroupList(defaultViewW)
+	m.groupList = initList(defaultItemDelegate(0), nil, defaultViewW)
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.

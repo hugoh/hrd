@@ -310,36 +310,3 @@ func TestSelHistoryViewEmpty(t *testing.T) {
 		t.Error("selHistoryView with no entries should be empty")
 	}
 }
-
-func TestWrapString(t *testing.T) {
-	// Short string — no wrapping
-	got := wrapString("short", 10)
-	if len(got) != 1 || got[0] != "short" {
-		t.Errorf("wrapString('short', 10) = %q, want [short]", got)
-	}
-
-	// Wraps at comma boundary
-	got = wrapString("a, b, c, d, e", 10)
-	if len(got) == 1 {
-		t.Fatal("expected wrapping")
-	}
-
-	// All lines should be non-empty and ≤ max
-	for _, line := range got {
-		if len(line) > 10 {
-			t.Errorf("line %q exceeds max width 10", line)
-		}
-	}
-
-	// No separator — wraps at space
-	got = wrapString("aaaa bbbb cccc", 8)
-	if len(got) < 2 {
-		t.Error("expected multi-line wrap")
-	}
-
-	for _, line := range got {
-		if len(line) > 8 {
-			t.Errorf("line %q exceeds max width 8", line)
-		}
-	}
-}

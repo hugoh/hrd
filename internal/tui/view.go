@@ -12,9 +12,7 @@ import (
 )
 
 const (
-	progressBarW    = 10
-	historyIndent   = 4
-	historyMinWrapW = 10
+	progressBarW = 10
 )
 
 //nolint:gochecknoglobals // effectively constant, progress bar model
@@ -318,47 +316,6 @@ func (m *model) selHistoryView() string {
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.historyList.View(), sep, footer)
-}
-
-func wrapString(s string, maxW int) []string {
-	if len(s) <= maxW {
-		return []string{s}
-	}
-
-	var out []string
-
-	for len(s) > 0 {
-		if len(s) <= maxW {
-			out = append(out, s)
-
-			break
-		}
-
-		idx := strings.LastIndex(s[:maxW], ", ")
-		if idx < 0 {
-			idx = strings.LastIndex(s[:maxW], " ")
-		}
-
-		if idx < 0 {
-			idx = maxW
-		} else {
-			idx += 2 // include separator
-		}
-
-		out = append(out, s[:idx])
-		s = s[idx:]
-		s = strings.TrimLeft(s, " ")
-	}
-
-	return out
-}
-
-func repoCountLabel(n int) string {
-	if n == 1 {
-		return "1 repo"
-	}
-
-	return fmt.Sprintf("%d repos", n)
 }
 
 func buildHelp(bindings []binding) string {

@@ -1366,8 +1366,8 @@ func TestHandleSelHistoryRestore(t *testing.T) {
 	}
 	m.initTable()
 
-	entry := SelectionEntry{Repos: []string{"a", "c"}}
-	_, cmd := m.handleSelHistoryRestore(entry)
+	repos := []string{"a", "c"}
+	_, cmd := m.handleSelHistoryRestore(repos)
 
 	if m.mode != modeNormal {
 		t.Error("mode should be modeNormal after restore")
@@ -1404,8 +1404,8 @@ func TestHandleSelHistoryRestoreMissingRepo(t *testing.T) {
 	}
 	m.initTable()
 
-	entry := SelectionEntry{Repos: []string{"a", "stale_repo"}}
-	_, _ = m.handleSelHistoryRestore(entry)
+	repos := []string{"a", "stale_repo"}
+	_, _ = m.handleSelHistoryRestore(repos)
 
 	if m.modal != modalAlert {
 		t.Error("modal should be modalAlert when repos are missing")

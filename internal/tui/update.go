@@ -55,7 +55,6 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.helpViewport.SetHeight(m.contentHeight())
 	m.historyList.SetWidth(m.width)
 	m.historyList.SetHeight(m.contentHeight())
-	m.refreshHistoryDelegate()
 	m.groupList.SetWidth(m.width)
 	m.groupList.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
@@ -728,17 +727,6 @@ func (m *model) pushSelectionHistory() {
 	}
 }
 
-func (m *model) refreshHistoryDelegate() {
-	items := m.historyList.Items()
-	if len(items) == 0 {
-		return
-	}
-
-	delegate := newHistoryDelegate(m.width)
-	delegate.recomputeHeight(items)
-	m.historyList.SetDelegate(delegate)
-}
-
 func openSelHistoryPopup(m *model) {
 	if len(m.persState.SelectionHistory) == 0 {
 		return
@@ -750,9 +738,6 @@ func openSelHistoryPopup(m *model) {
 	}
 
 	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
-	delegate := newHistoryDelegate(m.width)
-	delegate.recomputeHeight(items)
-	m.historyList.SetDelegate(delegate)
 	m.historyList.SetItems(items)
 	m.historyList.Select(0)
 
@@ -766,7 +751,7 @@ func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		return m.handleSelHistoryRestore(item.entry)
+		return m.handleSelHistoryRestore(item.repos)
 	}
 
 	var cmd tea.Cmd
@@ -776,12 +761,12 @@ func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *model) handleSelHistoryRestore(entry SelectionEntry) (tea.Model, tea.Cmd) {
+func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
 	selected := make(map[string]bool)
 
 	var missing []string
 
-	for _, name := range entry.Repos {
+	for _, name := range repos {
 		if _, ok := m.cfg.Repos[name]; ok {
 			selected[name] = true
 		} else {
@@ -860,7 +845,7 @@ func openGroupPopup(m *model, mode groupMode) {
 	}
 
 	m.groupMode = mode
-	m.groupList = initGroupList(m.width)
+	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
 	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos))
