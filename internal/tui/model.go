@@ -162,10 +162,11 @@ type model struct {
 	selHistoryCursor int
 	alertMsg         string
 
-	commandOpen bool
-	input       textinput.Model
-	cmdPrefix   cmdPrefix
-	historyIdx  int
+	commandOpen         bool
+	input               textinput.Model
+	cmdPrefix           cmdPrefix
+	historyIdx          int
+	historyFilterPrefix string
 
 	executing      bool
 	execSideEffect bool

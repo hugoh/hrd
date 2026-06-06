@@ -331,10 +331,12 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "up":
+		m.updateHistoryFilter()
 		m.historyPrev()
 
 		return m, nil
 	case "down":
+		m.updateHistoryFilter()
 		m.historyNext()
 
 		return m, nil
@@ -367,7 +369,14 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 		m.execSideEffect = true
 
-		return m, execCmd(m, selected, prefixLabels[m.cmdPrefix], cmdStr)
+		prefix := prefixLabels[m.cmdPrefix]
+		cmd := cmdStr
+
+		if m.cmdPrefix == prefixNone {
+			prefix, cmd = parseUnifiedCmd(cmdStr)
+		}
+
+		return m, execCmd(m, selected, prefix, cmd)
 	case keyEsc:
 		m.commandOpen = false
 
@@ -601,6 +610,22 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 	// runner.VCSSubcmd, not the current command-bar prefix.
 	// might be "sh" and would route through runner.Shell instead).
 	return execCmd(m, selected, "", subcmd)
+}
+
+func parseUnifiedCmd(input string) (string, string) {
+	if strings.HasPrefix(input, "!") {
+		return prefixLabels[prefixShell], strings.TrimSpace(input[1:])
+	}
+
+	if strings.HasPrefix(input, "jj ") {
+		return vcsJj, strings.TrimSpace(input[3:])
+	}
+
+	if strings.HasPrefix(input, "git ") {
+		return vcsGit, strings.TrimSpace(input[4:])
+	}
+
+	return "", input
 }
 
 func (m *model) pushSelectionHistory() {

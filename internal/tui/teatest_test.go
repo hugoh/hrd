@@ -93,10 +93,10 @@ func TestTeaCommandBar(t *testing.T) {
 		return strings.Contains(string(bts), "testrepo")
 	})
 
-	// 'G' → Update → handleKeyMsg → handleMainKey → mainKeyHandlers["G"] → commandOpen=true
-	tm.Send(tea.KeyPressMsg{Code: 'G'})
+	// ':' → Update → handleKeyMsg → handleMainKey → mainKeyHandlers[":"] → commandOpen=true
+	tm.Send(tea.KeyPressMsg{Code: ':'})
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return strings.Contains(string(bts), "[git]")
+		return strings.Contains(string(bts), "type a command")
 	})
 
 	// Type into real textinput via tm.Type()
@@ -106,7 +106,7 @@ func TestTeaCommandBar(t *testing.T) {
 	// Esc → close command bar without executing
 	tm.Send(tea.KeyPressMsg{Code: tea.KeyEsc})
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return !strings.Contains(string(bts), "[git]")
+		return !strings.Contains(string(bts), "type a command")
 	})
 
 	// Quit

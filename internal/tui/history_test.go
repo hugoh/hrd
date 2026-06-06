@@ -110,7 +110,7 @@ func TestHistoryEntriesAllPrefixes(t *testing.T) {
 		prefix cmdPrefix
 		want   int
 	}{
-		{prefixNone, 0},
+		{prefixNone, 4},
 		{prefixGit, 2},
 		{prefixJj, 1},
 		{prefixShell, 1},
@@ -304,11 +304,259 @@ func TestHistoryNextAtMinBound(t *testing.T) {
 }
 
 func TestHistoryReset(t *testing.T) {
-	m := &model{historyIdx: 5}
+	m := &model{historyIdx: 5, historyFilterPrefix: "git"}
 
 	m.historyReset()
 
 	if m.historyIdx != -1 {
 		t.Errorf("historyIdx = %d, want -1", m.historyIdx)
+	}
+
+	if m.historyFilterPrefix != "" {
+		t.Errorf("historyFilterPrefix = %q, want empty", m.historyFilterPrefix)
+	}
+}
+
+func TestFormatHistoryEntry_PrefixNoneSh(t *testing.T) {
+	got := formatHistoryEntry(prefixNone, HistoryEntry{Prefix: "sh", Command: "ls ."})
+
+	want := "!ls ."
+	if got != want {
+		t.Errorf("formatHistoryEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatHistoryEntry_PrefixNoneGit(t *testing.T) {
+	got := formatHistoryEntry(prefixNone, HistoryEntry{Prefix: "git", Command: "log"})
+
+	want := "git log"
+	if got != want {
+		t.Errorf("formatHistoryEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatHistoryEntry_PrefixNoneJj(t *testing.T) {
+	got := formatHistoryEntry(prefixNone, HistoryEntry{Prefix: "jj", Command: "status"})
+
+	want := "jj status"
+	if got != want {
+		t.Errorf("formatHistoryEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatHistoryEntry_PrefixNoneEmpty(t *testing.T) {
+	got := formatHistoryEntry(prefixNone, HistoryEntry{Prefix: "", Command: "status"})
+
+	want := "status"
+	if got != want {
+		t.Errorf("formatHistoryEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestFormatHistoryEntry_PerVcsBar(t *testing.T) {
+	got := formatHistoryEntry(prefixGit, HistoryEntry{Prefix: "git", Command: "log"})
+
+	want := "log"
+	if got != want {
+		t.Errorf("formatHistoryEntry() = %q, want %q", got, want)
+	}
+}
+
+func TestHistoryFilterFromInput_Shell(t *testing.T) {
+	m := &model{input: initInput()}
+	m.input.SetValue("!ls .")
+
+	if got := m.historyFilterFromInput(); got != "sh" {
+		t.Errorf("historyFilterFromInput() = %q, want %q", got, "sh")
+	}
+}
+
+func TestHistoryFilterFromInput_Jj(t *testing.T) {
+	m := &model{input: initInput()}
+	m.input.SetValue("jj status")
+
+	if got := m.historyFilterFromInput(); got != "jj" {
+		t.Errorf("historyFilterFromInput() = %q, want %q", got, "jj")
+	}
+}
+
+func TestHistoryFilterFromInput_Git(t *testing.T) {
+	m := &model{input: initInput()}
+	m.input.SetValue("git log")
+
+	if got := m.historyFilterFromInput(); got != "git" {
+		t.Errorf("historyFilterFromInput() = %q, want %q", got, "git")
+	}
+}
+
+func TestHistoryFilterFromInput_Empty(t *testing.T) {
+	m := &model{input: initInput()}
+	if got := m.historyFilterFromInput(); got != "" {
+		t.Errorf("historyFilterFromInput() = %q, want empty", got)
+	}
+}
+
+func TestHistoryFilterFromInput_NoPrefix(t *testing.T) {
+	m := &model{input: initInput()}
+	m.input.SetValue("status")
+
+	if got := m.historyFilterFromInput(); got != "" {
+		t.Errorf("historyFilterFromInput() = %q, want empty", got)
+	}
+}
+
+func TestHistoryEntries_FilteredByHistoryFilterPrefix(t *testing.T) {
+	m := &model{
+		persState: PersistentState{
+			History: []HistoryEntry{
+				{Prefix: "git", Command: "log"},
+				{Prefix: "sh", Command: "ls"},
+				{Prefix: "git", Command: "status"},
+			},
+		},
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+	}
+
+	got := m.historyEntries()
+	want := []HistoryEntry{
+		{Prefix: "git", Command: "log"},
+		{Prefix: "git", Command: "status"},
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("historyEntries() = %v, want %v", got, want)
+	}
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("historyEntries()[%d] = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+func TestHistoryEntries_EmptyFilterReturnsAll(t *testing.T) {
+	m := &model{
+		persState: PersistentState{
+			History: []HistoryEntry{
+				{Prefix: "git", Command: "log"},
+			},
+		},
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "",
+	}
+
+	got := m.historyEntries()
+	if len(got) != 1 {
+		t.Errorf("historyEntries() = %d entries, want 1", len(got))
+	}
+}
+
+func TestHistoryPrev_UnifiedBarReconstructs(t *testing.T) {
+	m := &model{
+		input: initInput(),
+		persState: PersistentState{
+			History: []HistoryEntry{
+				{Prefix: "jj", Command: "status"},
+				{Prefix: "git", Command: "log"},
+			},
+		},
+		cmdPrefix:  prefixNone,
+		historyIdx: -1,
+	}
+
+	m.historyPrev()
+
+	if m.input.Value() != "jj status" {
+		t.Errorf("input value = %q, want %q", m.input.Value(), "jj status")
+	}
+}
+
+func TestHistoryPrev_UnifiedBarReconstructsShell(t *testing.T) {
+	m := &model{
+		input: initInput(),
+		persState: PersistentState{
+			History: []HistoryEntry{
+				{Prefix: "sh", Command: "ls ."},
+			},
+		},
+		cmdPrefix:  prefixNone,
+		historyIdx: -1,
+	}
+
+	m.historyPrev()
+
+	if m.input.Value() != "!ls ." {
+		t.Errorf("input value = %q, want %q", m.input.Value(), "!ls .")
+	}
+}
+
+func TestHistoryNext_UnifiedBarReconstructs(t *testing.T) {
+	m := &model{
+		input: initInput(),
+		persState: PersistentState{
+			History: []HistoryEntry{
+				{Prefix: "jj", Command: "status"},
+				{Prefix: "jj", Command: "log"},
+			},
+		},
+		cmdPrefix:  prefixNone,
+		historyIdx: 1,
+	}
+
+	m.historyNext()
+
+	if m.input.Value() != "jj status" {
+		t.Errorf("input value = %q, want %q", m.input.Value(), "jj status")
+	}
+}
+
+func TestUpdateHistoryFilter_PrefixNone(t *testing.T) {
+	m := &model{
+		input:      initInput(),
+		cmdPrefix:  prefixNone,
+		historyIdx: -1,
+	}
+	m.input.SetValue("jj status")
+
+	m.updateHistoryFilter()
+
+	if m.historyFilterPrefix != "jj" {
+		t.Errorf("historyFilterPrefix = %q, want %q", m.historyFilterPrefix, "jj")
+	}
+}
+
+func TestUpdateHistoryFilter_PrefixNoneMidNavigationSkips(t *testing.T) {
+	m := &model{
+		input:               initInput(),
+		cmdPrefix:           prefixNone,
+		historyIdx:          2,
+		historyFilterPrefix: "jj",
+	}
+	m.input.SetValue("!ls .")
+
+	m.updateHistoryFilter()
+
+	if m.historyFilterPrefix != "jj" {
+		t.Errorf(
+			"historyFilterPrefix = %q, want %q (should not re-derive mid-flight)",
+			m.historyFilterPrefix,
+			"jj",
+		)
+	}
+}
+
+func TestUpdateHistoryFilter_PerVcsBarNoop(t *testing.T) {
+	m := &model{
+		input:               initInput(),
+		cmdPrefix:           prefixGit,
+		historyFilterPrefix: "old",
+	}
+	m.input.SetValue("status")
+
+	m.updateHistoryFilter()
+
+	if m.historyFilterPrefix != "old" {
+		t.Errorf("historyFilterPrefix = %q, want %q (unchanged)", m.historyFilterPrefix, "old")
 	}
 }

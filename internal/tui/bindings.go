@@ -162,31 +162,14 @@ var mainBindings = []binding{
 
 	// Cmd bar
 	{
-		key:        "G",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixGit) },
-		label:      "git",
-		desc:       "Open command bar (git)",
+		key:        ":",
+		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixNone) },
+		label:      "cmd",
+		desc:       "Open command bar",
+		hrd:        true,
 		section:    secCmdBar,
 		sideEffect: true,
 		order:      10,
-	},
-	{
-		key:        "J",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixJj) },
-		label:      "jj",
-		desc:       "Open command bar (jj)",
-		section:    secCmdBar,
-		sideEffect: true,
-		order:      20,
-	},
-	{
-		key:        "$",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixShell) },
-		label:      "sh",
-		desc:       "Open command bar (shell)",
-		section:    secCmdBar,
-		sideEffect: true,
-		order:      30,
 	},
 }
 
