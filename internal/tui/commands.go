@@ -64,7 +64,7 @@ func startExec(
 		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
 	}
 
-	if _, known := backend.ByName(prefix); known == nil {
+	if _, err := backend.ByName(prefix); err == nil {
 		args, shErr := shlex.Split(cmdStr)
 		if shErr != nil {
 			return nil, fmt.Errorf("parse command: %w", shErr)
