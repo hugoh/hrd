@@ -34,6 +34,8 @@ func forEachRepo(
 		repo, ok := repos[name]
 		if !ok {
 			// Repo not found — call fn synchronously (channel is buffered, won't block).
+			// Error is always nil here: forEachRepoChan's wrapper detects empty
+			// repo path and sends an error result to the channel, returning nil.
 			_ = workFn(ctx, config.Repo{}, name)
 
 			continue
