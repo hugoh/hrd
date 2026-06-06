@@ -26,7 +26,7 @@ func forEachRepo(
 	names []string,
 	concurrency int64,
 	workFn func(ctx context.Context, repo config.Repo, name string) error,
-) {
+) error {
 	sem := semaphore.NewWeighted(concurrency)
 	group, ctx := errgroup.WithContext(ctx)
 
@@ -50,7 +50,11 @@ func forEachRepo(
 		})
 	}
 
-	_ = group.Wait()
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("forEachRepo: %w", err)
+	}
+
+	return nil
 }
 
 // Result is the outcome for a single repo, sent through the results channel.
@@ -104,7 +108,10 @@ func forEachRepoChan[T any](
 	go func() {
 		defer close(results)
 
-		forEachRepo(ctx, repos, names, concurrency,
+		// forEachRepo returns an errgroup error (context cancellation from
+		// sem.Acquire). Individual repo results carry their own errors on
+		// the channel already, so there's no caller to notify here.
+		_ = forEachRepo(ctx, repos, names, concurrency,
 			func(ctx context.Context, repo config.Repo, name string) error {
 				if repo.Path == "" {
 					results <- errResult(name)
