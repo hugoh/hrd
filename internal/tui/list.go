@@ -88,7 +88,7 @@ func buildGroupItems(names []string, groups map[string]config.Group, totalRepos 
 		var desc string
 
 		switch name {
-		case labelAllCap:
+		case labelAllRepos:
 			desc = fmt.Sprintf("all %d repos", totalRepos)
 		case labelNew:
 			desc = "create a new group"

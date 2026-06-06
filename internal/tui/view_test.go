@@ -78,7 +78,7 @@ func TestViewGroupScreen(t *testing.T) {
 	m := testModel(func(m *model) {
 		m.screen = screenGroup
 		m.initGroupList()
-		m.groupList.SetItems([]list.Item{groupItem{name: labelAllCap}})
+		m.groupList.SetItems([]list.Item{groupItem{name: labelAllRepos}})
 		m.groupList.SetWidth(m.width)
 		m.groupList.SetHeight(m.contentHeight())
 	})

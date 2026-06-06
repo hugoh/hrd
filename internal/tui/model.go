@@ -107,13 +107,12 @@ const (
 
 	initInputW = 40
 
-	vcsGit      = "git"
-	vcsJj       = "jj"
-	labelAll    = "all"
-	labelAllCap = "[all]"
-	labelNew    = "[new...]"
-	keyEsc      = "esc"
-	keyEnter    = "enter"
+	vcsGit   = "git"
+	vcsJj    = "jj"
+	labelAll = "all"
+	labelNew = "[new...]"
+	keyEsc   = "esc"
+	keyEnter = "enter"
 
 	secNavigation = "Navigation"
 	secSelection  = "Selection"

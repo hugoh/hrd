@@ -248,7 +248,7 @@ func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
-	if selected == labelAllCap {
+	if selected == labelAllRepos {
 		m.groupFilter = ""
 	} else {
 		m.groupFilter = selected
@@ -836,7 +836,7 @@ func openGroupPopup(m *model, mode groupMode) {
 	switch mode {
 	case groupFilterMode:
 		options = make([]string, 0, 1+len(groupNames))
-		options = append(options, labelAllCap)
+		options = append(options, labelAllRepos)
 		options = append(options, groupNames...)
 	case groupAddMode:
 		options = make([]string, 0, len(groupNames)+1)
