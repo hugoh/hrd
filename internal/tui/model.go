@@ -36,6 +36,7 @@ const (
 	screenOutput
 	screenHelp
 	screenGroup
+	screenSelHistory
 )
 
 type mode int
@@ -158,6 +159,9 @@ type model struct {
 	groupMode         groupMode
 	groupNewInput     bool
 
+	selHistoryCursor int
+	alertMsg         string
+
 	commandOpen bool
 	input       textinput.Model
 	cmdPrefix   cmdPrefix
@@ -180,6 +184,7 @@ type model struct {
 	persState PersistentState
 }
 
+//nolint:funlen // model initialization with many setup steps
 func newModel(ctx context.Context, opts Options) (*model, error) {
 	statePath := opts.StatePath
 	if statePath == "" {
@@ -198,10 +203,21 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 
 	repoOrder := sortedRepoKeys(cfg.Repos)
 
-	selected := restoreSelected(persState.LastRepos, cfg.Repos)
-	if len(persState.LastRepos) == 0 {
-		for _, name := range repoOrder {
-			selected[name] = true
+	var selected map[string]bool
+
+	if len(opts.Repos) > 0 {
+		resolved, err := cfg.ResolveScope(opts.Repos)
+		if err != nil {
+			return nil, fmt.Errorf("new model: resolving repos: %w", err)
+		}
+
+		selected = makeSelectedMap(resolved)
+	} else {
+		selected = restoreSelected(persState.LastRepos, cfg.Repos)
+		if len(persState.LastRepos) == 0 {
+			for _, name := range repoOrder {
+				selected[name] = true
+			}
 		}
 	}
 
@@ -228,6 +244,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		historyIdx:  -1,
 	}
 
+	m.pushSelectionHistory()
 	m.initTable()
 	m.updateTableRows()
 	m.initInput()
@@ -321,6 +338,7 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 func (m *model) quit() {
+	m.pushSelectionHistory()
 	m.savePersState()
 	m.execCancelAll()
 }

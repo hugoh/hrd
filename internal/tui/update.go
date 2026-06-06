@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
@@ -80,6 +82,7 @@ func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 
 // --- Key messages -----------------------------------------------------------
 
+//nolint:cyclop // key dispatch with multiple screens
 func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+c" {
 		return m.handleCtrlC()
@@ -110,6 +113,8 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	case screenGroup:
 		return m.handleGroupKey(msg)
+	case screenSelHistory:
+		return m.handleSelHistoryKey(msg)
 	}
 
 	return m, nil
@@ -136,7 +141,7 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		m.output.SetContent("")
 
 		return m, nil
-	case screenHelp, screenGroup:
+	case screenHelp, screenGroup, screenSelHistory:
 		m.screen = screenMain
 
 		return m, nil
@@ -164,6 +169,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 
 	if m.modal == modalAlert {
 		m.modal = modalNone
+		m.alertMsg = ""
 
 		return m, nil
 	}
@@ -174,7 +180,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 		m.output.SetContent("")
 
 		return m, nil
-	case screenHelp, screenGroup:
+	case screenHelp, screenGroup, screenSelHistory:
 		m.groupNewInput = false
 		m.screen = screenMain
 
@@ -257,6 +263,7 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 
 	m.screen = screenMain
 	m.loading = true
+	m.pushSelectionHistory()
 	m.savePersState()
 
 	return m, loadStatusesCmd(m)
@@ -389,6 +396,7 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Clear alert on any key.
 	if m.modal == modalAlert {
 		m.modal = modalNone
+		m.alertMsg = ""
 	}
 
 	key := msg.String()
@@ -493,6 +501,7 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	}
 
 	m.updateTableRows()
+	m.pushSelectionHistory()
 	m.savePersState()
 
 	return m, nil
@@ -592,6 +601,116 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 	// runner.VCSSubcmd, not the current command-bar prefix.
 	// might be "sh" and would route through runner.Shell instead).
 	return execCmd(m, selected, "", subcmd)
+}
+
+func (m *model) pushSelectionHistory() {
+	current := sortedSelected(m.selected)
+	if len(m.persState.SelectionHistory) > 0 {
+		last := m.persState.SelectionHistory[0].Repos
+		if equalStringSlices(current, last) {
+			return
+		}
+	}
+
+	entry := SelectionEntry{
+		Timestamp: time.Now(),
+		Repos:     current,
+	}
+
+	m.persState.SelectionHistory = append([]SelectionEntry{entry}, m.persState.SelectionHistory...)
+	if len(m.persState.SelectionHistory) > selectionHistoryCap {
+		m.persState.SelectionHistory = m.persState.SelectionHistory[:selectionHistoryCap]
+	}
+}
+
+func openSelHistoryPopup(m *model) {
+	m.selHistoryCursor = 0
+	m.screen = screenSelHistory
+}
+
+func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	entries := m.persState.SelectionHistory
+	if len(entries) == 0 {
+		m.screen = screenMain
+
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "up", "k":
+		if m.selHistoryCursor > 0 {
+			m.selHistoryCursor--
+		}
+
+		return m, nil
+	case "down", "j":
+		if m.selHistoryCursor < len(entries)-1 {
+			m.selHistoryCursor++
+		}
+
+		return m, nil
+	case keyEnter:
+		return m.handleSelHistoryRestore(entries[m.selHistoryCursor])
+	}
+
+	return m, nil
+}
+
+func (m *model) handleSelHistoryRestore(entry SelectionEntry) (tea.Model, tea.Cmd) {
+	selected := make(map[string]bool)
+
+	var missing []string
+
+	for _, name := range entry.Repos {
+		if _, ok := m.cfg.Repos[name]; ok {
+			selected[name] = true
+		} else {
+			missing = append(missing, name)
+		}
+	}
+
+	if len(missing) > 0 {
+		m.modal = modalAlert
+		m.alertMsg = fmt.Sprintf("Warning: %d repo(s) no longer exist:\n%s",
+			len(missing), strings.Join(missing, "\n"))
+	}
+
+	m.selected = selected
+	m.mode = modeNormal
+	m.repoTable.SetStyles(tableStyles(false))
+	m.updateTableRows()
+	m.pushSelectionHistory()
+	m.savePersState()
+	m.screen = screenMain
+
+	return m, loadStatusesCmd(m)
+}
+
+func sortedSelected(selected map[string]bool) []string {
+	out := make([]string, 0, len(selected))
+	for name, sel := range selected {
+		if sel {
+			out = append(out, name)
+		}
+	}
+
+	sort.Strings(out)
+
+	return out
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
 }
 
 func openCommandBar(m *model, p cmdPrefix) {

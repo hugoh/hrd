@@ -238,3 +238,105 @@ func TestHelpContent(t *testing.T) {
 		t.Errorf("helpContent() missing Navigation, got %q", content)
 	}
 }
+
+func TestAlertContent(t *testing.T) {
+	m := &model{}
+
+	// Default when no alertMsg
+	content := m.alertContent()
+	if !strings.Contains(content, "No repos selected") {
+		t.Error("default alertContent should mention 'No repos selected'")
+	}
+
+	// Custom alertMsg
+	m.alertMsg = "Custom warning message"
+
+	content = m.alertContent()
+	if !strings.Contains(content, "Custom warning message") {
+		t.Error("alertContent with alertMsg should return the custom message")
+	}
+}
+
+func TestRepoCountLabel(t *testing.T) {
+	m := &model{}
+
+	if got := m.repoCountLabel(1); got != "1 repo" {
+		t.Errorf("repoCountLabel(1) = %q, want %q", got, "1 repo")
+	}
+
+	if got := m.repoCountLabel(3); got != "3 repos" {
+		t.Errorf("repoCountLabel(3) = %q, want %q", got, "3 repos")
+	}
+}
+
+func TestSelHistoryView(t *testing.T) {
+	m := &model{
+		screen: screenSelHistory,
+		width:  80,
+		height: 30,
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b", "c"}},
+				{Repos: []string{"d"}},
+			},
+		},
+	}
+	m.initTable()
+
+	view := m.selHistoryView()
+	if view == "" {
+		t.Fatal("selHistoryView() returned empty")
+	}
+
+	if !strings.Contains(view, "Selection History") {
+		t.Error("selHistoryView should show 'Selection History' header")
+	}
+
+	if !strings.Contains(view, "3 repos") {
+		t.Error("selHistoryView should show repo count")
+	}
+}
+
+func TestSelHistoryViewEmpty(t *testing.T) {
+	m := &model{
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+
+	view := m.selHistoryView()
+	if view != "" {
+		t.Error("selHistoryView with no entries should be empty")
+	}
+}
+
+func TestWrapString(t *testing.T) {
+	// Short string — no wrapping
+	got := wrapString("short", 10)
+	if len(got) != 1 || got[0] != "short" {
+		t.Errorf("wrapString('short', 10) = %q, want [short]", got)
+	}
+
+	// Wraps at comma boundary
+	got = wrapString("a, b, c, d, e", 10)
+	if len(got) == 1 {
+		t.Fatal("expected wrapping")
+	}
+
+	// All lines should be non-empty and ≤ max
+	for _, line := range got {
+		if len(line) > 10 {
+			t.Errorf("line %q exceeds max width 10", line)
+		}
+	}
+
+	// No separator — wraps at space
+	got = wrapString("aaaa bbbb cccc", 8)
+	if len(got) < 2 {
+		t.Error("expected multi-line wrap")
+	}
+
+	for _, line := range got {
+		if len(line) > 8 {
+			t.Errorf("line %q exceeds max width 8", line)
+		}
+	}
+}

@@ -312,3 +312,14 @@ func TestTableRepos_EmptyWhenNoneSelected(t *testing.T) {
 		t.Errorf("tableRepos() = %v, want empty", got)
 	}
 }
+
+func TestMakeSelectedMap(t *testing.T) {
+	got := makeSelectedMap([]string{"b", "a"})
+	if !got["a"] || !got["b"] {
+		t.Error("makeSelectedMap should set all names to true")
+	}
+
+	if got["c"] {
+		t.Error("makeSelectedMap should not include names not in input")
+	}
+}

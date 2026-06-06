@@ -11,7 +11,11 @@ import (
 	"github.com/hugoh/hrd/internal/ui"
 )
 
-const progressBarW = 10
+const (
+	progressBarW    = 10
+	historyIndent   = 4
+	historyMinWrapW = 10
+)
 
 //nolint:gochecknoglobals // effectively constant, progress bar model
 var progressModel = progress.New(
@@ -35,6 +39,8 @@ func (m *model) View() tea.View {
 		content = m.helpView()
 	case screenGroup:
 		content = m.groupView()
+	case screenSelHistory:
+		content = m.selHistoryView()
 	}
 
 	v := tea.NewView(content)
@@ -61,10 +67,7 @@ func (m *model) mainView() string {
 			Height(m.contentHeight()).
 			Align(lipgloss.Center).
 			AlignVertical(lipgloss.Center).
-			Render(
-				styleWarn.Render("No repos selected") + "\n" +
-					ui.Muted("Select a group with @ or specific repos with x"),
-			)
+			Render(m.alertContent())
 	case len(m.repoTable.Rows()) == 0 && m.mode != modeSelect:
 		tableContent = m.emptyTableView()
 	default:
@@ -93,6 +96,15 @@ func (m *model) emptyTableView() string {
 		Align(lipgloss.Center).
 		Foreground(lipgloss.Color("8")).
 		Render(msg)
+}
+
+func (m *model) alertContent() string {
+	if m.alertMsg != "" {
+		return styleWarn.Render(m.alertMsg)
+	}
+
+	return styleWarn.Render("No repos selected") + "\n" +
+		ui.Muted("Select a group with @ or specific repos with x")
 }
 
 func (m *model) renderHeader() string {
@@ -321,6 +333,112 @@ func (m *model) renderGroupItems() []string {
 	}
 
 	return items
+}
+
+//nolint:funlen // detailed entry rendering with repo list wrapping
+func (m *model) selHistoryView() string {
+	entries := m.persState.SelectionHistory
+	if len(entries) == 0 {
+		return ""
+	}
+
+	ch := m.contentHeight()
+
+	wrapW := max(m.width-historyIndent, historyMinWrapW)
+
+	type entryMeta struct{ start, count int }
+
+	var (
+		lines []string
+		meta  []entryMeta
+	)
+
+	for i, e := range entries {
+		start := len(lines)
+
+		marker := "  "
+		if i == m.selHistoryCursor {
+			marker = "▸ "
+		}
+
+		ts := e.Timestamp.Format("Jan 02 15:04")
+		header := fmt.Sprintf("%s%s  %s", marker, ui.Muted(ts), m.repoCountLabel(len(e.Repos)))
+		lines = append(lines, header)
+
+		repoStr := strings.Join(e.Repos, ", ")
+		for _, w := range wrapString(repoStr, wrapW) {
+			lines = append(lines, "  "+w)
+		}
+
+		if i < len(entries)-1 {
+			lines = append(lines, "")
+		}
+
+		meta = append(meta, entryMeta{start, len(lines) - start})
+	}
+
+	var visible []string
+
+	if len(lines) <= ch {
+		visible = lines
+	} else {
+		cursorStart := meta[m.selHistoryCursor].start
+
+		off := cursorStart
+		if off+ch > len(lines) {
+			off = len(lines) - ch
+		}
+
+		visible = lines[off : off+ch]
+	}
+
+	content := strings.Join(visible, "\n")
+	header := styleHeader.Render(" Selection History ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+}
+
+func wrapString(s string, maxW int) []string {
+	if len(s) <= maxW {
+		return []string{s}
+	}
+
+	var out []string
+
+	for len(s) > 0 {
+		if len(s) <= maxW {
+			out = append(out, s)
+
+			break
+		}
+
+		idx := strings.LastIndex(s[:maxW], ", ")
+		if idx < 0 {
+			idx = strings.LastIndex(s[:maxW], " ")
+		}
+
+		if idx < 0 {
+			idx = maxW
+		} else {
+			idx += 2 // include separator
+		}
+
+		out = append(out, s[:idx])
+		s = s[idx:]
+		s = strings.TrimLeft(s, " ")
+	}
+
+	return out
+}
+
+func (*model) repoCountLabel(n int) string {
+	if n == 1 {
+		return "1 repo"
+	}
+
+	return fmt.Sprintf("%d repos", n)
 }
 
 func buildHelp(bindings []binding) string {

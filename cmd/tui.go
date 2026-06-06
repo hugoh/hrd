@@ -26,10 +26,16 @@ func tuiCmd(cfgPath *string) *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			repos := cmd.StringSlice(cmdReposFlag)
+
+			if a := cmd.Args(); a != nil {
+				repos = append(repos, a.Slice()...)
+			}
+
 			return tui.Run(ctx, tui.Options{
 				ConfigPath: *cfgPath,
 				Group:      cmd.String("group"),
-				Repos:      cmd.StringSlice("repos"),
+				Repos:      repos,
 			})
 		},
 	}

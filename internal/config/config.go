@@ -153,7 +153,7 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 		}
 	}
 
-	return c.validatedRepos(names)
+	return c.ValidatedRepos(names)
 }
 
 // AddRepo adds or updates a repo entry. The name is derived from the
@@ -224,6 +224,18 @@ func (c *Config) RemoveRepoFromGroup(name, group string) {
 	}
 }
 
+// ValidatedRepos checks that all names exist in the config and returns them.
+func (c *Config) ValidatedRepos(names []string) ([]string, error) {
+	for _, name := range names {
+		lookupName := stripGroupPrefix(name)
+		if _, ok := c.Repos[lookupName]; !ok {
+			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
+		}
+	}
+
+	return names, nil
+}
+
 func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
@@ -265,15 +277,4 @@ func (c *Config) groupRepos(name string) ([]string, bool) {
 	}
 
 	return nil, false
-}
-
-func (c *Config) validatedRepos(names []string) ([]string, error) {
-	for _, name := range names {
-		lookupName := stripGroupPrefix(name)
-		if _, ok := c.Repos[lookupName]; !ok {
-			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
-		}
-	}
-
-	return names, nil
 }

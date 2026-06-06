@@ -134,6 +134,15 @@ func restoreSelected(lastRepos []string, repos map[string]config.Repo) map[strin
 	return selected
 }
 
+func makeSelectedMap(names []string) map[string]bool {
+	selected := make(map[string]bool, len(names))
+	for _, n := range names {
+		selected[n] = true
+	}
+
+	return selected
+}
+
 func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) (string, error) {
 	if optGroup != "" {
 		stripped := strings.TrimPrefix(optGroup, "@")

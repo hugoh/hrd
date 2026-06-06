@@ -3,15 +3,11 @@ package cmd
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/tui"
 	"github.com/urfave/cli/v3"
 )
-
-var errUnknownCommand = errors.New("unknown command")
 
 const cmdNameHRD = "hrd"
 
@@ -42,12 +38,15 @@ func NewApp() *cli.Command {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			if args := cmd.Args(); args != nil && args.Len() > 0 {
-				return fmt.Errorf("%w: %s", errUnknownCommand, args.First())
+			var args []string
+
+			if a := cmd.Args(); a != nil {
+				args = a.Slice()
 			}
 
 			return runTUI(ctx, tui.Options{
 				ConfigPath: cfgPath,
+				Repos:      args,
 			})
 		},
 		Commands: []*cli.Command{

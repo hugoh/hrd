@@ -154,6 +154,11 @@ var mainBindings = []binding{
 
 		return m, nil
 	}, label: "help", desc: "Toggle this help", hrd: true, section: secGeneral, order: 20},
+	{key: "H", handler: func(m *model) (tea.Model, tea.Cmd) {
+		openSelHistoryPopup(m)
+
+		return m, nil
+	}, label: "history", desc: "Restore a previous repo selection", hrd: true, section: secGeneral, order: 25},
 
 	// Cmd bar
 	{

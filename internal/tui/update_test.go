@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -1194,6 +1195,211 @@ func TestHandleOutputKeyQ(t *testing.T) {
 
 	if cmd != nil {
 		t.Error("expected nil cmd when closing output with q")
+	}
+}
+
+func TestSortedSelected(t *testing.T) {
+	selected := map[string]bool{"c": true, "a": true, "b": false}
+	got := sortedSelected(selected)
+
+	want := []string{"a", "c"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sortedSelected() = %v, want %v", got, want)
+	}
+}
+
+func TestEqualStringSlices(t *testing.T) {
+	if !equalStringSlices([]string{"a", "b"}, []string{"a", "b"}) {
+		t.Error("equalStringSlices should return true for equal slices")
+	}
+
+	if equalStringSlices([]string{"a"}, []string{"a", "b"}) {
+		t.Error("equalStringSlices should return false for different lengths")
+	}
+
+	if equalStringSlices([]string{"a", "b"}, []string{"a", "c"}) {
+		t.Error("equalStringSlices should return false for different elements")
+	}
+}
+
+func TestPushSelectionHistory(t *testing.T) {
+	m := &model{
+		selected:  map[string]bool{"a": true, "b": true},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+
+	m.pushSelectionHistory()
+
+	if len(m.persState.SelectionHistory) != 1 {
+		t.Fatalf("SelectionHistory length = %d, want 1", len(m.persState.SelectionHistory))
+	}
+
+	entry := m.persState.SelectionHistory[0]
+	if !reflect.DeepEqual(entry.Repos, []string{"a", "b"}) {
+		t.Errorf("entry.Repos = %v, want [a b]", entry.Repos)
+	}
+
+	if entry.Timestamp.IsZero() {
+		t.Error("entry.Timestamp should not be zero")
+	}
+
+	// Push identical state — should be deduped
+	m.pushSelectionHistory()
+
+	if len(m.persState.SelectionHistory) != 1 {
+		t.Errorf("SelectionHistory length = %d, want 1 (dedup)", len(m.persState.SelectionHistory))
+	}
+
+	// Push different state
+	m.selected = map[string]bool{"a": true}
+	m.pushSelectionHistory()
+
+	if len(m.persState.SelectionHistory) != 2 {
+		t.Errorf("SelectionHistory length = %d, want 2", len(m.persState.SelectionHistory))
+	}
+}
+
+func TestOpenSelHistoryPopup(t *testing.T) {
+	m := &model{}
+	openSelHistoryPopup(m)
+
+	if m.screen != screenSelHistory {
+		t.Errorf("screen = %d, want %d", m.screen, screenSelHistory)
+	}
+
+	if m.selHistoryCursor != 0 {
+		t.Errorf("selHistoryCursor = %d, want 0", m.selHistoryCursor)
+	}
+}
+
+func TestHandleSelHistoryKeyNavigation(t *testing.T) {
+	m := &model{
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b"}},
+				{Repos: []string{"c"}},
+				{Repos: []string{"d"}},
+			},
+		},
+	}
+	m.initTable()
+
+	// Initial cursor
+	if m.selHistoryCursor != 0 {
+		t.Fatalf("initial cursor = %d, want 0", m.selHistoryCursor)
+	}
+
+	// Navigate down
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	if m.selHistoryCursor != 1 {
+		t.Errorf("cursor after down = %d, want 1", m.selHistoryCursor)
+	}
+
+	// Navigate up
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	if m.selHistoryCursor != 0 {
+		t.Errorf("cursor after up = %d, want 0", m.selHistoryCursor)
+	}
+
+	// k/j navigation
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'j'})
+	if m.selHistoryCursor != 1 {
+		t.Errorf("cursor after j = %d, want 1", m.selHistoryCursor)
+	}
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'k'})
+	if m.selHistoryCursor != 0 {
+		t.Errorf("cursor after k = %d, want 0", m.selHistoryCursor)
+	}
+
+	// Edge: up at top stays at 0
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	if m.selHistoryCursor != 0 {
+		t.Errorf("cursor at top = %d, want 0", m.selHistoryCursor)
+	}
+}
+
+func TestHandleSelHistoryKeyEmpty(t *testing.T) {
+	m := &model{
+		screen:    screenSelHistory,
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+	m.initTable()
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d (should return to main when empty)", m.screen, screenMain)
+	}
+}
+
+func TestHandleSelHistoryRestore(t *testing.T) {
+	m := &model{
+		ctx:       context.Background(),
+		repoOrder: []string{"a", "b", "c"},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"a": {},
+				"b": {},
+				"c": {},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+		mode:      modeSingle,
+	}
+	m.initTable()
+
+	entry := SelectionEntry{Repos: []string{"a", "c"}}
+	_, cmd := m.handleSelHistoryRestore(entry)
+
+	if m.mode != modeNormal {
+		t.Error("mode should be modeNormal after restore")
+	}
+
+	if !m.selected["a"] || !m.selected["c"] || m.selected["b"] {
+		t.Error("restore should set correct selected repos")
+	}
+
+	if m.screen != screenMain {
+		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	}
+
+	if cmd == nil {
+		t.Error("expected non-nil cmd (refresh) after restore")
+	}
+
+	if m.modal != modalNone {
+		t.Error("modal should not be set when all repos exist")
+	}
+}
+
+func TestHandleSelHistoryRestoreMissingRepo(t *testing.T) {
+	m := &model{
+		ctx:       context.Background(),
+		repoOrder: []string{"a"},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"a": {},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+	m.initTable()
+
+	entry := SelectionEntry{Repos: []string{"a", "stale_repo"}}
+	_, _ = m.handleSelHistoryRestore(entry)
+
+	if m.modal != modalAlert {
+		t.Error("modal should be modalAlert when repos are missing")
+	}
+
+	if m.alertMsg == "" {
+		t.Error("alertMsg should be set when repos are missing")
+	}
+
+	if !m.selected["a"] {
+		t.Error("existing repos should still be selected")
 	}
 }
 
