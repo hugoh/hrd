@@ -676,7 +676,7 @@ func TestHandleSelectAll(t *testing.T) {
 	}
 }
 
-func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
+func TestMainKeyXTogglesSelectMode(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a"},
 		selected:  map[string]bool{"a": true},
@@ -686,9 +686,9 @@ func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	if m.mode != modeSelect {
-		t.Error("mode should be modeSelect after space (entered select mode)")
+		t.Error("mode should be modeSelect after pressing x (entered select mode)")
 	}
 
 	if m.mode == modeSingle {
@@ -699,13 +699,13 @@ func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
 		t.Error("expected nil cmd")
 	}
 
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	if m.mode != modeSelect {
-		t.Error("mode should remain modeSelect after another space (stays in select mode)")
+		t.Error("mode should remain modeSelect after another x (stays in select mode)")
 	}
 
 	if m.selected["a"] {
-		t.Error("repo 'a' should be deselected after space in select mode")
+		t.Error("repo 'a' should be deselected after x in select mode")
 	}
 
 	if cmd != nil {
@@ -722,7 +722,7 @@ func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
 	}
 }
 
-func TestMainKeySpaceSelectsOne(t *testing.T) {
+func TestMainKeyXSelectsOne(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true, "b": false},
@@ -733,9 +733,9 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	if m.selected["a"] {
-		t.Error("repo 'a' should be deselected after space in select mode")
+		t.Error("repo 'a' should be deselected after x in select mode")
 	}
 
 	if m.cursor != 1 {
@@ -746,9 +746,9 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 		t.Error("expected nil cmd")
 	}
 
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	if !m.selected["b"] {
-		t.Error("repo 'b' should be selected after second space")
+		t.Error("repo 'b' should be selected after second x")
 	}
 
 	if cmd != nil {
@@ -756,7 +756,7 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 	}
 }
 
-func TestMainKeyXSingleToggle(t *testing.T) {
+func TestMainKeySSingleToggle(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true},
@@ -766,9 +766,9 @@ func TestMainKeyXSingleToggle(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 's'})
 	if m.mode != modeSingle {
-		t.Error("mode should be modeSingle after pressing x")
+		t.Error("mode should be modeSingle after pressing s")
 	}
 
 	if m.mode == modeSelect {
@@ -779,9 +779,9 @@ func TestMainKeyXSingleToggle(t *testing.T) {
 		t.Error("expected nil cmd")
 	}
 
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 's'})
 	if m.mode == modeSingle {
-		t.Error("mode should be modeNormal after pressing x again")
+		t.Error("mode should be modeNormal after pressing s again")
 	}
 
 	if cmd != nil {

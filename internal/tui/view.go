@@ -63,7 +63,7 @@ func (m *model) mainView() string {
 			AlignVertical(lipgloss.Center).
 			Render(
 				styleWarn.Render("No repos selected") + "\n" +
-					ui.Muted("Select a group with @ or specific repos with Space"),
+					ui.Muted("Select a group with @ or specific repos with x"),
 			)
 	case len(m.repoTable.Rows()) == 0 && m.mode != modeSelect:
 		tableContent = m.emptyTableView()
@@ -82,7 +82,7 @@ func (m *model) mainView() string {
 }
 
 func (m *model) emptyTableView() string {
-	msg := "No repos selected\nSelect a group with @ or specific repos with Space"
+	msg := "No repos selected\nSelect a group with @ or specific repos with x"
 	if len(m.repoOrder) == 0 {
 		msg = "No repos configured\nUse `hrd repo add <path>` to add one"
 	}
@@ -106,7 +106,7 @@ func (m *model) renderHeader() string {
 	case modeSelect:
 		left += styleSelectMarker.Render(" x:select")
 	case modeSingle:
-		left += styleSelectMarker.Render(" x:single")
+		left += styleSelectMarker.Render(" s:single")
 	case modeNormal:
 	}
 

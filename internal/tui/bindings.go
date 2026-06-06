@@ -34,13 +34,13 @@ var mainBindings = []binding{
 
 	// Selection
 	{
-		key: "space", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
+		key: "x", displayKey: "x", handler: func(m *model) (tea.Model, tea.Cmd) {
 			if m.mode == modeSelect {
 				return m.handleSelectOne()
 			}
 
 			return m.handleSelectToggle()
-		}, label: "select", desc: "Toggle selection mode / select one", hrd: true,
+		}, label: "select", desc: "Toggle selection mode / toggle repo", hrd: true,
 		section: secSelection, order: 10,
 	},
 	{key: "enter", handler: func(m *model) (tea.Model, tea.Cmd) {
@@ -60,7 +60,7 @@ var mainBindings = []binding{
 		order:   20,
 	},
 	{
-		key:     "x",
+		key:     "s",
 		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleSingleToggle() },
 		label:   "single",
 		desc:    "Focus commands on one repo",
@@ -90,7 +90,7 @@ var mainBindings = []binding{
 
 	// Commands
 	{
-		key:     "s",
+		key:     "S",
 		handler: func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "status", false) },
 		label:   "status",
 		desc:    "Run status on selected",
@@ -175,7 +175,7 @@ var mainBindings = []binding{
 		order:      20,
 	},
 	{
-		key:        "S",
+		key:        "$",
 		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixShell) },
 		label:      "sh",
 		desc:       "Open command bar (shell)",

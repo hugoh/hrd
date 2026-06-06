@@ -208,8 +208,8 @@ func TestEmptyTableViewNothingSelected(t *testing.T) {
 		t.Errorf("empty mainView() should mention @ key, got %q", view)
 	}
 
-	if !strings.Contains(view, "Space") {
-		t.Errorf("empty mainView() should mention Space key, got %q", view)
+	if !strings.Contains(view, "x") {
+		t.Errorf("empty mainView() should mention x key, got %q", view)
 	}
 }
 
@@ -221,8 +221,8 @@ func TestRenderHeaderSingleMode(t *testing.T) {
 	})
 
 	view := m.mainView()
-	if !strings.Contains(view, "x:single") {
-		t.Errorf("mainView() should show 'x:single' indicator in single mode, got %q", view)
+	if !strings.Contains(view, "s:single") {
+		t.Errorf("mainView() should show 's:single' indicator in single mode, got %q", view)
 	}
 }
 
