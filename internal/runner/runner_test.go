@@ -40,7 +40,8 @@ func (*gitBackend) Detect(path string) (bool, error) {
 func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
-func (*gitBackend) SubcommandArgs(op string) []string { return []string{op} }
+func (*gitBackend) SubcommandArgs(op string) []string               { return []string{op} }
+func (*gitBackend) Subcommands(_ context.Context) ([]string, error) { return nil, nil }
 func (*gitBackend) Run(
 	ctx context.Context,
 	path string,

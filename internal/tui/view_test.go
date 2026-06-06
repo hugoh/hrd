@@ -125,10 +125,10 @@ func TestOutputViewExecuting(t *testing.T) {
 }
 
 func TestRenderInputLine(t *testing.T) {
-	m := &model{cmdPrefix: prefixGit}
+	m := &model{cmdPrefix: prefixNone}
 	m.initInput()
 
-	assert.Contains(t, m.renderInputLine(), "[git]")
+	assert.Contains(t, m.renderInputLine(), ":")
 }
 
 func TestRenderInputLineShell(t *testing.T) {

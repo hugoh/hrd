@@ -14,7 +14,6 @@ import (
 )
 
 const (
-	cmdNameGit   = "git"
 	cmdNameShell = "shell"
 
 	cmdReposFlag = "repos"
@@ -117,30 +116,16 @@ func cmdArgs(cmd *cli.Command, cfg *config.Config) []string {
 	return cmdArgsFilter(cmd.Args().Slice(), cfg.Repos, cfg.Groups)
 }
 
-func gitCmd(cfgPath *string) *cli.Command {
+func vcsCmd(cfgPath *string, name string) *cli.Command {
 	return &cli.Command{
-		Name:            cmdNameGit,
-		Usage:           "run a git command across repos",
-		ArgsUsage:       "[repo|group...] -- <git args>",
+		Name:            name,
+		Usage:           fmt.Sprintf("run a %s command across repos", name),
+		ArgsUsage:       "[repo|group...] -- <args>",
 		SkipFlagParsing: false,
 		Flags:           dispatchFlags,
 		ShellComplete:   repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runDispatch(ctx, cmd, cfgPath, cmdNameGit)
-		},
-	}
-}
-
-func jjCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:            "jj",
-		Usage:           "run a jj command across repos",
-		ArgsUsage:       "[repo|group...] -- <jj args>",
-		SkipFlagParsing: false,
-		Flags:           dispatchFlags,
-		ShellComplete:   repoGroupCompleter(cfgPath),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runDispatch(ctx, cmd, cfgPath, "jj")
+			return runDispatch(ctx, cmd, cfgPath, name)
 		},
 	}
 }

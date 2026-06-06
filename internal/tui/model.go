@@ -66,8 +66,6 @@ type cmdPrefix int
 
 const (
 	prefixNone cmdPrefix = iota
-	prefixGit
-	prefixJj
 	prefixShell
 	numPrefixes
 )
@@ -81,8 +79,6 @@ var vcsSubcommands = []string{"status", "diff", "log", "fetch", "pull", "push"}
 //nolint:gochecknoglobals // effectively constant, prefix label lookup
 var prefixLabels = [numPrefixes]string{
 	"",
-	vcsGit,
-	vcsJj,
 	"sh",
 }
 
@@ -107,8 +103,6 @@ const (
 
 	initInputW = 40
 
-	vcsGit   = "git"
-	vcsJj    = "jj"
 	labelAll = "all"
 	labelNew = "[new...]"
 	keyEsc   = "esc"
@@ -172,8 +166,7 @@ type model struct {
 	cmdPrefix           cmdPrefix
 	historyIdx          int
 	historyFilterPrefix string
-	gitCompletions      []string
-	jjCompletions       []string
+	vcsCompletions      map[string][]string
 
 	executing      bool
 	execSideEffect bool

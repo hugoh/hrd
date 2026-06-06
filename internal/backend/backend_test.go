@@ -109,10 +109,11 @@ type mockBackend struct {
 	detect   func(path string) (bool, error)
 }
 
-func (m *mockBackend) Name() string                     { return m.name }
-func (m *mockBackend) Priority() int                    { return m.priority }
-func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
-func (*mockBackend) SubcommandArgs(op string) []string  { return []string{op} }
+func (m *mockBackend) Name() string                                  { return m.name }
+func (m *mockBackend) Priority() int                                 { return m.priority }
+func (m *mockBackend) Detect(path string) (bool, error)              { return m.detect(path) }
+func (*mockBackend) SubcommandArgs(op string) []string               { return []string{op} }
+func (*mockBackend) Subcommands(_ context.Context) ([]string, error) { return nil, nil }
 
 // withCleanRegistry resets the global registry to a clean state and restores it
 // on test cleanup. Registers the given backends on the clean registry.

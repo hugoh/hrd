@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/google/shlex"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
@@ -59,24 +60,25 @@ func startExec(
 	prefix, cmdStr string,
 	concurrency int64,
 ) (<-chan runner.Result, error) {
-	switch prefix {
-	case vcsGit, vcsJj:
-		args, err := shlex.Split(cmdStr)
-		if err != nil {
-			return nil, fmt.Errorf("parse command: %w", err)
+	if prefix == "" {
+		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
+	}
+
+	if _, known := backend.ByName(prefix); known == nil {
+		args, shErr := shlex.Split(cmdStr)
+		if shErr != nil {
+			return nil, fmt.Errorf("parse command: %w", shErr)
 		}
 
-		res, err := runner.Dispatch(ctx, repos, selected, prefix, args, concurrency)
-		if err != nil {
-			return nil, fmt.Errorf("dispatch: %w", err)
+		res, dispatchErr := runner.Dispatch(ctx, repos, selected, prefix, args, concurrency)
+		if dispatchErr != nil {
+			return nil, fmt.Errorf("dispatch: %w", dispatchErr)
 		}
 
 		return res, nil
-	case "":
-		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
-	default:
-		return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 	}
+
+	return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 }
 
 // execCmd starts execution with the given prefix and command string.

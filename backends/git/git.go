@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -65,6 +66,44 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 
 func (*Backend) SubcommandArgs(op string) []string {
 	return []string{op}
+}
+
+// Subcommands shells out to git help -a and returns available subcommands.
+func (*Backend) Subcommands(ctx context.Context) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "git", "help", "-a").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git help: %w", err)
+	}
+
+	return parseGitCmdList(string(out)), nil
+}
+
+func parseGitCmdList(help string) []string {
+	seen := make(map[string]bool)
+
+	var cmds []string
+
+	for line := range strings.SplitSeq(help, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if !strings.HasPrefix(line, "   ") && !strings.HasPrefix(line, "\t") {
+			continue
+		}
+
+		name, _, _ := strings.Cut(trimmed, " ")
+
+		if !seen[name] {
+			seen[name] = true
+			cmds = append(cmds, name)
+		}
+	}
+
+	slices.Sort(cmds)
+
+	return cmds
 }
 
 // Run executes arbitrary git args in path.

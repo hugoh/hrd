@@ -1,168 +1,12 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestParseGitCommands(t *testing.T) {
-	sample := `See 'git help <command>' to read about a specific subcommand
-
-Main Porcelain Commands
-   add                     Add file contents to the index
-   branch                  List, create, or delete branches
-   checkout                Switch branches or restore working tree files
-   commit                  Record changes to the repository
-   diff                    Show changes between commits, commit and working tree, etc
-   fetch                   Download objects and refs from another repository
-   log                     Show commit logs
-   merge                   Join two or more development histories together
-   pull                    Fetch from and integrate with another repository or a local branch
-   push                    Update remote refs along with associated objects
-   status                  Show the working tree status
-
-Ancillary Commands / Manipulators
-   config                  Get and set repository or global options
-   help                    Display help information about Git
-   mergetool               Run merge conflict resolution tools to resolve merge conflicts
-`
-
-	got := parseGitCommands(sample)
-	want := []string{
-		"git add", "git branch", "git checkout", "git commit",
-		"git config", "git diff", "git fetch", "git help",
-		"git log", "git merge", "git mergetool", "git pull",
-		"git push", "git status",
-	}
-
-	require.Len(t, got, len(want))
-	assert.Equal(t, want, got)
-}
-
-func TestParseGitCommandsEmpty(t *testing.T) {
-	assert.Empty(t, parseGitCommands(""))
-}
-
-func TestParseGitCommandsNoSections(t *testing.T) {
-	assert.Empty(t, parseGitCommands("Just some text\nNo indented commands\n"))
-}
-
-func TestParseGitCommandsDeduplicates(t *testing.T) {
-	got := parseGitCommands("   status\n   log")
-	require.Len(t, got, 2)
-	assert.Equal(t, []string{"git log", "git status"}, got)
-}
-
-func TestParseGitCommandsTabIndent(t *testing.T) {
-	got := parseGitCommands("\tstatus		Show status\n\tlog		Show log")
-	require.Len(t, got, 2)
-}
-
-func jjSampleCompletion() string {
-	return `
-_jj() {
-    local i cur prev opts cmd
-    COMPREPLY=()
-    case "${cmd},${i}" in
-        ",$1")
-            cmd="jj"
-            ;;
-        jj,abandon)
-            cmd="jj__subcmd__abandon"
-            ;;
-        jj,bookmark)
-            cmd="jj__subcmd__bookmark"
-            ;;
-        jj,commit)
-            cmd="jj__subcmd__commit"
-            ;;
-        jj,describe)
-            cmd="jj__subcmd__describe"
-            ;;
-        jj,diff)
-            cmd="jj__subcmd__diff"
-            ;;
-        jj,git)
-            cmd="jj__subcmd__git"
-            ;;
-        jj,log)
-            cmd="jj__subcmd__log"
-            ;;
-        jj,new)
-            cmd="jj__subcmd__new"
-            ;;
-        jj,rebase)
-            cmd="jj__subcmd__rebase"
-            ;;
-        jj,status)
-            cmd="jj__subcmd__status"
-            ;;
-        jj,b)
-            cmd="jj__subcmd__bookmark__b"
-            ;;
-    esac
-}
-`
-}
-
-func TestParseJjCommands(t *testing.T) {
-	got := parseJjCommands(jjSampleCompletion())
-	want := []string{
-		"jj abandon", "jj b", "jj bookmark", "jj commit",
-		"jj describe", "jj diff", "jj git", "jj log",
-		"jj new", "jj rebase", "jj status",
-	}
-
-	require.Len(t, got, len(want))
-	assert.Equal(t, want, got)
-}
-
-func TestParseJjCommandsAliases(t *testing.T) {
-	sample := `
-        jj,status)
-                cmd="jj__subcmd__status"
-        jj,st)
-                cmd="jj__subcmd__status__st"
-        jj,diff)
-                cmd="jj__subcmd__diff"
-        jj,d)
-                cmd="jj__subcmd__diff__d"
-`
-
-	got := parseJjCommands(sample)
-	assert.Len(t, got, 4)
-}
-
-func TestParseJjCommandsEmpty(t *testing.T) {
-	assert.Empty(t, parseJjCommands(""))
-}
-
-func TestParseJjCommandsNoEntries(t *testing.T) {
-	assert.Empty(t, parseJjCommands("some random bash code\nno jj entries here\n"))
-}
-
-func TestParseJjCommandsDeduplicates(t *testing.T) {
-	input := `        jj,status)
-                cmd="x"
-        jj,status)
-                cmd="y"
-        jj,log)
-                cmd="z"
-`
-
-	got := parseJjCommands(input)
-	assert.Len(t, got, 2)
-}
-
-func TestParseJjCommandsPrefixFormat(t *testing.T) {
-	cmds := parseJjCommands("\n        jj,status)\n")
-	require.Len(t, cmds, 1)
-	assert.Equal(t, "jj status", cmds[0])
-}
 
 func TestSuggestionsActive(t *testing.T) {
 	m := &model{}
@@ -189,7 +33,9 @@ func TestSuggestionsActive(t *testing.T) {
 
 func TestUpdateCompletions_GitPrefix(t *testing.T) {
 	m := &model{
-		gitCompletions: []string{"git status", "git log", "git pull", "git push"},
+		vcsCompletions: map[string][]string{
+			"git": {"git status", "git log", "git pull", "git push"},
+		},
 	}
 	m.initInput()
 
@@ -214,7 +60,9 @@ func TestUpdateCompletions_GitPrefix(t *testing.T) {
 
 func TestUpdateCompletions_JjPrefix(t *testing.T) {
 	m := &model{
-		jjCompletions: []string{"jj status", "jj log", "jj new", "jj describe"},
+		vcsCompletions: map[string][]string{
+			"jj": {"jj status", "jj log", "jj new", "jj describe"},
+		},
 	}
 	m.initInput()
 
@@ -230,8 +78,10 @@ func TestUpdateCompletions_JjPrefix(t *testing.T) {
 
 func TestUpdateCompletions_ShellPrefixNoop(t *testing.T) {
 	m := &model{
-		gitCompletions: []string{"git status"},
-		jjCompletions:  []string{"jj status"},
+		vcsCompletions: map[string][]string{
+			"git": {"git status"},
+			"jj":  {"jj status"},
+		},
 	}
 	m.initInput()
 
@@ -245,12 +95,14 @@ func newModelWithCompletions(gitCmds, jjCmds []string) *model {
 	m := &model{}
 	m.initInput()
 
+	m.vcsCompletions = make(map[string][]string)
+
 	if gitCmds != nil {
-		m.gitCompletions = gitCmds
+		m.vcsCompletions["git"] = gitCmds
 	}
 
 	if jjCmds != nil {
-		m.jjCompletions = jjCmds
+		m.vcsCompletions["jj"] = jjCmds
 	}
 
 	return m
@@ -355,7 +207,7 @@ func TestUpdateCompletions_PartialPrefixJj(t *testing.T) {
 }
 
 func TestUpdateCompletions_EmptyCompletions(t *testing.T) {
-	m := &model{gitCompletions: []string{}}
+	m := &model{vcsCompletions: map[string][]string{"git": {}}}
 	m.initInput()
 
 	m.input.SetValue("git st")
@@ -364,61 +216,12 @@ func TestUpdateCompletions_EmptyCompletions(t *testing.T) {
 	assert.False(t, m.input.ShowSuggestions)
 }
 
-func TestUpdateCompletions_LazyLoadsGit(t *testing.T) {
-	m := &model{}
-	m.initInput()
-	m.input.SetValue("git st")
-
-	require.Nil(t, m.gitCompletions)
-
-	m.updateCompletions()
-
-	require.NotNil(t, m.gitCompletions)
-	require.NotEmpty(t, m.gitCompletions)
-	assert.True(t, strings.HasPrefix(m.gitCompletions[0], "git "))
-}
-
-func TestUpdateCompletions_LazyLoadsJj(t *testing.T) {
-	m := &model{}
-	m.initInput()
-	m.input.SetValue("jj status")
-
-	require.Nil(t, m.jjCompletions)
-
-	m.updateCompletions()
-
-	require.NotNil(t, m.jjCompletions)
-	require.NotEmpty(t, m.jjCompletions)
-	assert.True(t, strings.HasPrefix(m.jjCompletions[0], "jj "))
-}
-
-func TestUpdateCompletions_OnlyLoadsOnce(t *testing.T) {
-	m := &model{}
-	m.initInput()
-
-	m.input.SetValue("git st")
-	m.updateCompletions()
-	gitLen := len(m.gitCompletions)
-
-	m.input.SetValue("git status")
-	m.updateCompletions()
-
-	assert.Len(t, m.gitCompletions, gitLen)
-
-	m.input.SetValue("jj status")
-	m.updateCompletions()
-	jjLen := len(m.jjCompletions)
-
-	m.input.SetValue("jj log")
-	m.updateCompletions()
-
-	assert.Len(t, m.jjCompletions, jjLen)
-}
-
 func TestHandleInputKey_UpDownWhenSuggestionsActive(t *testing.T) {
 	m := &model{
-		commandOpen:    true,
-		gitCompletions: []string{"git status", "git log", "git diff"},
+		commandOpen: true,
+		vcsCompletions: map[string][]string{
+			"git": {"git status", "git log", "git diff"},
+		},
 	}
 	m.initInput()
 	m.input.Focus()

@@ -47,8 +47,6 @@ func TestShortcutCmdPrefixIndependent(t *testing.T) {
 		prefix cmdPrefix
 	}{
 		{"default prefix", prefixNone},
-		{"git prefix", prefixGit},
-		{"jj prefix", prefixJj},
 		{"shell prefix", prefixShell},
 	}
 

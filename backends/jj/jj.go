@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -21,9 +22,12 @@ const (
 	separator            = "\x1f"
 	cmdNameLog           = "log"
 	cmdGit               = "git"
+	subCmdBookmark       = "bookmark"
+	subCmdList           = "list"
 	opFetch              = "fetch"
 	opPull               = "pull"
 	opPush               = "push"
+	subCmdRebase         = "rebase"
 )
 
 //nolint:gochecknoglobals // common jj log flags shared across Status calls
@@ -37,7 +41,7 @@ var jjPrefixedOps = map[string]bool{
 
 //nolint:gochecknoglobals // table of multi-step operations (op → sequence of arg lists)
 var multiStepOps = map[string][][]string{
-	opPull: {{cmdGit, opFetch}, {"rebase", "-d", "trunk()"}},
+	opPull: {{cmdGit, opFetch}, {subCmdRebase, "-d", "trunk()"}},
 }
 
 // Backend implements backend.Backend for jj repositories.
@@ -67,6 +71,45 @@ func (*Backend) SubcommandArgs(op string) []string {
 	}
 
 	return []string{op}
+}
+
+// Subcommands shells out to jj util completion bash and returns available subcommands.
+func (*Backend) Subcommands(ctx context.Context) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "jj", "util", "completion", "bash").Output()
+	if err != nil {
+		return nil, fmt.Errorf("jj completion: %w", err)
+	}
+
+	return parseJjCmdList(string(out)), nil
+}
+
+func parseJjCmdList(completion string) []string {
+	seen := make(map[string]bool)
+
+	var cmds []string
+
+	for line := range strings.SplitSeq(completion, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "jj,") {
+			continue
+		}
+
+		rest, _, _ := strings.Cut(line, ")")
+
+		_, sub, _ := strings.Cut(rest, ",")
+		if sub == "" {
+			continue
+		}
+
+		if !seen[sub] {
+			seen[sub] = true
+			cmds = append(cmds, sub)
+		}
+	}
+
+	slices.Sort(cmds)
+
+	return cmds
 }
 
 // Status queries jj for the current change, all local bookmark tracking
@@ -109,7 +152,7 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	headName := strings.TrimSpace(headOut)
 	if headName != "" {
 		bmOut, _ := runJJ(ctx, path, []string{
-			"bookmark", "list", "--all-remotes", headName,
+			subCmdBookmark, subCmdList, "--all-remotes", headName,
 		})
 		status.Bookmarks = parseBookmarks(bmOut)
 
@@ -143,7 +186,7 @@ func enrichWithRemoteBookmark(
 	path, headName string,
 	bm *backend.BookmarkStatus,
 ) {
-	out, err := runJJ(ctx, path, []string{"bookmark", "list", "--all-remotes"})
+	out, err := runJJ(ctx, path, []string{subCmdBookmark, subCmdList, "--all-remotes"})
 	if err != nil || strings.TrimSpace(out) == "" {
 		return
 	}

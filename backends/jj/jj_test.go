@@ -14,6 +14,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func jjSampleCompletion() string {
+	return `
+_jj() {
+    local i cur prev opts cmd
+    COMPREPLY=()
+    case "${cmd},${i}" in
+        ",$1")
+            cmd="jj"
+            ;;
+        jj,abandon)
+            cmd="jj__subcmd__abandon"
+            ;;
+        jj,bookmark)
+            cmd="jj__subcmd__bookmark"
+            ;;
+        jj,commit)
+            cmd="jj__subcmd__commit"
+            ;;
+        jj,describe)
+            cmd="jj__subcmd__describe"
+            ;;
+        jj,diff)
+            cmd="jj__subcmd__diff"
+            ;;
+        jj,git)
+            cmd="jj__subcmd__git"
+            ;;
+        jj,log)
+            cmd="jj__subcmd__log"
+            ;;
+        jj,new)
+            cmd="jj__subcmd__new"
+            ;;
+        jj,rebase)
+            cmd="jj__subcmd__rebase"
+            ;;
+        jj,status)
+            cmd="jj__subcmd__status"
+            ;;
+        jj,b)
+            cmd="jj__subcmd__bookmark__b"
+            ;;
+    esac
+}
+`
+}
+
 // setupJJDir creates a temp directory with a minimal .jj structure.
 func setupJJDir(t *testing.T) string {
 	t.Helper()
@@ -744,4 +791,94 @@ func TestRunSteps_InfraError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj test")
+}
+
+func TestBackend_Subcommands(t *testing.T) {
+	b := &Backend{}
+
+	cmds, err := b.Subcommands(context.Background())
+	if err != nil {
+		t.Skipf("jj not available: %v", err)
+	}
+
+	require.NotEmpty(t, cmds)
+
+	expect := []string{"status", "log", "diff", "new", "describe", "commit", "git"}
+
+	for _, want := range expect {
+		assert.Contains(t, cmds, want)
+	}
+}
+
+func TestBackend_Subcommands_Error(t *testing.T) {
+	b := &Backend{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := b.Subcommands(ctx)
+	assert.Error(t, err)
+}
+
+func TestParseJjCmdList(t *testing.T) {
+	got := parseJjCmdList(jjSampleCompletion())
+	want := []string{
+		"abandon", "b", "bookmark", "commit",
+		"describe", "diff", "git", "log",
+		"new", "rebase", "status",
+	}
+
+	require.Len(t, got, len(want))
+	assert.Equal(t, want, got)
+}
+
+func TestParseJjCmdListAliases(t *testing.T) {
+	sample := `
+        jj,status)
+                cmd="jj__subcmd__status"
+        jj,st)
+                cmd="jj__subcmd__status__st"
+        jj,diff)
+                cmd="jj__subcmd__diff"
+        jj,d)
+                cmd="jj__subcmd__diff__d"
+`
+
+	got := parseJjCmdList(sample)
+	assert.Len(t, got, 4)
+}
+
+func TestParseJjCmdListEmpty(t *testing.T) {
+	assert.Empty(t, parseJjCmdList(""))
+}
+
+func TestParseJjCmdListNoEntries(t *testing.T) {
+	assert.Empty(t, parseJjCmdList("some random bash code\nno jj entries here\n"))
+}
+
+func TestParseJjCmdListSkipsEmptySub(t *testing.T) {
+	got := parseJjCmdList("        jj,)\n        jj,status)\n")
+	assert.Equal(t, []string{"status"}, got)
+}
+
+func TestParseJjCmdListDeduplicates(t *testing.T) {
+	input := `        jj,status)
+                cmd="x"
+        jj,status)
+                cmd="y"
+        jj,log)
+                cmd="z"
+`
+
+	got := parseJjCmdList(input)
+	assert.Len(t, got, 2)
+}
+
+func TestParseJjCmdListSorted(t *testing.T) {
+	got := parseJjCmdList(`
+        jj,status)
+        jj,log)
+        jj,abandon)
+`)
+	assert.True(t, slices.IsSorted(got))
 }

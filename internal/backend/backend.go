@@ -224,6 +224,11 @@ type Backend interface {
 	// because jj wraps git operations under the "git" subcommand.
 	SubcommandArgs(op string) []string
 
+	// Subcommands returns available subcommands for the VCS tool, e.g.
+	// ["add", "branch", "log", "status"] for git. Returns an empty slice
+	// when subcommands cannot be loaded (tool not found, parse error, etc).
+	Subcommands(ctx context.Context) ([]string, error)
+
 	// Run executes the given args using this VCS tool in path.
 	// When interactive is true, the caller has already arranged for the
 	// subprocess to inherit the terminal; Run must not capture output.
@@ -258,6 +263,16 @@ func Register(backend Backend) {
 	registry = append(registry, nil)
 	copy(registry[idx+1:], registry[idx:])
 	registry[idx] = backend
+}
+
+// Names returns all registered backend names, in priority order.
+func Names() []string {
+	names := make([]string, len(registry))
+	for i, be := range registry {
+		names[i] = be.Name()
+	}
+
+	return names
 }
 
 // ByName returns the backend with the given name, or an error if not found.

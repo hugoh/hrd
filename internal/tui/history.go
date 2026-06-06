@@ -1,6 +1,10 @@
 package tui
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/hugoh/hrd/internal/backend"
+)
 
 const maxHistoryLen = 100
 
@@ -39,12 +43,10 @@ func (m *model) historyFilterFromInput() string {
 		return "sh"
 	}
 
-	if strings.HasPrefix(input, "jj ") {
-		return "jj"
-	}
-
-	if strings.HasPrefix(input, "git ") {
-		return vcsGit
+	for _, name := range backend.Names() {
+		if strings.HasPrefix(input, name+" ") {
+			return name
+		}
 	}
 
 	return ""

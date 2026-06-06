@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -410,55 +412,89 @@ func (m *model) updateCompletions() {
 	input := m.input.Value()
 	m.input.ShowSuggestions = false
 
-	if m.setPrefixCompletions(input, "git ", &m.gitCompletions, loadGitCompletions) {
+	if input == "" {
 		return
 	}
 
-	if m.setPrefixCompletions(input, "jj ", &m.jjCompletions, loadJjCompletions) {
+	if strings.HasPrefix(input, "!") {
 		return
 	}
 
-	if m.cmdPrefix == prefixNone && input != "" && !strings.HasPrefix(input, "!") &&
-		len(vcsSubcommands) > 0 {
+	if m.updateVCSCompletions(input) {
+		return
+	}
+
+	if m.cmdPrefix == prefixNone && len(vcsSubcommands) > 0 {
 		m.input.ShowSuggestions = true
 		m.input.SetSuggestions(vcsSubcommands)
 	}
 }
 
-func (m *model) setPrefixCompletions(
-	input, prefix string,
-	dest *[]string,
-	loader func() []string,
-) bool {
-	if input == "" {
-		return false
+func (m *model) updateVCSCompletions(input string) bool {
+	for _, name := range backend.Names() {
+		if m.matchVCSCompletions(input, name) {
+			return true
+		}
 	}
 
-	// Match when input has typed the full prefix (e.g. "git status"),
-	// or when input is a partial prefix of "git "/"jj " (e.g. "g" or "gi").
+	return false
+}
+
+func (m *model) matchVCSCompletions(input, name string) bool {
+	prefix := name + " "
+
 	if !strings.HasPrefix(input, prefix) && !strings.HasPrefix(prefix, input) {
 		return false
 	}
 
-	// Phase 1: partial prefix ("g" / "gi" / "git") → suggest the prefix name itself.
+	// Phase 1: partial prefix ("g" / "gi") → suggest backend name.
 	if strings.HasPrefix(prefix, input) && prefix != input {
 		m.input.ShowSuggestions = true
-		m.input.SetSuggestions([]string{strings.TrimSpace(prefix)})
+		m.input.SetSuggestions([]string{name})
 
 		return true
 	}
 
-	// Phase 2: full prefix typed → load and suggest all subcommands.
-	if *dest == nil {
-		*dest = loader()
-	}
+	// Phase 2: full prefix typed → load and suggest subcommands.
+	m.loadVCSCompletions(name)
 
-	if len(*dest) > 0 {
+	if len(m.vcsCompletions[name]) > 0 {
 		m.input.ShowSuggestions = true
-		m.input.SetSuggestions(*dest)
+		m.input.SetSuggestions(m.vcsCompletions[name])
 	}
 
 	return true
+}
+
+func (m *model) loadVCSCompletions(name string) {
+	if m.vcsCompletions == nil {
+		m.vcsCompletions = make(map[string][]string)
+	}
+
+	if _, ok := m.vcsCompletions[name]; ok {
+		return
+	}
+
+	b, err := backend.ByName(name)
+	if err != nil {
+		m.vcsCompletions[name] = []string{}
+
+		return
+	}
+
+	cmds, err := b.Subcommands(context.Background())
+	if err != nil || cmds == nil {
+		m.vcsCompletions[name] = []string{}
+
+		return
+	}
+
+	prefixed := make([]string, len(cmds))
+	for i, c := range cmds {
+		prefixed[i] = name + " " + c
+	}
+
+	m.vcsCompletions[name] = prefixed
 }
 
 func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -609,8 +645,8 @@ func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) handleCmdBarOpen(p cmdPrefix) (tea.Model, tea.Cmd) {
-	openCommandBar(m, p)
+func (m *model) handleCmdBarOpen() (tea.Model, tea.Cmd) {
+	openCommandBar(m, prefixNone)
 
 	return m, nil
 }
@@ -689,15 +725,14 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 
 func parseUnifiedCmd(input string) (string, string) {
 	if strings.HasPrefix(input, "!") {
-		return prefixLabels[prefixShell], strings.TrimSpace(input[1:])
+		return "sh", strings.TrimSpace(input[1:])
 	}
 
-	if strings.HasPrefix(input, "jj ") {
-		return vcsJj, strings.TrimSpace(input[3:])
-	}
-
-	if strings.HasPrefix(input, "git ") {
-		return vcsGit, strings.TrimSpace(input[4:])
+	for _, name := range backend.Names() {
+		prefix := name + " "
+		if strings.HasPrefix(input, prefix) {
+			return name, strings.TrimSpace(input[len(prefix):])
+		}
 	}
 
 	return "", input
@@ -818,8 +853,8 @@ func equalStringSlices(a, b []string) bool {
 	return true
 }
 
-func openCommandBar(m *model, p cmdPrefix) {
-	m.cmdPrefix = p
+func openCommandBar(m *model, _ cmdPrefix) {
+	m.cmdPrefix = prefixNone
 	m.commandOpen = true
 	m.input.SetValue("")
 	m.input.ShowSuggestions = false

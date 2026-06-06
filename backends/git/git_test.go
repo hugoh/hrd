@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -256,6 +257,88 @@ func TestBackend_Run_Interactive(t *testing.T) {
 	res, err := b.Run(context.Background(), dir, []string{"rev-parse", "HEAD"}, true)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode)
+}
+
+func TestBackend_Subcommands(t *testing.T) {
+	b := &Backend{}
+
+	cmds, err := b.Subcommands(context.Background())
+	require.NoError(t, err)
+	require.NotEmpty(t, cmds)
+
+	expect := []string{"add", "status", "log", "diff", "commit", "fetch", "pull", "push"}
+
+	for _, want := range expect {
+		assert.Contains(t, cmds, want)
+	}
+}
+
+func TestBackend_Subcommands_Error(t *testing.T) {
+	b := &Backend{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := b.Subcommands(ctx)
+	assert.Error(t, err)
+}
+
+func TestParseGitCmdList(t *testing.T) {
+	sample := `See 'git help <command>' to read about a specific subcommand
+
+Main Porcelain Commands
+   add                     Add file contents to the index
+   branch                  List, create, or delete branches
+   checkout                Switch branches or restore working tree files
+   commit                  Record changes to the repository
+   diff                    Show changes between commits, commit and working tree, etc
+   fetch                   Download objects and refs from another repository
+   log                     Show commit logs
+   merge                   Join two or more development histories together
+   pull                    Fetch from and integrate with another repository or a local branch
+   push                    Update remote refs along with associated objects
+   status                  Show the working tree status
+
+Ancillary Commands / Manipulators
+   config                  Get and set repository or global options
+   help                    Display help information about Git
+   mergetool               Run merge conflict resolution tools to resolve merge conflicts
+`
+
+	got := parseGitCmdList(sample)
+	want := []string{
+		"add", "branch", "checkout", "commit",
+		"config", "diff", "fetch", "help",
+		"log", "merge", "mergetool", "pull",
+		"push", "status",
+	}
+
+	require.Len(t, got, len(want))
+	assert.Equal(t, want, got)
+}
+
+func TestParseGitCmdListEmpty(t *testing.T) {
+	assert.Empty(t, parseGitCmdList(""))
+}
+
+func TestParseGitCmdListNoSections(t *testing.T) {
+	assert.Empty(t, parseGitCmdList("Just some text\nNo indented commands\n"))
+}
+
+func TestParseGitCmdListDeduplicates(t *testing.T) {
+	got := parseGitCmdList("   status\n   log")
+	require.Len(t, got, 2)
+	assert.Equal(t, []string{"log", "status"}, got)
+}
+
+func TestParseGitCmdListTabIndent(t *testing.T) {
+	got := parseGitCmdList("\tstatus		Show status\n\tlog		Show log")
+	require.Len(t, got, 2)
+}
+
+func TestParseGitCmdListSorted(t *testing.T) {
+	got := parseGitCmdList("   status\n   log\n   add\n   fetch")
+	assert.True(t, slices.IsSorted(got))
 }
 
 func TestBackend_Run_InteractiveNonZero(t *testing.T) {

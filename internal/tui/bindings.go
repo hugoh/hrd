@@ -163,7 +163,7 @@ var mainBindings = []binding{
 	// Cmd bar
 	{
 		key:        ":",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixNone) },
+		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen() },
 		label:      "cmd",
 		desc:       "Open command bar",
 		hrd:        true,

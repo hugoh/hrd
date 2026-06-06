@@ -49,7 +49,7 @@ func TestPushHistorySavesEmptyPrefix(t *testing.T) {
 	assert.Equal(t, HistoryEntry{Prefix: "", Command: "status"}, m.persState.History[1])
 }
 
-func TestHistoryEntriesFiltersByPrefix(t *testing.T) {
+func TestHistoryEntriesFiltersByHistoryFilterPrefix(t *testing.T) {
 	m := &model{
 		persState: PersistentState{
 			History: []HistoryEntry{
@@ -58,7 +58,8 @@ func TestHistoryEntriesFiltersByPrefix(t *testing.T) {
 				{Prefix: "git", Command: "status"},
 			},
 		},
-		cmdPrefix: prefixGit,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
 	}
 
 	got := m.historyEntries()
@@ -72,16 +73,6 @@ func TestHistoryEntriesFiltersByPrefix(t *testing.T) {
 }
 
 func TestHistoryEntriesAllPrefixes(t *testing.T) {
-	tests := []struct {
-		prefix cmdPrefix
-		want   int
-	}{
-		{prefixNone, 4},
-		{prefixGit, 2},
-		{prefixJj, 1},
-		{prefixShell, 1},
-	}
-
 	history := []HistoryEntry{
 		{Prefix: "git", Command: "log"},
 		{Prefix: "git", Command: "status"},
@@ -89,23 +80,52 @@ func TestHistoryEntriesAllPrefixes(t *testing.T) {
 		{Prefix: "sh", Command: "make test"},
 	}
 
-	for _, tt := range tests {
-		label := prefixLabels[tt.prefix]
-
+	t.Run("unified bar no filter shows all", func(t *testing.T) {
 		m := &model{
-			persState: PersistentState{History: history},
-			cmdPrefix: tt.prefix,
+			persState:           PersistentState{History: history},
+			cmdPrefix:           prefixNone,
+			historyFilterPrefix: "",
 		}
 
-		got := m.historyEntries()
-		assert.Lenf(t, got, tt.want, "prefix %q", label)
-	}
+		assert.Len(t, m.historyEntries(), 4)
+	})
+
+	t.Run("unified bar git filter", func(t *testing.T) {
+		m := &model{
+			persState:           PersistentState{History: history},
+			cmdPrefix:           prefixNone,
+			historyFilterPrefix: "git",
+		}
+
+		assert.Len(t, m.historyEntries(), 2)
+	})
+
+	t.Run("unified bar jj filter", func(t *testing.T) {
+		m := &model{
+			persState:           PersistentState{History: history},
+			cmdPrefix:           prefixNone,
+			historyFilterPrefix: "jj",
+		}
+
+		assert.Len(t, m.historyEntries(), 1)
+	})
+
+	t.Run("unified bar sh filter", func(t *testing.T) {
+		m := &model{
+			persState:           PersistentState{History: history},
+			cmdPrefix:           prefixNone,
+			historyFilterPrefix: "sh",
+		}
+
+		assert.Len(t, m.historyEntries(), 1)
+	})
 }
 
 func TestHistoryEntriesEmpty(t *testing.T) {
 	m := &model{
-		persState: PersistentState{},
-		cmdPrefix: prefixGit,
+		persState:           PersistentState{},
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
 	}
 
 	assert.Nil(t, m.historyEntries())
@@ -119,7 +139,8 @@ func TestHistoryEntriesNoMatch(t *testing.T) {
 				{Prefix: "sh", Command: "pwd"},
 			},
 		},
-		cmdPrefix: prefixGit,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
 	}
 
 	assert.Nil(t, m.historyEntries())
@@ -134,14 +155,15 @@ func TestHistoryPrevFirstCall(t *testing.T) {
 				{Prefix: "git", Command: "status"},
 			},
 		},
-		cmdPrefix:  prefixGit,
-		historyIdx: -1,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          -1,
 	}
 
 	m.historyPrev()
 
 	assert.Equal(t, 0, m.historyIdx)
-	assert.Equal(t, "log", m.input.Value())
+	assert.Equal(t, "git log", m.input.Value())
 }
 
 func TestHistoryPrevClampsAtEnd(t *testing.T) {
@@ -153,21 +175,23 @@ func TestHistoryPrevClampsAtEnd(t *testing.T) {
 				{Prefix: "git", Command: "status"},
 			},
 		},
-		cmdPrefix:  prefixGit,
-		historyIdx: 1,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          1,
 	}
 
 	m.historyPrev()
 
 	assert.Equal(t, 1, m.historyIdx)
-	assert.Equal(t, "status", m.input.Value())
+	assert.Equal(t, "git status", m.input.Value())
 }
 
 func TestHistoryPrevNoEntries(t *testing.T) {
 	m := &model{
-		persState:  PersistentState{},
-		cmdPrefix:  prefixGit,
-		historyIdx: -1,
+		persState:           PersistentState{},
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          -1,
 	}
 
 	m.historyPrev()
@@ -183,8 +207,9 @@ func TestHistoryNextFromNewest(t *testing.T) {
 				{Prefix: "git", Command: "log"},
 			},
 		},
-		cmdPrefix:  prefixGit,
-		historyIdx: 0,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          0,
 	}
 
 	m.historyNext()
@@ -203,14 +228,15 @@ func TestHistoryNextCyclesBack(t *testing.T) {
 				{Prefix: "git", Command: "fetch"},
 			},
 		},
-		cmdPrefix:  prefixGit,
-		historyIdx: 2,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          2,
 	}
 
 	m.historyNext()
 
 	assert.Equal(t, 1, m.historyIdx)
-	assert.Equal(t, "status", m.input.Value())
+	assert.Equal(t, "git status", m.input.Value())
 }
 
 func TestHistoryNextAtMinBound(t *testing.T) {
@@ -221,8 +247,9 @@ func TestHistoryNextAtMinBound(t *testing.T) {
 				{Prefix: "git", Command: "log"},
 			},
 		},
-		cmdPrefix:  prefixGit,
-		historyIdx: -1,
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          -1,
 	}
 
 	m.historyNext()
@@ -261,8 +288,8 @@ func TestFormatHistoryEntry_PrefixNoneEmpty(t *testing.T) {
 }
 
 func TestFormatHistoryEntry_PerVcsBar(t *testing.T) {
-	got := formatHistoryEntry(prefixGit, HistoryEntry{Prefix: "git", Command: "log"})
-	assert.Equal(t, "log", got)
+	got := formatHistoryEntry(prefixNone, HistoryEntry{Prefix: "git", Command: "log"})
+	assert.Equal(t, "git log", got)
 }
 
 func TestHistoryFilterFromInput_Shell(t *testing.T) {
@@ -413,17 +440,4 @@ func TestUpdateHistoryFilter_PrefixNoneMidNavigationSkips(t *testing.T) {
 	m.updateHistoryFilter()
 
 	assert.Equal(t, "jj", m.historyFilterPrefix)
-}
-
-func TestUpdateHistoryFilter_PerVcsBarNoop(t *testing.T) {
-	m := &model{
-		input:               initInput(),
-		cmdPrefix:           prefixGit,
-		historyFilterPrefix: "old",
-	}
-	m.input.SetValue("status")
-
-	m.updateHistoryFilter()
-
-	assert.Equal(t, "old", m.historyFilterPrefix)
 }

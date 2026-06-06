@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/backends/git"
+	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
@@ -25,6 +26,7 @@ import (
 
 func TestMain(m *testing.M) {
 	git.Register()
+	jj.Register()
 	os.Exit(m.Run())
 }
 
@@ -613,13 +615,13 @@ func TestHandleCmdBarOpen(t *testing.T) {
 	}
 	m.initInput()
 
-	_, _ = m.handleCmdBarOpen(prefixGit)
+	_, _ = m.handleCmdBarOpen()
 	if !m.commandOpen {
 		t.Error("commandOpen should be true after handleCmdBarOpen")
 	}
 
-	if m.cmdPrefix != prefixGit {
-		t.Errorf("cmdPrefix = %d, want %d", m.cmdPrefix, prefixGit)
+	if m.cmdPrefix != prefixNone {
+		t.Errorf("cmdPrefix = %d, want %d", m.cmdPrefix, prefixNone)
 	}
 }
 
