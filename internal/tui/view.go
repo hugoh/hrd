@@ -372,7 +372,7 @@ func buildHelp(bindings []binding) string {
 	return bld.String()
 }
 
-//nolint:gochecknoglobals // pre-built help string from bindings
+//nolint:gochecknoglobals // cached help text, built once at init
 var helpStr string
 
 func init() { //nolint:gochecknoinits

@@ -521,7 +521,7 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	key := msg.String()
 
-	handler, ok := mainKeyHandlers[key]
+	handler, ok := getKeyHandlers()[key]
 	if ok {
 		return handler(m)
 	}

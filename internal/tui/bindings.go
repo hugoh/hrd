@@ -1,6 +1,10 @@
 package tui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"sync"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 //nolint:gochecknoglobals,goconst,mnd // binding definitions
 var mainBindings = []binding{
@@ -173,12 +177,19 @@ var mainBindings = []binding{
 	},
 }
 
-//nolint:gochecknoglobals // key dispatch table built from bindings
-var mainKeyHandlers map[string]func(*model) (tea.Model, tea.Cmd)
+//nolint:gochecknoglobals // cache for key dispatch table, built lazily
+var (
+	mainKeyHandlers   map[string]func(*model) (tea.Model, tea.Cmd)
+	buildHandlersOnce sync.Once
+)
 
-func init() { //nolint:gochecknoinits
-	mainKeyHandlers = make(map[string]func(*model) (tea.Model, tea.Cmd), len(mainBindings))
-	for _, b := range mainBindings {
-		mainKeyHandlers[b.key] = b.handler
-	}
+func getKeyHandlers() map[string]func(*model) (tea.Model, tea.Cmd) {
+	buildHandlersOnce.Do(func() {
+		mainKeyHandlers = make(map[string]func(*model) (tea.Model, tea.Cmd), len(mainBindings))
+		for _, b := range mainBindings {
+			mainKeyHandlers[b.key] = b.handler
+		}
+	})
+
+	return mainKeyHandlers
 }
