@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1207,10 +1207,7 @@ func TestSortedSelected(t *testing.T) {
 	selected := map[string]bool{"c": true, "a": true, "b": false}
 	got := sortedSelected(selected)
 
-	want := []string{"a", "c"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("sortedSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"a", "c"}, got)
 }
 
 func TestEqualStringSlices(t *testing.T) {
@@ -1235,18 +1232,11 @@ func TestPushSelectionHistory(t *testing.T) {
 
 	m.pushSelectionHistory()
 
-	if len(m.persState.SelectionHistory) != 1 {
-		t.Fatalf("SelectionHistory length = %d, want 1", len(m.persState.SelectionHistory))
-	}
+	require.Len(t, m.persState.SelectionHistory, 1)
 
 	entry := m.persState.SelectionHistory[0]
-	if !reflect.DeepEqual(entry.Repos, []string{"a", "b"}) {
-		t.Errorf("entry.Repos = %v, want [a b]", entry.Repos)
-	}
-
-	if entry.Timestamp.IsZero() {
-		t.Error("entry.Timestamp should not be zero")
-	}
+	assert.Equal(t, []string{"a", "b"}, entry.Repos)
+	assert.False(t, entry.Timestamp.IsZero())
 
 	// Push identical state — should be deduped
 	m.pushSelectionHistory()

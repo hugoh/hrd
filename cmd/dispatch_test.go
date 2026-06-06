@@ -492,7 +492,9 @@ func TestDispatchWithFewerResultsThanNames(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("dispatch hung: resultCh was not closed after callback finished")
+		t.Fatal(
+			"dispatch hung: resultCh was not closed after callback finished",
+		)
 	}
 }
 
