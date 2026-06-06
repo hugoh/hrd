@@ -472,19 +472,15 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 
 	// Make the working copy have no description so the ancestor walk runs,
 	// then cause runJJ to fail on ancestor revs.
-	origRunJJ := runJJ
-
-	runJJ = func(ctx context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(ctx context.Context, _ string, args []string) (string, error) {
 		// Let the working copy query (@) succeed, fail on ancestor queries (@- etc).
 		if slices.Contains(args, "@") {
-			return origRunJJ(ctx, dir, args)
+			return defaultRunJJ(ctx, dir, args)
 		}
 
 		return "", assert.AnError
 	}
-	defer func() { runJJ = origRunJJ }()
-
-	b := &Backend{}
 	st, err := b.Status(context.Background(), dir)
 	// The ancestor walk should not hard-error — it breaks on first failure
 	// and returns whatever the working copy gave us.
@@ -493,10 +489,8 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 }
 
 func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		switch {
 		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
 			return "main: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
@@ -512,7 +506,7 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Equal(t, "origin", bm.Remote)
 	assert.Equal(t, 0, bm.Ahead)
@@ -521,10 +515,8 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 }
 
 func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
 			return "main: sxoqvoon 2c688398\n  @git: sxoqvoon 2c688398\n", nil
 		}
@@ -533,17 +525,15 @@ func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
 }
 
 func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
 			return "main: sxoqvoon 2c688398\n" +
 				"  @git: sxoqvoon 2c688398\n" +
@@ -554,30 +544,25 @@ func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
 }
 
 func TestEnrichWithRemoteBookmark_FetchError(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, _ []string) (string, error) {
 		return "", assert.AnError
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 }
 
 func TestCountRevs(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
 	tests := []struct {
 		name   string
 		output string
@@ -594,11 +579,12 @@ func TestCountRevs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, _ []string) (string, error) {
 				return tt.output, tt.err
 			}
 
-			assert.Equal(t, tt.want, countRevs(context.Background(), "/tmp", "main..main@origin"))
+			assert.Equal(t, tt.want, b.countRevs(context.Background(), "/tmp", "main..main@origin"))
 		})
 	}
 }
@@ -644,7 +630,8 @@ func TestBackend_Run_NoExecutable(t *testing.T) {
 func TestRunJJ_Failure(t *testing.T) {
 	dir := setupJJDir(t)
 
-	_, err := runJJ(
+	b := &Backend{runJJFn: defaultRunJJ}
+	_, err := b.runJJ(
 		context.Background(),
 		dir,
 		[]string{"log", "-r", "@", "--template", "invalid_template"},
@@ -667,9 +654,6 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 
 //nolint:cyclop,funlen // table-driven test with 3 cases
 func TestBackend_Status_LocalAhead(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
 	tests := []struct {
 		name      string
 		wcOutput  string
@@ -698,7 +682,8 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
 					return tt.wcOutput, nil
 				}
@@ -719,7 +704,6 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 				return "", nil
 			}
 
-			b := &Backend{}
 			st, err := b.Status(context.Background(), "/tmp")
 			require.NoError(t, err)
 
@@ -872,6 +856,10 @@ func TestParseJjCmdListDeduplicates(t *testing.T) {
 
 	got := parseJjCmdList(input)
 	assert.Len(t, got, 2)
+}
+
+func TestRegister_DuplicatePanics(t *testing.T) {
+	assert.Panics(t, func() { Register() })
 }
 
 func TestParseJjCmdListSorted(t *testing.T) {

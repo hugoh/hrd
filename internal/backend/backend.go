@@ -238,15 +238,17 @@ type Backend interface {
 // Detection priority follows registration order.
 //
 //nolint:gochecknoglobals // intentional: plugin registry
-var registry []Backend
+var (
+	errDuplicateBackend = errors.New("duplicate backend")
+	registry            []Backend
+)
 
 // Register adds a backend to the global registry.
 // Detection priority follows Backend.Priority() order (higher first).
-// It panics on duplicate names to catch wiring mistakes at startup.
-func Register(backend Backend) {
+func Register(backend Backend) error {
 	for _, existing := range registry {
 		if existing.Name() == backend.Name() {
-			panic(fmt.Sprintf("backend %q already registered", backend.Name()))
+			return fmt.Errorf("%w: %q", errDuplicateBackend, backend.Name())
 		}
 	}
 
@@ -263,6 +265,8 @@ func Register(backend Backend) {
 	registry = append(registry, nil)
 	copy(registry[idx+1:], registry[idx:])
 	registry[idx] = backend
+
+	return nil
 }
 
 // Names returns all registered backend names, in priority order.

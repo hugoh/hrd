@@ -45,7 +45,9 @@ var multiStepOps = map[string][][]string{
 }
 
 // Backend implements backend.Backend for jj repositories.
-type Backend struct{}
+type Backend struct {
+	runJJFn func(ctx context.Context, path string, args []string) (string, error)
+}
 
 var _ backend.Backend = (*Backend)(nil)
 
@@ -120,7 +122,7 @@ func parseJjCmdList(completion string) []string {
 //  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data
 //  3. jj bookmark list --all-remotes + jj log ×2 (only when HEAD bookmark
 //     has no tracking remote but a @remote counterpart exists — colocated repos)
-func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
+func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
 	const sep = "\x1f"
 
 	const detailTmpl = `change_id.short(8) ++ "` + sep + `" ++ ` +
@@ -132,7 +134,7 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	wcArgs := append([]string{}, logBaseArgs...)
 	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
 
-	wcOut, err := runJJ(ctx, path, wcArgs)
+	wcOut, err := b.runJJ(ctx, path, wcArgs)
 	if err != nil {
 		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
 	}
@@ -140,18 +142,18 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	status := parseWorkingCopy(wcOut)
 
 	if status.CommitMsg == "" {
-		fillCommitMsgFromAncestors(ctx, path, &status)
+		b.fillCommitMsgFromAncestors(ctx, path, &status)
 	}
 
 	headArgs := append([]string{}, logBaseArgs...)
 	headArgs = append(headArgs, "-r", "::@ & bookmarks()", "-n", "1", ignoreWorkingCopyArg,
 		templateFlag, "bookmarks.first().name()")
 
-	headOut, _ := runJJ(ctx, path, headArgs)
+	headOut, _ := b.runJJ(ctx, path, headArgs)
 
 	headName := strings.TrimSpace(headOut)
 	if headName != "" {
-		bmOut, _ := runJJ(ctx, path, []string{
+		bmOut, _ := b.runJJ(ctx, path, []string{
 			subCmdBookmark, subCmdList, "--all-remotes", headName,
 		})
 		status.Bookmarks = parseBookmarks(bmOut)
@@ -159,12 +161,12 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 		// For colocated repos the HEAD bookmark may have @git tracking
 		// but no @origin — look for a @remote counterpart.
 		if len(status.Bookmarks) > 0 && status.Bookmarks[0].Remote == "" {
-			enrichWithRemoteBookmark(ctx, path, headName, &status.Bookmarks[0])
+			b.enrichWithRemoteBookmark(ctx, path, headName, &status.Bookmarks[0])
 		}
 	}
 
 	if headName != "" {
-		status.LocalAhead = countRevs(ctx, path, headName+"..@")
+		status.LocalAhead = b.countRevs(ctx, path, headName+"..@")
 		if status.LocalAhead > 0 {
 			status.LocalAhead--
 		}
@@ -173,72 +175,6 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
 
 	return status, nil
-}
-
-// enrichWithRemoteBookmark looks for a @remote bookmark (e.g. main@origin)
-// matching headName and, if found, computes ahead/behind against it.
-//
-// This handles colocated jj/git repos where bookmarks don't have explicit
-// tracking remotes configured — the remote bookmark exists as a separate
-// @remote entry in jj's bookmark list.
-func enrichWithRemoteBookmark(
-	ctx context.Context,
-	path, headName string,
-	bm *backend.BookmarkStatus,
-) {
-	out, err := runJJ(ctx, path, []string{subCmdBookmark, subCmdList, "--all-remotes"})
-	if err != nil || strings.TrimSpace(out) == "" {
-		return
-	}
-
-	for line := range strings.SplitSeq(out, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, headName+"@") || !strings.Contains(trimmed, ":") {
-			continue
-		}
-
-		// "main@origin: opxqzwyo e67b1a90 (empty) Merge pull request ..."
-		before, _, _ := strings.Cut(trimmed, ":")
-
-		remoteName := strings.TrimPrefix(strings.TrimSpace(before), headName+"@")
-		if remoteName == "" || remoteName == cmdGit {
-			continue
-		}
-
-		remoteBm := headName + "@" + remoteName
-		behind := countRevs(ctx, path, headName+".."+remoteBm)
-		ahead := countRevs(ctx, path, remoteBm+".."+headName)
-
-		bm.Remote = remoteName
-		bm.Ahead = ahead
-		bm.Behind = behind
-		backend.ComputeBookmarkState(bm)
-
-		return
-	}
-}
-
-// countRevs runs jj log -r <revset> --count and returns the number.
-func countRevs(ctx context.Context, path, revset string) int {
-	out, err := runJJ(ctx, path, []string{
-		cmdNameLog, colorNeverFlag, ignoreWorkingCopyArg,
-		"-r", revset, "--count",
-	})
-	if err != nil {
-		return 0
-	}
-
-	trimmed := strings.TrimSpace(out)
-	if trimmed == "" {
-		return 0
-	}
-
-	n, err := strconv.Atoi(trimmed)
-	if err != nil {
-		return 0
-	}
-
-	return n
 }
 
 // Run executes jj args in path. Multi-step ops (pull, etc.) run each step
@@ -263,6 +199,110 @@ func (*Backend) Run(
 	return res, nil
 }
 
+func (b *Backend) runJJ(ctx context.Context, path string, args []string) (string, error) {
+	if b.runJJFn != nil {
+		return b.runJJFn(ctx, path, args)
+	}
+
+	return defaultRunJJ(ctx, path, args)
+}
+
+// enrichWithRemoteBookmark looks for a @remote bookmark (e.g. main@origin)
+// matching headName and, if found, computes ahead/behind against it.
+//
+// This handles colocated jj/git repos where bookmarks don't have explicit
+// tracking remotes configured — the remote bookmark exists as a separate
+// @remote entry in jj's bookmark list.
+func (b *Backend) enrichWithRemoteBookmark(
+	ctx context.Context,
+	path, headName string,
+	bm *backend.BookmarkStatus,
+) {
+	out, err := b.runJJ(ctx, path, []string{subCmdBookmark, subCmdList, "--all-remotes"})
+	if err != nil || strings.TrimSpace(out) == "" {
+		return
+	}
+
+	for line := range strings.SplitSeq(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, headName+"@") || !strings.Contains(trimmed, ":") {
+			continue
+		}
+
+		before, _, _ := strings.Cut(trimmed, ":")
+
+		remoteName := strings.TrimPrefix(strings.TrimSpace(before), headName+"@")
+		if remoteName == "" || remoteName == cmdGit {
+			continue
+		}
+
+		remoteBm := headName + "@" + remoteName
+		behind := b.countRevs(ctx, path, headName+".."+remoteBm)
+		ahead := b.countRevs(ctx, path, remoteBm+".."+headName)
+
+		bm.Remote = remoteName
+		bm.Ahead = ahead
+		bm.Behind = behind
+		backend.ComputeBookmarkState(bm)
+
+		return
+	}
+}
+
+// countRevs runs jj log -r <revset> --count and returns the number.
+func (b *Backend) countRevs(ctx context.Context, path, revset string) int {
+	out, err := b.runJJ(ctx, path, []string{
+		cmdNameLog, colorNeverFlag, ignoreWorkingCopyArg,
+		"-r", revset, "--count",
+	})
+	if err != nil {
+		return 0
+	}
+
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return 0
+	}
+
+	n, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0
+	}
+
+	return n
+}
+
+// fillCommitMsgFromAncestors walks back through ancestors to find first commit with description.
+func (b *Backend) fillCommitMsgFromAncestors(
+	ctx context.Context, path string, status *backend.RepoStatus,
+) {
+	const maxAncestors = 10
+
+	for i := 1; i <= maxAncestors; i++ {
+		rev := "@" + strings.Repeat("-", i)
+
+		const tmpl = `description.first_line() ++ "` + separator + `" ++ committer.timestamp().ago()`
+
+		args := append([]string{}, logBaseArgs...)
+		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, tmpl)
+
+		out, err := b.runJJ(ctx, path, args)
+		if err != nil {
+			break
+		}
+
+		if msg := extractCommitMsg(out); msg != "" {
+			status.CommitMsg = msg
+
+			if time := extractCommitTime(out); time != "" {
+				status.CommitTime = "(" + time + ")"
+			}
+
+			break
+		}
+	}
+}
+
 // runSteps executes each step sequentially, returning on the first non-zero
 // exit or infrastructure error.
 func runSteps(
@@ -285,8 +325,7 @@ func runSteps(
 	return backend.RunResult{}, nil
 }
 
-//nolint:gochecknoglobals // swapped in tests to simulate jj failures
-var runJJ = func(ctx context.Context, path string, args []string) (string, error) {
+func defaultRunJJ(ctx context.Context, path string, args []string) (string, error) {
 	var buf bytes.Buffer
 
 	//nolint:gosec // controlled command execution, args from user input
@@ -348,35 +387,6 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 	}
 
 	return status
-}
-
-// fillCommitMsgFromAncestors walks back through ancestors to find first commit with description.
-func fillCommitMsgFromAncestors(ctx context.Context, path string, status *backend.RepoStatus) {
-	const maxAncestors = 10
-
-	for i := 1; i <= maxAncestors; i++ {
-		rev := "@" + strings.Repeat("-", i)
-
-		const tmpl = `description.first_line() ++ "` + separator + `" ++ committer.timestamp().ago()`
-
-		args := append([]string{}, logBaseArgs...)
-		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, tmpl)
-
-		out, err := runJJ(ctx, path, args)
-		if err != nil {
-			break
-		}
-
-		if msg := extractCommitMsg(out); msg != "" {
-			status.CommitMsg = msg
-
-			if time := extractCommitTime(out); time != "" {
-				status.CommitTime = "(" + time + ")"
-			}
-
-			break
-		}
-	}
 }
 
 func extractCommitMsg(out string) string {
@@ -539,5 +549,7 @@ func extractCount(s, keyword string) int {
 
 // Register registers the jj backend with the backend registry.
 func Register() {
-	backend.Register(&Backend{})
+	if err := backend.Register(&Backend{runJJFn: defaultRunJJ}); err != nil {
+		panic(fmt.Sprintf("jj: %v", err))
+	}
 }

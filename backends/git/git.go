@@ -255,5 +255,7 @@ func handleAheadBehind(ab string) (int, int) {
 
 // Register registers the git backend with the backend registry.
 func Register() {
-	backend.Register(&Backend{})
+	if err := backend.Register(&Backend{}); err != nil {
+		panic(fmt.Sprintf("git: %v", err))
+	}
 }

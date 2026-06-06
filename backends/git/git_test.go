@@ -429,6 +429,10 @@ func TestBackend_Run_NonExecutablePath(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestRegister_DuplicatePanics(t *testing.T) {
+	assert.Panics(t, func() { Register() })
+}
+
 func runGitCmd(t *testing.T, dir string, args []string) {
 	t.Helper()
 

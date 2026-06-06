@@ -22,7 +22,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	backend.Register(&gitBackend{})
+	if err := backend.Register(&gitBackend{}); err != nil {
+		panic(err)
+	}
 
 	os.Exit(m.Run())
 }
