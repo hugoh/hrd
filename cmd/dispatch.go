@@ -690,13 +690,13 @@ func statusTableConfig(details bool) ([]int, []string) {
 
 	type layoutWeights struct{ name, status int }
 
-	weights := layoutWeights{name: 25, status: 75} //nolint:mnd
+	weights := layoutWeights{name: 25, status: 75} //nolint:mnd // layout weight percentages
 	if details {
-		weights = layoutWeights{name: 20, status: 80} //nolint:mnd
+		weights = layoutWeights{name: 20, status: 80} //nolint:mnd // layout weight percentages
 	}
 
 	termWidth := ui.GetTermWidth()
-	pct := func(p int) int { return termWidth * p / 100 } //nolint:mnd
+	pct := func(p int) int { return termWidth * p / 100 } //nolint:mnd // percentage conversion
 
 	nameWidth := max(pct(weights.name), minNameWidth)
 	statusWidth := ui.ComputeRemainderWidth(termWidth, minStatusWidth, nameWidth, vcsWidth)

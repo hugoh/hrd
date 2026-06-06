@@ -51,10 +51,8 @@ type Backend struct {
 
 var _ backend.Backend = (*Backend)(nil)
 
-// Name returns the backend identifier "jj".
 func (*Backend) Name() string { return "jj" }
 
-// Priority returns the jj detection priority.
 func (*Backend) Priority() int { return priorityJj }
 
 // Detect returns true if path contains a .jj directory.
@@ -360,7 +358,7 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 	parts := strings.SplitN(
 		strings.TrimRight(raw, "\n"),
 		separator,
-		5, //nolint:mnd
+		5, //nolint:mnd // changeID, dirty, conflict, description, time
 	)
 
 	var status backend.RepoStatus
@@ -390,15 +388,17 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 }
 
 func extractCommitMsg(out string) string {
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2) //nolint:mnd
+	//nolint:mnd // message + time split limit
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2)
 
 	return strings.TrimSpace(parts[0])
 }
 
 func extractCommitTime(out string) string {
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2) //nolint:mnd
+	//nolint:mnd // message + time split limit
+	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2)
 
-	if len(parts) >= 2 { //nolint:mnd
+	if len(parts) >= 2 { //nolint:mnd // time present
 		return strings.TrimSpace(parts[1])
 	}
 
@@ -547,7 +547,7 @@ func extractCount(s, keyword string) int {
 	return n
 }
 
-// Register registers the jj backend with the backend registry.
+// Register adds the jj backend to the global registry.
 func Register() {
 	if err := backend.Register(&Backend{runJJFn: defaultRunJJ}); err != nil {
 		panic(fmt.Sprintf("jj: %v", err))

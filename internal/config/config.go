@@ -40,12 +40,10 @@ func (r Repo) ActiveBackend() string {
 	return b.Name()
 }
 
-// Group is a named collection of repo names.
 type Group struct {
 	Repos []string `toml:"repos"`
 }
 
-// Settings holds global tunables.
 type Settings struct {
 	// Concurrency caps the number of parallel subprocess invocations.
 	Concurrency int `toml:"concurrency"`
@@ -69,7 +67,6 @@ func defaultConfig() Config {
 	}
 }
 
-// DefaultPath returns the platform config path for the hrd config file.
 func DefaultPath() string {
 	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
 		return filepath.Join(xdg, "hrd", "config.toml")
@@ -80,8 +77,8 @@ func DefaultPath() string {
 	return filepath.Join(home, ".config", "hrd", "config.toml")
 }
 
-// Load reads the config file at path. If the file does not exist a default
-// config is returned without error — the file is created on first write.
+// Load returns a default config when the file does not exist.
+// The file is created on first write.
 func Load(path string) (Config, error) {
 	cfg := defaultConfig()
 
@@ -140,8 +137,7 @@ func stripGroupPrefix(name string) string {
 	return strings.TrimPrefix(name, "@")
 }
 
-// ResolveScope returns the list of repo names to operate on given an explicit
-// set of names/group passed on the CLI.
+// ResolveScope resolves explicit CLI names/groups into repo names.
 func (c *Config) ResolveScope(names []string) ([]string, error) {
 	if len(names) == 0 {
 		return c.allRepos()
@@ -156,14 +152,13 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 	return c.ValidatedRepos(names)
 }
 
-// AddRepo adds or updates a repo entry. The name is derived from the
-// directory base name unless it would conflict, in which case the caller
-// should provide an explicit name.
+// AddRepo derives the name from the directory base name unless it would
+// conflict, in which case the caller should provide an explicit name.
 func (c *Config) AddRepo(name string, repo Repo) {
 	c.Repos[name] = repo
 }
 
-// RemoveRepo removes a repo and scrubs it from all groups.
+// RemoveRepo scrubs a repo from the config and all groups.
 func (c *Config) RemoveRepo(name string) {
 	delete(c.Repos, name)
 
@@ -177,7 +172,7 @@ func (c *Config) RemoveRepo(name string) {
 	}
 }
 
-// AddRepoToGroup adds a repo to a group and updates the groups cache.
+// AddRepoToGroup updates the groups cache after adding the repo.
 func (c *Config) AddRepoToGroup(name, group string) {
 	repo := c.Repos[name]
 
@@ -198,7 +193,7 @@ func (c *Config) AddRepoToGroup(name, group string) {
 	c.Groups[group] = g
 }
 
-// RemoveRepoFromGroup removes a repo from a group and updates the groups cache.
+// RemoveRepoFromGroup updates the groups cache after removing the repo.
 func (c *Config) RemoveRepoFromGroup(name, group string) {
 	repo := c.Repos[name]
 	before := len(repo.Groups)
@@ -224,7 +219,7 @@ func (c *Config) RemoveRepoFromGroup(name, group string) {
 	}
 }
 
-// ValidatedRepos checks that all names exist in the config and returns them.
+// ValidatedRepos returns all names that exist in the config, or an error.
 func (c *Config) ValidatedRepos(names []string) ([]string, error) {
 	for _, name := range names {
 		lookupName := stripGroupPrefix(name)

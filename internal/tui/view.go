@@ -48,8 +48,6 @@ func (m *model) View() tea.View {
 	return v
 }
 
-// --- Main screen ------------------------------------------------------------
-
 func (m *model) mainView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 
@@ -202,8 +200,6 @@ func (*model) renderFooter() string {
 
 	return styleFooter.Render(strings.Join(parts, " "))
 }
-
-// --- Output screen ----------------------------------------------------------
 
 func (m *model) outputView() string {
 	var header string

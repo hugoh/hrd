@@ -59,7 +59,7 @@ func forEachRepo(
 	return nil
 }
 
-// Result is the outcome for a single repo, sent through the results channel.
+// Result for a single repo, sent through the results channel.
 type Result struct {
 	RepoName string
 	RepoPath string
@@ -87,7 +87,7 @@ func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
 	}
 }
 
-// StatusResult carries the live status for a single repo used by `ll`.
+// StatusResult is the live status used by `ll`.
 type StatusResult struct {
 	RepoName string
 	RepoPath string
@@ -201,8 +201,7 @@ func VCSSubcmd(
 	)
 }
 
-// Shell runs an arbitrary shell command across repos. It does not route
-// through a backend; it uses sh -c directly.
+// Shell runs across repos using sh -c directly (no backend routing).
 func Shell(
 	ctx context.Context,
 	repos map[string]config.Repo,
@@ -238,8 +237,7 @@ func ResultColor(res Result) string {
 	return "green"
 }
 
-// GatherStatus fetches the VCS status for each repo concurrently,
-// streaming one StatusResult per repo to the returned channel.
+// GatherStatus streams one StatusResult per repo to the returned channel.
 func GatherStatus(
 	ctx context.Context,
 	repos map[string]config.Repo,

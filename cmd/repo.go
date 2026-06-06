@@ -221,7 +221,7 @@ func repoRenameCmd(cfgPath *string) *cli.Command {
 			}
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != 2 { //nolint:mnd
+			if cmd.NArg() != 2 { //nolint:mnd // expects old and new name
 				return errRepoRenameUsage
 			}
 
@@ -304,7 +304,7 @@ func groupActionCmd(
 			}
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != 2 { //nolint:mnd
+			if cmd.NArg() != 2 { //nolint:mnd // expects repo and group name
 				return usageErr
 			}
 
