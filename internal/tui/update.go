@@ -605,6 +605,10 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 
 func (m *model) pushSelectionHistory() {
 	current := sortedSelected(m.selected)
+	if len(current) == 0 {
+		return
+	}
+
 	if len(m.persState.SelectionHistory) > 0 {
 		last := m.persState.SelectionHistory[0].Repos
 		if equalStringSlices(current, last) {

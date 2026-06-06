@@ -342,6 +342,11 @@ func (m *model) selHistoryView() string {
 		return ""
 	}
 
+	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	for name := range m.cfg.Repos {
+		allRepoSet[name] = struct{}{}
+	}
+
 	ch := m.contentHeight()
 
 	wrapW := max(m.width-historyIndent, historyMinWrapW)
@@ -365,8 +370,18 @@ func (m *model) selHistoryView() string {
 		header := fmt.Sprintf("%s%s  %s", marker, ui.Muted(ts), m.repoCountLabel(len(e.Repos)))
 		lines = append(lines, header)
 
-		repoStr := strings.Join(e.Repos, ", ")
-		for _, w := range wrapString(repoStr, wrapW) {
+		var displayStr string
+
+		if groups, uncovered := matchingGroups(e.Repos, allRepoSet, m.cfg.Groups); len(groups) > 0 {
+			parts := make([]string, 0, len(groups)+len(uncovered))
+			parts = append(parts, groups...)
+			parts = append(parts, uncovered...)
+			displayStr = strings.Join(parts, ", ")
+		} else {
+			displayStr = strings.Join(e.Repos, ", ")
+		}
+
+		for _, w := range wrapString(displayStr, wrapW) {
 			lines = append(lines, "  "+w)
 		}
 
