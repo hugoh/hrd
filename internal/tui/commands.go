@@ -88,6 +88,8 @@ func startExec(
 // VCS shortcuts (s/l/d/f) should pass "" so they always use VCS routing
 // regardless of the current command-bar prefix.
 func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
+	m.execCancelAll()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.execCancel = cancel
 	m.executing = true
