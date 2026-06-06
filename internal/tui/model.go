@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
@@ -160,13 +161,12 @@ type model struct {
 	spinner  spinner.Model
 	statuses map[string]runner.StatusResult
 
-	groupPopupCursor  int
-	groupPopupOptions []string
-	groupMode         groupMode
-	groupNewInput     bool
+	groupList     list.Model
+	groupMode     groupMode
+	groupNewInput bool
 
-	selHistoryCursor int
-	alertMsg         string
+	historyList list.Model
+	alertMsg    string
 
 	commandOpen         bool
 	input               textinput.Model
@@ -259,6 +259,8 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	m.initInput()
 	m.initOutput()
 	m.initHelpViewport()
+	m.initHistoryList()
+	m.initGroupList()
 
 	return m, nil
 }
@@ -325,6 +327,24 @@ func (m *model) initHelpViewport() {
 		viewport.WithHeight(initOutputH),
 	)
 	m.helpViewport.SetContent(m.helpContent())
+}
+
+func (m *model) initHistoryList() {
+	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	for name := range m.cfg.Repos {
+		allRepoSet[name] = struct{}{}
+	}
+
+	m.historyList = initHistoryList(
+		m.persState.SelectionHistory,
+		m.cfg.Groups,
+		allRepoSet,
+		defaultViewW,
+	)
+}
+
+func (m *model) initGroupList() {
+	m.groupList = initGroupList(defaultViewW)
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.

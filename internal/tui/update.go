@@ -53,6 +53,11 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.output.SetHeight(m.contentHeight())
 	m.helpViewport.SetWidth(m.width)
 	m.helpViewport.SetHeight(m.contentHeight())
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(m.contentHeight())
+	m.refreshHistoryDelegate()
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
 
 	const (
@@ -214,28 +219,24 @@ func (m *model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		if m.groupPopupCursor > 0 {
-			m.groupPopupCursor--
-		}
-
-		return m, nil
-	case "down", "j":
-		if m.groupPopupCursor < len(m.groupPopupOptions)-1 {
-			m.groupPopupCursor++
-		}
-
-		return m, nil
-	case keyEnter:
+	if msg.String() == keyEnter {
 		return m.handleGroupEnter()
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+
+	m.groupList, cmd = m.groupList.Update(msg)
+
+	return m, cmd
 }
 
 func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
-	selected := m.groupPopupOptions[m.groupPopupCursor]
+	item, ok := m.groupList.SelectedItem().(groupItem)
+	if !ok {
+		return m, nil
+	}
+
+	selected := item.name
 
 	switch m.groupMode {
 	case groupFilterMode:
@@ -727,37 +728,52 @@ func (m *model) pushSelectionHistory() {
 	}
 }
 
+func (m *model) refreshHistoryDelegate() {
+	items := m.historyList.Items()
+	if len(items) == 0 {
+		return
+	}
+
+	delegate := newHistoryDelegate(m.width)
+	delegate.recomputeHeight(items)
+	m.historyList.SetDelegate(delegate)
+}
+
 func openSelHistoryPopup(m *model) {
-	m.selHistoryCursor = 0
+	if len(m.persState.SelectionHistory) == 0 {
+		return
+	}
+
+	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	for name := range m.cfg.Repos {
+		allRepoSet[name] = struct{}{}
+	}
+
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
+	delegate := newHistoryDelegate(m.width)
+	delegate.recomputeHeight(items)
+	m.historyList.SetDelegate(delegate)
+	m.historyList.SetItems(items)
+	m.historyList.Select(0)
+
 	m.screen = screenSelHistory
 }
 
 func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	entries := m.persState.SelectionHistory
-	if len(entries) == 0 {
-		m.screen = screenMain
-
-		return m, nil
-	}
-
-	switch msg.String() {
-	case "up", "k":
-		if m.selHistoryCursor > 0 {
-			m.selHistoryCursor--
+	if msg.String() == keyEnter {
+		item, ok := m.historyList.SelectedItem().(historyItem)
+		if !ok {
+			return m, nil
 		}
 
-		return m, nil
-	case "down", "j":
-		if m.selHistoryCursor < len(entries)-1 {
-			m.selHistoryCursor++
-		}
-
-		return m, nil
-	case keyEnter:
-		return m.handleSelHistoryRestore(entries[m.selHistoryCursor])
+		return m.handleSelHistoryRestore(item.entry)
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+
+	m.historyList, cmd = m.historyList.Update(msg)
+
+	return m, cmd
 }
 
 func (m *model) handleSelHistoryRestore(entry SelectionEntry) (tea.Model, tea.Cmd) {
@@ -843,20 +859,26 @@ func openGroupPopup(m *model, mode groupMode) {
 		options = append(options, labelNew)
 	}
 
-	m.groupPopupOptions = options
 	m.groupMode = mode
+	m.groupList = initGroupList(m.width)
+	m.groupList.SetHeight(m.contentHeight())
 
-	m.groupPopupCursor = 0
+	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos))
+	m.groupList.SetItems(items)
+
+	cursor := 0
+
 	if m.groupFilter != "" && mode == groupFilterMode {
 		for i, opt := range options {
 			if opt == m.groupFilter || opt == "@"+m.groupFilter {
-				m.groupPopupCursor = i
+				cursor = i
 
 				break
 			}
 		}
 	}
 
+	m.groupList.Select(cursor)
 	m.screen = screenGroup
 }
 

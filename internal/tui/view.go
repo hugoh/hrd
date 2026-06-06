@@ -279,25 +279,8 @@ func (m *model) groupView() string {
 		return m.groupNewInputView()
 	}
 
-	items := m.renderGroupItems()
-
-	ch := m.contentHeight()
-
-	var visible []string
-
-	if len(items) <= ch {
-		visible = items
-	} else {
-		scrollOff := m.groupPopupCursor
-
-		if scrollOff+ch > len(items) {
-			scrollOff = len(items) - ch
-		}
-
-		visible = items[scrollOff : scrollOff+ch]
-	}
-
-	content := strings.Join(visible, "\n")
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(m.contentHeight())
 
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
@@ -308,7 +291,7 @@ func (m *model) groupView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.groupList.View(), sep, footer)
 }
 
 func (m *model) groupNewInputView() string {
@@ -322,103 +305,19 @@ func (m *model) groupNewInputView() string {
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
 }
 
-func (m *model) renderGroupItems() []string {
-	items := make([]string, 0, len(m.groupPopupOptions))
-	for i, opt := range m.groupPopupOptions {
-		marker := "  "
-		if i == m.groupPopupCursor {
-			marker = "▸ "
-		}
-
-		name := opt
-		if m.groupMode == groupFilterMode && (opt == m.groupFilter || opt == "@"+m.groupFilter) {
-			name = styleBold.Render(opt)
-		}
-
-		items = append(items, marker+name)
-	}
-
-	return items
-}
-
-//nolint:funlen // detailed entry rendering with repo list wrapping
 func (m *model) selHistoryView() string {
-	entries := m.persState.SelectionHistory
-	if len(entries) == 0 {
+	if len(m.persState.SelectionHistory) == 0 {
 		return ""
 	}
 
-	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
-	for name := range m.cfg.Repos {
-		allRepoSet[name] = struct{}{}
-	}
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(m.contentHeight())
 
-	ch := m.contentHeight()
-
-	wrapW := max(m.width-historyIndent, historyMinWrapW)
-
-	type entryMeta struct{ start, count int }
-
-	var (
-		lines []string
-		meta  []entryMeta
-	)
-
-	for i, e := range entries {
-		start := len(lines)
-
-		marker := "  "
-		if i == m.selHistoryCursor {
-			marker = "▸ "
-		}
-
-		ts := e.Timestamp.Format("Jan 02 15:04")
-		header := fmt.Sprintf("%s%s  %s", marker, ui.Muted(ts), m.repoCountLabel(len(e.Repos)))
-		lines = append(lines, header)
-
-		var displayStr string
-
-		if groups, uncovered := matchingGroups(e.Repos, allRepoSet, m.cfg.Groups); len(groups) > 0 {
-			parts := make([]string, 0, len(groups)+len(uncovered))
-			parts = append(parts, groups...)
-			parts = append(parts, uncovered...)
-			displayStr = strings.Join(parts, ", ")
-		} else {
-			displayStr = strings.Join(e.Repos, ", ")
-		}
-
-		for _, w := range wrapString(displayStr, wrapW) {
-			lines = append(lines, "  "+w)
-		}
-
-		if i < len(entries)-1 {
-			lines = append(lines, "")
-		}
-
-		meta = append(meta, entryMeta{start, len(lines) - start})
-	}
-
-	var visible []string
-
-	if len(lines) <= ch {
-		visible = lines
-	} else {
-		cursorStart := meta[m.selHistoryCursor].start
-
-		off := cursorStart
-		if off+ch > len(lines) {
-			off = len(lines) - ch
-		}
-
-		visible = lines[off : off+ch]
-	}
-
-	content := strings.Join(visible, "\n")
 	header := styleHeader.Render(" Selection History ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.historyList.View(), sep, footer)
 }
 
 func wrapString(s string, maxW int) []string {
@@ -454,7 +353,7 @@ func wrapString(s string, maxW int) []string {
 	return out
 }
 
-func (*model) repoCountLabel(n int) string {
+func repoCountLabel(n int) string {
 	if n == 1 {
 		return "1 repo"
 	}

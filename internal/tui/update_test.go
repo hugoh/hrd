@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -952,11 +953,13 @@ func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupPopupOptions: []string{labelAllCap, "work"},
-		groupPopupCursor:  1,
+		repoOrder: []string{"r1"},
+		selected:  map[string]bool{},
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(1)
 
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
@@ -1124,6 +1127,7 @@ func TestOpenGroupPopup(t *testing.T) {
 		},
 		groupFilter: "work",
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupFilterMode)
 
@@ -1131,12 +1135,12 @@ func TestOpenGroupPopup(t *testing.T) {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
 	}
 
-	if len(m.groupPopupOptions) != 3 {
-		t.Errorf("expected 3 popup options, got %d", len(m.groupPopupOptions))
+	if len(m.groupList.Items()) != 3 {
+		t.Errorf("expected 3 popup items, got %d", len(m.groupList.Items()))
 	}
 
-	if m.groupPopupCursor != 2 {
-		t.Errorf("cursor = %d, want 2 (index of work)", m.groupPopupCursor)
+	if m.groupList.Index() != 2 {
+		t.Errorf("cursor = %d, want 2 (index of work)", m.groupList.Index())
 	}
 }
 
@@ -1148,6 +1152,7 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 			},
 		},
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupFilterMode)
 
@@ -1155,12 +1160,12 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
 	}
 
-	if len(m.groupPopupOptions) != 2 {
-		t.Errorf("expected 2 popup options, got %d", len(m.groupPopupOptions))
+	if len(m.groupList.Items()) != 2 {
+		t.Errorf("expected 2 popup items, got %d", len(m.groupList.Items()))
 	}
 
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 (index of [all])", m.groupPopupCursor)
+	if m.groupList.Index() != 0 {
+		t.Errorf("cursor = %d, want 0 (index of [all])", m.groupList.Index())
 	}
 }
 
@@ -1260,20 +1265,33 @@ func TestPushSelectionHistory(t *testing.T) {
 }
 
 func TestOpenSelHistoryPopup(t *testing.T) {
-	m := &model{}
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{"a": {}, "b": {}},
+		},
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b"}},
+			},
+		},
+	}
+	m.initHistoryList()
 	openSelHistoryPopup(m)
 
 	if m.screen != screenSelHistory {
 		t.Errorf("screen = %d, want %d", m.screen, screenSelHistory)
 	}
 
-	if m.selHistoryCursor != 0 {
-		t.Errorf("selHistoryCursor = %d, want 0", m.selHistoryCursor)
+	if m.historyList.Index() != 0 {
+		t.Errorf("cursor = %d, want 0", m.historyList.Index())
 	}
 }
 
 func TestHandleSelHistoryKeyNavigation(t *testing.T) {
 	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{"a": {}, "b": {}, "c": {}, "d": {}},
+		},
 		persState: PersistentState{
 			SelectionHistory: []SelectionEntry{
 				{Repos: []string{"a", "b"}},
@@ -1283,39 +1301,37 @@ func TestHandleSelHistoryKeyNavigation(t *testing.T) {
 		},
 	}
 	m.initTable()
+	m.initHistoryList()
 
-	// Initial cursor
-	if m.selHistoryCursor != 0 {
-		t.Fatalf("initial cursor = %d, want 0", m.selHistoryCursor)
+	openSelHistoryPopup(m)
+
+	if m.historyList.Index() != 0 {
+		t.Fatalf("initial cursor = %d, want 0", m.historyList.Index())
 	}
 
-	// Navigate down
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyDown})
-	if m.selHistoryCursor != 1 {
-		t.Errorf("cursor after down = %d, want 1", m.selHistoryCursor)
+	if m.historyList.Index() != 1 {
+		t.Errorf("cursor after down = %d, want 1", m.historyList.Index())
 	}
 
-	// Navigate up
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
-	if m.selHistoryCursor != 0 {
-		t.Errorf("cursor after up = %d, want 0", m.selHistoryCursor)
+	if m.historyList.Index() != 0 {
+		t.Errorf("cursor after up = %d, want 0", m.historyList.Index())
 	}
 
-	// k/j navigation
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'j'})
-	if m.selHistoryCursor != 1 {
-		t.Errorf("cursor after j = %d, want 1", m.selHistoryCursor)
+	if m.historyList.Index() != 1 {
+		t.Errorf("cursor after j = %d, want 1", m.historyList.Index())
 	}
 
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'k'})
-	if m.selHistoryCursor != 0 {
-		t.Errorf("cursor after k = %d, want 0", m.selHistoryCursor)
+	if m.historyList.Index() != 0 {
+		t.Errorf("cursor after k = %d, want 0", m.historyList.Index())
 	}
 
-	// Edge: up at top stays at 0
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
-	if m.selHistoryCursor != 0 {
-		t.Errorf("cursor at top = %d, want 0", m.selHistoryCursor)
+	if m.historyList.Index() != 0 {
+		t.Errorf("cursor at top = %d, want 0", m.historyList.Index())
 	}
 }
 
@@ -1325,10 +1341,11 @@ func TestHandleSelHistoryKeyEmpty(t *testing.T) {
 		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
 	}
 	m.initTable()
+	m.initHistoryList()
 
 	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d (should return to main when empty)", m.screen, screenMain)
+	if m.screen != screenSelHistory {
+		t.Errorf("screen = %d, want %d (empty list, no-op)", m.screen, screenSelHistory)
 	}
 }
 
@@ -1588,6 +1605,7 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 			},
 		},
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupAddMode)
 
@@ -1595,12 +1613,8 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
 	}
 
-	if len(m.groupPopupOptions) != 3 {
-		t.Errorf("expected 3 popup options (2 groups + new), got %d", len(m.groupPopupOptions))
-	}
-
-	if m.groupPopupOptions[2] != labelNew {
-		t.Errorf("last option = %q, want %q", m.groupPopupOptions[2], labelNew)
+	if len(m.groupList.Items()) != 3 {
+		t.Errorf("expected 3 popup items, got %d", len(m.groupList.Items()))
 	}
 
 	if m.groupMode != groupAddMode {
@@ -1615,11 +1629,14 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {Groups: []string{"work"}}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupFilter:       "work",
-		groupPopupOptions: []string{labelAllCap, "work"},
+		repoOrder:   []string{"r1"},
+		selected:    map[string]bool{},
+		groupFilter: "work",
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupEnter()
 
@@ -1648,13 +1665,15 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 			},
 			Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},
 		},
-		opts:              Options{ConfigPath: cfgPath},
-		repoOrder:         []string{"repo1", "repo2"},
-		selected:          map[string]bool{"repo2": true},
-		groupPopupOptions: []string{"work", labelNew},
-		groupPopupCursor:  0,
-		groupMode:         groupAddMode,
+		opts:      Options{ConfigPath: cfgPath},
+		repoOrder: []string{"repo1", "repo2"},
+		selected:  map[string]bool{"repo2": true},
+		groupMode: groupAddMode,
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupEnter()
 
@@ -1676,12 +1695,13 @@ func TestHandleGroupEnterAddModeNew(t *testing.T) {
 		cfg: config.Config{
 			Repos: map[string]config.Repo{"repo1": {}},
 		},
-		repoOrder:         []string{"repo1"},
-		selected:          map[string]bool{"repo1": true},
-		groupPopupOptions: []string{"work", labelNew},
-		groupPopupCursor:  1,
-		groupMode:         groupAddMode,
+		repoOrder: []string{"repo1"},
+		selected:  map[string]bool{"repo1": true},
+		groupMode: groupAddMode,
 	}
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
 	m.initInput()
 
 	_, cmd := m.handleGroupEnter()
@@ -1770,46 +1790,46 @@ func TestHandleGroupNewInputEsc(t *testing.T) {
 
 func TestHandleGroupKeyNavigation(t *testing.T) {
 	m := &model{
-		groupPopupOptions: []string{"a", "b", "c"},
-		groupPopupCursor:  1,
+		groupMode: groupFilterMode,
 	}
+	m.initGroupList()
+	m.groupList.SetItems([]list.Item{
+		groupItem{name: "a"},
+		groupItem{name: "b"},
+		groupItem{name: "c"},
+	})
+	m.groupList.Select(1)
 
-	// Press up
 	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
-
 	if cmd != nil {
 		t.Error("expected nil cmd after up")
 	}
 
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 after up", m.groupPopupCursor)
+	if m.groupList.Index() != 0 {
+		t.Errorf("cursor = %d, want 0 after up", m.groupList.Index())
 	}
 
-	// Press down
 	_, cmd = m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
-
 	if cmd != nil {
 		t.Error("expected nil cmd after down")
 	}
 
-	if m.groupPopupCursor != 1 {
-		t.Errorf("cursor = %d, want 1 after down", m.groupPopupCursor)
+	if m.groupList.Index() != 1 {
+		t.Errorf("cursor = %d, want 1 after down", m.groupList.Index())
 	}
 
-	// Up at top clamps to 0
-	m.groupPopupCursor = 0
+	m.groupList.Select(0)
 	m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
 
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 at top", m.groupPopupCursor)
+	if m.groupList.Index() != 0 {
+		t.Errorf("cursor = %d, want 0 at top", m.groupList.Index())
 	}
 
-	// Down at bottom clamps to len-1
-	m.groupPopupCursor = 2
+	m.groupList.Select(2)
 	m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
 
-	if m.groupPopupCursor != 2 {
-		t.Errorf("cursor = %d, want 2 at bottom", m.groupPopupCursor)
+	if m.groupList.Index() != 2 {
+		t.Errorf("cursor = %d, want 2 at bottom", m.groupList.Index())
 	}
 }
 
@@ -1820,10 +1840,13 @@ func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupPopupOptions: []string{labelAllCap, "work"},
+		repoOrder: []string{"r1"},
+		selected:  map[string]bool{},
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 

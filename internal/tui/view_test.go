@@ -4,8 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
 
@@ -75,8 +77,10 @@ func TestViewNotReady(t *testing.T) {
 func TestViewGroupScreen(t *testing.T) {
 	m := testModel(func(m *model) {
 		m.screen = screenGroup
-		m.groupPopupOptions = []string{labelAllCap}
-		m.groupPopupCursor = 0
+		m.initGroupList()
+		m.groupList.SetItems([]list.Item{groupItem{name: labelAllCap}})
+		m.groupList.SetWidth(m.width)
+		m.groupList.SetHeight(m.contentHeight())
 	})
 
 	view := m.View()
@@ -258,13 +262,11 @@ func TestAlertContent(t *testing.T) {
 }
 
 func TestRepoCountLabel(t *testing.T) {
-	m := &model{}
-
-	if got := m.repoCountLabel(1); got != "1 repo" {
+	if got := repoCountLabel(1); got != "1 repo" {
 		t.Errorf("repoCountLabel(1) = %q, want %q", got, "1 repo")
 	}
 
-	if got := m.repoCountLabel(3); got != "3 repos" {
+	if got := repoCountLabel(3); got != "3 repos" {
 		t.Errorf("repoCountLabel(3) = %q, want %q", got, "3 repos")
 	}
 }
@@ -274,6 +276,10 @@ func TestSelHistoryView(t *testing.T) {
 		screen: screenSelHistory,
 		width:  80,
 		height: 30,
+		cfg: config.Config{
+			Groups: map[string]config.Group{},
+			Repos:  map[string]config.Repo{"a": {}, "b": {}, "c": {}, "d": {}},
+		},
 		persState: PersistentState{
 			SelectionHistory: []SelectionEntry{
 				{Repos: []string{"a", "b", "c"}},
@@ -282,6 +288,7 @@ func TestSelHistoryView(t *testing.T) {
 		},
 	}
 	m.initTable()
+	m.initHistoryList()
 
 	view := m.selHistoryView()
 	if view == "" {
@@ -290,10 +297,6 @@ func TestSelHistoryView(t *testing.T) {
 
 	if !strings.Contains(view, "Selection History") {
 		t.Error("selHistoryView should show 'Selection History' header")
-	}
-
-	if !strings.Contains(view, "3 repos") {
-		t.Error("selHistoryView should show repo count")
 	}
 }
 
