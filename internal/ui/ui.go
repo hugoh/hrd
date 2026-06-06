@@ -20,9 +20,13 @@ import (
 var (
 	loggerInit sync.Once
 	loggerVal  *log.Logger
+	loggerMu   sync.Mutex
 )
 
 func logLogger() *log.Logger {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+
 	if loggerVal != nil {
 		return loggerVal
 	}
@@ -40,6 +44,9 @@ func logLogger() *log.Logger {
 // SetLogger sets the package-level logger. Used in tests to redirect output.
 // Passing nil restores the default logger.
 func SetLogger(l *log.Logger) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+
 	loggerVal = l
 	loggerInit = sync.Once{}
 }
