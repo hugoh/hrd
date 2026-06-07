@@ -67,11 +67,6 @@ func TestFormatDispatchHeader(t *testing.T) {
 	})
 }
 
-func TestColorSprint(t *testing.T) {
-	out := ui.ColorSprint("green", "hello")
-	assert.Contains(t, out, "hello")
-}
-
 func TestComputeRemainderWidth(t *testing.T) {
 	// termWidth=100, minWidth=10, used=[20, 30] (2 fixed widths)
 	// total used = 50, numSeparators = 2, separatorWidth = 2

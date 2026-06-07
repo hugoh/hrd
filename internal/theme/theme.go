@@ -54,6 +54,8 @@ var ANSIColors = map[string]string{
 	"red":     "1",
 	"magenta": "5",
 	"gray":    "8",
+	"cyan":    "14",
+	"purple":  "62",
 }
 
 // DefaultColor is the ANSI code used when a color name is not found.

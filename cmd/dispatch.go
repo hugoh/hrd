@@ -673,7 +673,7 @@ func statusRow(name, vcs string, res *runner.StatusResult, details bool) []strin
 	}
 
 	if res.Err != nil {
-		return []string{name, vcs, ui.ColorSprint("red", fmt.Sprintf("%v", res.Err))}
+		return []string{name, vcs, ui.ApplyColor("red", fmt.Sprintf("%v", res.Err))}
 	}
 
 	line := ui.FormatDispatchStatusLine(res.Status, details)

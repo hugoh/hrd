@@ -1,30 +1,18 @@
 package tui
 
-import "charm.land/lipgloss/v2"
+import (
+	"charm.land/lipgloss/v2"
+	"github.com/hugoh/hrd/internal/theme"
+)
 
 //nolint:gochecknoglobals // effectively constant, lipgloss styles
 var (
 	styleHeader = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("14"))
-
-	styleFooter = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8"))
+			Foreground(lipgloss.Color(theme.ColorCode("cyan")))
 
 	styleSeparator = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("8"))
-
-	styleGroupLabel = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("3"))
-
-	styleSelectMarker = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("3"))
-
-	styleSelectedCount = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("3"))
-
-	styleWarn = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("3"))
+			Foreground(lipgloss.Color(theme.ColorCode("gray")))
 
 	styleBold = lipgloss.NewStyle().
 			Bold(true)

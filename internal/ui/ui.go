@@ -55,12 +55,16 @@ func lipglossColor(colorName string) color.Color {
 	return lipgloss.Color(theme.ColorCode(colorName))
 }
 
-func Muted(s string) string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(s)
+func MutedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipglossColor("gray"))
 }
 
-func MutedStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+func Muted(s string) string {
+	return MutedStyle().Render(s)
+}
+
+func WarnStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipglossColor("yellow"))
 }
 
 func StateStyle(state backend.RefState) lipgloss.Style {
@@ -71,33 +75,31 @@ func ApplyColor(colorName, symbol string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
 }
 
-func ColorSprint(colorName, s string) string {
-	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(s)
-}
-
 func FormatDispatchHeader(name, vcs string) string {
 	return fmt.Sprintf(" %-15s %-3s", name, vcs)
 }
 
+//nolint:gochecknoglobals // cached dispatch result styles
+var (
+	dispatchHeaderStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("236")).
+				Foreground(lipgloss.Color("15"))
+	dispatchErrorStyle   = lipgloss.NewStyle().Foreground(lipglossColor("red"))
+	dispatchSuccessStyle = lipgloss.NewStyle().Foreground(lipglossColor("green"))
+)
+
 func RenderDispatchResult(res runner.Result) string {
-	headerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("15"))
-	header := headerStyle.Render(FormatDispatchHeader(res.RepoName, res.VCS))
+	header := dispatchHeaderStyle.Render(FormatDispatchHeader(res.RepoName, res.VCS))
 
 	if runner.ResultColor(res) == "red" {
 		if res.Err != nil {
-			return header + " " + lipgloss.NewStyle().
-				Foreground(lipgloss.Color("1")).
-				Render("✗ "+res.Err.Error())
+			return header + " " + dispatchErrorStyle.Render("✗ "+res.Err.Error())
 		}
 
-		return header + " " + lipgloss.NewStyle().
-			Foreground(lipgloss.Color("1")).
-			Render("✗ exit "+strconv.Itoa(res.ExitCode))
+		return header + " " + dispatchErrorStyle.Render("✗ exit "+strconv.Itoa(res.ExitCode))
 	}
 
-	return header + " " + lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓")
+	return header + " " + dispatchSuccessStyle.Render("✓")
 }
 
 type StatusLineParts struct {
