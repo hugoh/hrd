@@ -7,7 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.7
 	charm.land/lipgloss/v2 v2.0.3
 	charm.land/log/v2 v2.0.0
-	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260602025833-85a30b5e440a
+	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20260607010151-cd19a2bba55f
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/muesli/reflow v0.3.0
 	github.com/pelletier/go-toml/v2 v2.3.1
@@ -25,7 +25,7 @@ require (
 	github.com/charmbracelet/harmonica v0.2.0 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260601155805-6cf7526a1b3f // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
-	github.com/charmbracelet/x/exp/golden v0.0.0-20260602025833-85a30b5e440a // indirect
+	github.com/charmbracelet/x/exp/golden v0.0.0-20260607010151-cd19a2bba55f // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
