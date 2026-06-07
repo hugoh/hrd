@@ -13,6 +13,14 @@ const maxHistoryLen = 100
 func (m *model) pushHistory(prefix, cmdStr string) {
 	entry := HistoryEntry{Prefix: prefix, Command: cmdStr}
 
+	for i, e := range m.persState.History {
+		if e.Prefix == prefix && e.Command == cmdStr {
+			m.persState.History = append(m.persState.History[:i], m.persState.History[i+1:]...)
+
+			break
+		}
+	}
+
 	m.persState.History = append([]HistoryEntry{entry}, m.persState.History...)
 	if len(m.persState.History) > maxHistoryLen {
 		m.persState.History = m.persState.History[:maxHistoryLen]
