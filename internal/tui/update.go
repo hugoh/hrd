@@ -930,9 +930,7 @@ func (m *model) formatStatusLine(name string) string {
 	}
 
 	if sr.Err != nil {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCode("red"))).
-			Render("✗ " + sr.Err.Error())
+		return ui.ApplyColor("red", "✗ "+sr.Err.Error())
 	}
 
 	st := sr.Status

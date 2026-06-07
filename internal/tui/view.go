@@ -86,20 +86,19 @@ func (m *model) emptyTableView() string {
 		msg = "No repos configured\nUse `hrd repo add <path>` to add one"
 	}
 
-	return lipgloss.NewStyle().
+	return ui.MutedStyle().
 		Width(m.width).
 		Height(m.contentHeight()).
 		Align(lipgloss.Center).
-		Foreground(lipgloss.Color("8")).
 		Render(msg)
 }
 
 func (m *model) alertContent() string {
 	if m.alertMsg != "" {
-		return styleWarn.Render(m.alertMsg)
+		return ui.WarnStyle().Render(m.alertMsg)
 	}
 
-	return styleWarn.Render("No repos selected") + "\n" +
+	return ui.WarnStyle().Render("No repos selected") + "\n" +
 		ui.Muted("Select a group with @ or specific repos with x")
 }
 
@@ -107,14 +106,14 @@ func (m *model) renderHeader() string {
 	left := styleHeader.Render(" hrd")
 
 	if gl := m.groupLabel(); gl != "" && gl != labelAll {
-		left += styleGroupLabel.Render(" " + gl)
+		left += ui.WarnStyle().Render(" " + gl)
 	}
 
 	switch m.mode {
 	case modeSelect:
-		left += styleSelectMarker.Render(" x:select")
+		left += ui.WarnStyle().Render(" x:select")
 	case modeSingle:
-		left += styleSelectMarker.Render(" s:single")
+		left += ui.WarnStyle().Render(" s:single")
 	case modeNormal:
 	}
 
@@ -126,7 +125,7 @@ func (m *model) renderHeader() string {
 			repoCount = fmt.Sprintf("%d/%d repos", cnt, total)
 		}
 
-		left += styleSelectedCount.Render(" " + repoCount)
+		left += ui.WarnStyle().Render(" " + repoCount)
 	}
 
 	right := m.renderHeaderRight()
@@ -179,7 +178,7 @@ func (m *model) renderInputLine() string {
 		prompt = fmt.Sprintf("[%s] $ ", prefixLabels[m.cmdPrefix])
 	}
 
-	return styleWarn.Render(prompt) + m.input.View()
+	return ui.WarnStyle().Render(prompt) + m.input.View()
 }
 
 func (*model) renderFooter() string {
@@ -198,7 +197,7 @@ func (*model) renderFooter() string {
 		parts = append(parts, dk+":"+b.label)
 	}
 
-	return styleFooter.Render(strings.Join(parts, " "))
+	return ui.MutedStyle().Render(strings.Join(parts, " "))
 }
 
 func (m *model) outputView() string {
@@ -215,13 +214,13 @@ func (m *model) outputView() string {
 
 	var left, right string
 
-	right = styleFooter.Render(" Esc/q:close")
+	right = ui.MutedStyle().Render(" Esc/q:close")
 
 	if m.executing && m.execTotal > 0 {
 		done := len(m.execResults)
 		pct := float64(done) / float64(m.execTotal)
 		bar := progressModel.ViewAs(pct)
-		left = styleFooter.Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal))
+		left = ui.MutedStyle().Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal))
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}
@@ -245,14 +244,10 @@ func (m *model) coloredSummary() string {
 	text := ui.FormatSummary(m.execTotal, failed)
 
 	if len(failed) > 0 {
-		return lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCode("red"))).
-			Render("✗ " + text)
+		return ui.ApplyColor("red", "✗ "+text)
 	}
 
-	return lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCode("green"))).
-		Render("✓ " + text)
+	return ui.ApplyColor("green", "✓ "+text)
 }
 
 // --- Full-screen views ------------------------------------------------------
@@ -263,7 +258,7 @@ func (m *model) helpView() string {
 
 	header := styleHeader.Render(" Help ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	footer := styleFooter.Render(" ↑/↓:scroll  j/k:scroll  Esc/q:close")
+	footer := ui.MutedStyle().Render(" ↑/↓:scroll  j/k:scroll  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.helpViewport.View(), sep, footer)
 }
@@ -283,7 +278,7 @@ func (m *model) groupView() string {
 
 	header := styleHeader.Render(headerTxt)
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
+	footer := ui.MutedStyle().Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.groupList.View(), sep, footer)
 }
@@ -291,9 +286,9 @@ func (m *model) groupView() string {
 func (m *model) groupNewInputView() string {
 	header := styleHeader.Render(" New group name ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	footer := styleFooter.Render(" Enter:confirm  Esc:back")
+	footer := ui.MutedStyle().Render(" Enter:confirm  Esc:back")
 
-	prompt := styleWarn.Render("name: ")
+	prompt := ui.WarnStyle().Render("name: ")
 	inputLine := prompt + m.input.View()
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
@@ -309,7 +304,7 @@ func (m *model) selHistoryView() string {
 
 	header := styleHeader.Render(" Selection History ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	footer := styleFooter.Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
+	footer := ui.MutedStyle().Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.historyList.View(), sep, footer)
 }
