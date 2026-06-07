@@ -23,8 +23,6 @@ func repoCountLabel(n int) string {
 	return fmt.Sprintf("%d repos", n)
 }
 
-// --- History list types ------------------------------------------------------
-
 type historyItem struct {
 	repos []string
 	title string
@@ -71,8 +69,6 @@ func buildHistoryItems(
 	return items
 }
 
-// --- Group list types --------------------------------------------------------
-
 type groupItem struct {
 	name string
 	desc string
@@ -104,19 +100,17 @@ func buildGroupItems(names []string, groups map[string]config.Group, totalRepos 
 	return items
 }
 
-// --- Delegate + list builder ---------------------------------------------------
-
 func defaultItemDelegate(spacing int) list.DefaultDelegate {
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = true
 	delegate.SetHeight(itemH)
 	delegate.SetSpacing(spacing)
 
-	title := lipgloss.NewStyle().PaddingLeft(itemIndent)
-	desc := lipgloss.NewStyle().PaddingLeft(itemIndent).Foreground(lipgloss.Color("12"))
+	title := lipgloss.NewStyle().PaddingLeft(itemIndent).Foreground(lipgloss.Color("12"))
+	desc := lipgloss.NewStyle().PaddingLeft(itemIndent)
 
 	delegate.Styles.NormalTitle = title
-	delegate.Styles.SelectedTitle = title.Background(lipgloss.Color("62"))
+	delegate.Styles.SelectedTitle = title.Background(lipgloss.Color("62")).UnsetForeground()
 	delegate.Styles.NormalDesc = desc
 	delegate.Styles.SelectedDesc = desc
 
