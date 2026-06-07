@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSortedRepoKeys(t *testing.T) {
@@ -13,19 +13,12 @@ func TestSortedRepoKeys(t *testing.T) {
 		"alpha": {},
 		"beta":  {},
 	}
-	want := []string{"alpha", "beta", "zeta"}
 
-	got := sortedRepoKeys(repos)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("sortedRepoKeys() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"alpha", "beta", "zeta"}, sortedRepoKeys(repos))
 }
 
 func TestSortedRepoKeysEmpty(t *testing.T) {
-	got := sortedRepoKeys(map[string]config.Repo{})
-	if len(got) != 0 {
-		t.Errorf("sortedRepoKeys() = %v, want empty slice", got)
-	}
+	assert.Empty(t, sortedRepoKeys(map[string]config.Repo{}))
 }
 
 func TestSortedGroupNames(t *testing.T) {
@@ -33,19 +26,12 @@ func TestSortedGroupNames(t *testing.T) {
 		"work":     {},
 		"personal": {},
 	}
-	want := []string{"personal", "work"}
 
-	got := sortedGroupNames(groups)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("sortedGroupNames() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"personal", "work"}, sortedGroupNames(groups))
 }
 
 func TestSortedGroupNamesEmpty(t *testing.T) {
-	got := sortedGroupNames(map[string]config.Group{})
-	if len(got) != 0 {
-		t.Errorf("sortedGroupNames() = %v, want empty slice", got)
-	}
+	assert.Empty(t, sortedGroupNames(map[string]config.Group{}))
 }
 
 func TestGroupLabel(t *testing.T) {
@@ -55,16 +41,12 @@ func TestGroupLabel(t *testing.T) {
 
 	t.Run("with group filter", func(t *testing.T) {
 		m.groupFilter = "personal"
-		if got := m.groupLabel(); got != "@personal" {
-			t.Errorf("groupLabel() = %q, want %q", got, "@personal")
-		}
+		assert.Equal(t, "@personal", m.groupLabel())
 	})
 
 	t.Run("no filter", func(t *testing.T) {
 		m.groupFilter = ""
-		if got := m.groupLabel(); got != "all" {
-			t.Errorf("groupLabel() = %q, want %q", got, "all")
-		}
+		assert.Equal(t, "all", m.groupLabel())
 	})
 }
 
@@ -78,47 +60,24 @@ func TestActiveRepoOrder(t *testing.T) {
 
 	t.Run("no group filter uses repoOrder", func(t *testing.T) {
 		m.groupFilter = ""
-		got := m.activeRepoOrder()
-		want := []string{"a", "b", "c"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
-		}
+		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
 	})
 
 	t.Run("known group filter", func(t *testing.T) {
 		m.groupFilter = "work"
-		got := m.activeRepoOrder()
-		want := []string{"a", "b"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
-		}
+		assert.Equal(t, []string{"a", "b"}, m.activeRepoOrder())
 	})
 
 	t.Run("unknown group filter cleared", func(t *testing.T) {
 		m.groupFilter = "nonexistent"
-		got := m.activeRepoOrder()
-		want := []string{"a", "b", "c"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
-		}
-
-		if m.groupFilter != "" {
-			t.Errorf("groupFilter = %q, want empty", m.groupFilter)
-		}
+		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
+		assert.Empty(t, m.groupFilter)
 	})
 
 	t.Run("empty group filter uses repoOrder", func(t *testing.T) {
 		m.groupFilter = ""
 		m.cfg.Groups = map[string]config.Group{}
-		got := m.activeRepoOrder()
-		want := []string{"a", "b", "c"}
-
-		if !reflect.DeepEqual(got, want) {
-			t.Errorf("activeRepoOrder() = %v, want %v", got, want)
-		}
+		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
 	})
 }
 
@@ -127,12 +86,7 @@ func TestAllReposFallback(t *testing.T) {
 		repoOrder: []string{"x", "y"},
 	}
 
-	got := m.allReposFallback()
-	want := []string{"x", "y"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("allReposFallback() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"x", "y"}, m.allReposFallback())
 }
 
 func TestSelectedNames(t *testing.T) {
@@ -141,12 +95,7 @@ func TestSelectedNames(t *testing.T) {
 		selected:  map[string]bool{"a": true, "c": true},
 	}
 
-	got := m.selectedNames()
-	want := []string{"a", "c"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("selectedNames() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"a", "c"}, m.selectedNames())
 }
 
 func TestSelectedNamesEmpty(t *testing.T) {
@@ -155,10 +104,7 @@ func TestSelectedNamesEmpty(t *testing.T) {
 		selected:  map[string]bool{},
 	}
 
-	got := m.selectedNames()
-	if len(got) != 0 {
-		t.Errorf("selectedNames() = %v, want empty", got)
-	}
+	assert.Empty(t, m.selectedNames())
 }
 
 func TestSelectedNames_SingleModeReturnsCursorRepo(t *testing.T) {
@@ -169,12 +115,7 @@ func TestSelectedNames_SingleModeReturnsCursorRepo(t *testing.T) {
 	}
 	m.cursor = 1
 
-	got := m.selectedNames()
-	want := []string{"c"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("selectedNames() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"c"}, m.selectedNames())
 }
 
 func TestSelectedNames_SingleModeNoneWhenCursorOutOfRange(t *testing.T) {
@@ -185,10 +126,7 @@ func TestSelectedNames_SingleModeNoneWhenCursorOutOfRange(t *testing.T) {
 	}
 	m.cursor = 5
 
-	got := m.selectedNames()
-	if len(got) != 0 {
-		t.Errorf("selectedNames() = %v, want empty", got)
-	}
+	assert.Empty(t, m.selectedNames())
 }
 
 func TestSelectedNames_SingleModeReturnsEmptyWhenNoneSelected(t *testing.T) {
@@ -199,10 +137,7 @@ func TestSelectedNames_SingleModeReturnsEmptyWhenNoneSelected(t *testing.T) {
 	}
 	m.cursor = 1
 
-	got := m.selectedNames()
-	if len(got) != 0 {
-		t.Errorf("selectedNames() = %v, want empty when no repos selected", got)
-	}
+	assert.Empty(t, m.selectedNames())
 }
 
 func TestAllSelected(t *testing.T) {
@@ -211,9 +146,7 @@ func TestAllSelected(t *testing.T) {
 		selected:  map[string]bool{"a": true, "b": true, "c": true},
 	}
 
-	if !m.allSelected() {
-		t.Error("allSelected() = false, want true")
-	}
+	assert.True(t, m.allSelected())
 }
 
 func TestAllSelectedNotAll(t *testing.T) {
@@ -222,9 +155,7 @@ func TestAllSelectedNotAll(t *testing.T) {
 		selected:  map[string]bool{"a": true, "c": true},
 	}
 
-	if m.allSelected() {
-		t.Error("allSelected() = true, want false")
-	}
+	assert.False(t, m.allSelected())
 }
 
 func TestAllSelectedEmpty(t *testing.T) {
@@ -233,9 +164,7 @@ func TestAllSelectedEmpty(t *testing.T) {
 		selected:  map[string]bool{},
 	}
 
-	if m.allSelected() {
-		t.Error("allSelected() = true, want false")
-	}
+	assert.False(t, m.allSelected())
 }
 
 func TestTableRepos_SelectModeReturnsAll(t *testing.T) {
@@ -245,12 +174,7 @@ func TestTableRepos_SelectModeReturnsAll(t *testing.T) {
 		mode:      modeSelect,
 	}
 
-	got := m.tableRepos()
-	want := []string{"a", "b", "c"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("tableRepos() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"a", "b", "c"}, m.tableRepos())
 }
 
 func TestTableRepos_SelectedOnlyWhenNotInSelectMode(t *testing.T) {
@@ -260,12 +184,7 @@ func TestTableRepos_SelectedOnlyWhenNotInSelectMode(t *testing.T) {
 		mode:      modeNormal,
 	}
 
-	got := m.tableRepos()
-	want := []string{"b"}
-
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("tableRepos() = %v, want %v", got, want)
-	}
+	assert.Equal(t, []string{"b"}, m.tableRepos())
 }
 
 func TestSelectedCount(t *testing.T) {
@@ -274,9 +193,7 @@ func TestSelectedCount(t *testing.T) {
 		selected:  map[string]bool{"a": true, "c": true},
 	}
 
-	if got := m.selectedCount(); got != 2 {
-		t.Errorf("selectedCount() = %d, want %d", got, 2)
-	}
+	assert.Equal(t, 2, m.selectedCount())
 }
 
 func TestSelectedCountEmpty(t *testing.T) {
@@ -285,9 +202,7 @@ func TestSelectedCountEmpty(t *testing.T) {
 		selected:  map[string]bool{},
 	}
 
-	if got := m.selectedCount(); got != 0 {
-		t.Errorf("selectedCount() = %d, want %d", got, 0)
-	}
+	assert.Equal(t, 0, m.selectedCount())
 }
 
 func TestTotalCount(t *testing.T) {
@@ -295,9 +210,7 @@ func TestTotalCount(t *testing.T) {
 		repoOrder: []string{"a", "b", "c"},
 	}
 
-	if got := m.totalCount(); got != 3 {
-		t.Errorf("totalCount() = %d, want %d", got, 3)
-	}
+	assert.Equal(t, 3, m.totalCount())
 }
 
 func TestTableRepos_EmptyWhenNoneSelected(t *testing.T) {
@@ -307,8 +220,99 @@ func TestTableRepos_EmptyWhenNoneSelected(t *testing.T) {
 		mode:      modeNormal,
 	}
 
-	got := m.tableRepos()
-	if len(got) != 0 {
-		t.Errorf("tableRepos() = %v, want empty", got)
+	assert.Empty(t, m.tableRepos())
+}
+
+func TestMatchingGroups_AllRepos(t *testing.T) {
+	repos := []string{"a", "b", "c"}
+	allRepoSet := map[string]struct{}{
+		"a": {}, "b": {}, "c": {},
 	}
+
+	labels, uncovered := matchingGroups(repos, allRepoSet, nil)
+	assert.Equal(t, []string{"[all]"}, labels)
+	assert.Empty(t, uncovered)
+}
+
+func TestMatchingGroups_SubsetOneGroup(t *testing.T) {
+	repos := []string{"a", "b", "c"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"a", "b"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Equal(t, []string{"@work"}, labels)
+	assert.Equal(t, []string{"c"}, uncovered)
+}
+
+func TestMatchingGroups_SubsetMultiGroup(t *testing.T) {
+	repos := []string{"a", "b", "c", "d"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"a", "b"}},
+		"team": {Repos: []string{"b", "c"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Equal(t, []string{"@team", "@work"}, labels)
+	assert.Equal(t, []string{"d"}, uncovered)
+}
+
+func TestMatchingGroups_AllCovered(t *testing.T) {
+	repos := []string{"a", "b"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"a", "b"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Equal(t, []string{"@work"}, labels)
+	assert.Empty(t, uncovered)
+}
+
+func TestMatchingGroups_AllCoveredMulti(t *testing.T) {
+	repos := []string{"a", "b"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"a", "b"}},
+		"team": {Repos: []string{"a", "b"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Equal(t, []string{"@team", "@work"}, labels)
+	assert.Empty(t, uncovered)
+}
+
+func TestMatchingGroups_NoMatch(t *testing.T) {
+	repos := []string{"a", "b"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"c", "d"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Nil(t, labels)
+	assert.Equal(t, repos, uncovered)
+}
+
+func TestMatchingGroups_EmptyGroups(t *testing.T) {
+	repos := []string{"a", "b"}
+
+	labels, uncovered := matchingGroups(repos, nil, map[string]config.Group{})
+	assert.Nil(t, labels)
+	assert.Equal(t, repos, uncovered)
+}
+
+func TestMatchingGroups_UnsortedGroupRepos(t *testing.T) {
+	repos := []string{"a", "b"}
+	groups := map[string]config.Group{
+		"work": {Repos: []string{"b", "a"}},
+	}
+
+	labels, uncovered := matchingGroups(repos, nil, groups)
+	assert.Equal(t, []string{"@work"}, labels)
+	assert.Empty(t, uncovered)
+}
+
+func TestMakeSelectedMap(t *testing.T) {
+	got := makeSelectedMap([]string{"b", "a"})
+	assert.True(t, got["a"])
+	assert.True(t, got["b"])
+	assert.False(t, got["c"])
 }

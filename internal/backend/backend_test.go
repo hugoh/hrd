@@ -109,10 +109,11 @@ type mockBackend struct {
 	detect   func(path string) (bool, error)
 }
 
-func (m *mockBackend) Name() string                     { return m.name }
-func (m *mockBackend) Priority() int                    { return m.priority }
-func (m *mockBackend) Detect(path string) (bool, error) { return m.detect(path) }
-func (*mockBackend) SubcommandArgs(op string) []string  { return []string{op} }
+func (m *mockBackend) Name() string                                  { return m.name }
+func (m *mockBackend) Priority() int                                 { return m.priority }
+func (m *mockBackend) Detect(path string) (bool, error)              { return m.detect(path) }
+func (*mockBackend) SubcommandArgs(op string) []string               { return []string{op} }
+func (*mockBackend) Subcommands(_ context.Context) ([]string, error) { return nil, nil }
 
 // withCleanRegistry resets the global registry to a clean state and restores it
 // on test cleanup. Registers the given backends on the clean registry.
@@ -123,7 +124,7 @@ func withCleanRegistry(t *testing.T, backends ...*mockBackend) {
 	registry = nil
 
 	for _, b := range backends {
-		Register(b)
+		require.NoError(t, Register(b))
 	}
 
 	t.Cleanup(func() { registry = orig })
@@ -146,33 +147,31 @@ func TestRegister(t *testing.T) {
 	withCleanRegistry(t)
 
 	b1 := &mockBackend{name: "low", priority: 10}
-	Register(b1)
+	require.NoError(t, Register(b1))
 	assert.Len(t, registry, 1)
 	assert.Equal(t, "low", registry[0].Name())
 
 	b2 := &mockBackend{name: "high", priority: 20}
-	Register(b2)
+	require.NoError(t, Register(b2))
 	assert.Len(t, registry, 2)
 	assert.Equal(t, "high", registry[0].Name())
 	assert.Equal(t, "low", registry[1].Name())
 
 	b3 := &mockBackend{name: "mid", priority: 15}
-	Register(b3)
+	require.NoError(t, Register(b3))
 	assert.Len(t, registry, 3)
 	assert.Equal(t, "high", registry[0].Name())
 	assert.Equal(t, "mid", registry[1].Name())
 	assert.Equal(t, "low", registry[2].Name())
 
-	assert.Panics(t, func() {
-		Register(&mockBackend{name: "low"})
-	})
+	assert.Error(t, Register(&mockBackend{name: "low"}))
 }
 
 func TestByName(t *testing.T) {
 	withCleanRegistry(t)
 
-	Register(&mockBackend{name: "git"})
-	Register(&mockBackend{name: "jj"})
+	require.NoError(t, Register(&mockBackend{name: "git"}))
+	require.NoError(t, Register(&mockBackend{name: "jj"}))
 
 	b, err := ByName("git")
 	require.NoError(t, err)
@@ -315,11 +314,12 @@ func TestDetectWithRealGitRepo(t *testing.T) {
 
 	var gitDetected bool
 
-	Register(&mockBackend{name: "git", detect: func(path string) (bool, error) {
+	err = Register(&mockBackend{name: "git", detect: func(path string) (bool, error) {
 		gitDetected = true
 
 		return path == dir, nil
 	}})
+	require.NoError(t, err)
 
 	b, err := Detect(dir)
 	require.NoError(t, err)

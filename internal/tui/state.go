@@ -8,9 +8,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
-const currentStateVersion = 2
+const currentStateVersion = 3
+
+const selectionHistoryCap = 50
 
 const (
 	stateDirPerm  = 0o750
@@ -23,12 +26,19 @@ type HistoryEntry struct {
 	Command string `json:"c"`
 }
 
+// SelectionEntry records a set of selected repos at a point in time.
+type SelectionEntry struct {
+	Timestamp time.Time `json:"t"`
+	Repos     []string  `json:"r"`
+}
+
 // PersistentState holds TUI session state saved between runs.
 type PersistentState struct {
-	Version   int            `json:"version"`
-	History   []HistoryEntry `json:"history"`
-	LastRepos []string       `json:"lastRepos"`
-	LastGroup string         `json:"lastGroup"`
+	Version          int              `json:"version"`
+	History          []HistoryEntry   `json:"history"`
+	SelectionHistory []SelectionEntry `json:"selectionHistory"`
+	LastRepos        []string         `json:"lastRepos"`
+	LastGroup        string           `json:"lastGroup"`
 }
 
 // defaultStatePath returns the default path for the TUI state file.
@@ -67,10 +77,15 @@ func loadState(
 	if state.Version != currentStateVersion {
 		state.Version = currentStateVersion
 		state.History = nil
+		state.SelectionHistory = nil
 	}
 
 	if state.History == nil {
 		state.History = []HistoryEntry{}
+	}
+
+	if state.SelectionHistory == nil {
+		state.SelectionHistory = []SelectionEntry{}
 	}
 
 	return state, nil

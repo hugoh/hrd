@@ -9,20 +9,24 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/backends/git"
+	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMain(m *testing.M) {
 	git.Register()
+	jj.Register()
 	os.Exit(m.Run())
 }
 
@@ -38,11 +42,9 @@ func initGitRepo(t *testing.T, dir string) {
 		"git commit -m 'initial commit'",
 	} {
 		c := exec.Command("bash", "-c", cmd)
-
 		c.Dir = dir
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git setup failed: %v\n%s", err, out)
-		}
+		out, err := c.CombinedOutput()
+		require.NoError(t, err, "git setup failed: %s", out)
 	}
 }
 
@@ -111,9 +113,7 @@ func TestHandleStatusUpdate(t *testing.T) {
 	}
 
 	_, cmd := m.handleStatusUpdate(msg)
-	if cmd != nil {
-		t.Log("handleStatusUpdate returned a continuation cmd")
-	}
+	assert.Nil(t, cmd, "handleStatusUpdate with no filtered repos should return nil cmd")
 
 	rows = m.repoTable.Rows()
 	require.Len(t, rows, 1)
@@ -136,9 +136,7 @@ func TestHandleStatusUpdateUnknownRepo(t *testing.T) {
 	}
 
 	_, cmd := m.handleStatusUpdate(msg)
-	if cmd != nil {
-		t.Error("handleStatusUpdate with no filtered repos should return nil cmd")
-	}
+	assert.Nil(t, cmd, "handleStatusUpdate with no filtered repos should return nil cmd")
 }
 
 func TestHandleStatusDone(t *testing.T) {
@@ -151,17 +149,9 @@ func TestHandleStatusDone(t *testing.T) {
 	m.initTable()
 
 	_, cmd := m.handleStatusDone()
-	if cmd != nil {
-		t.Error("handleStatusDone should return nil cmd")
-	}
-
-	if m.loading {
-		t.Error("loading should be false after handleStatusDone")
-	}
-
-	if m.statusCh != nil {
-		t.Error("statusCh should be nil after handleStatusDone")
-	}
+	assert.Nil(t, cmd, "handleStatusDone should return nil cmd")
+	assert.False(t, m.loading, "loading should be false after handleStatusDone")
+	assert.Nil(t, m.statusCh, "statusCh should be nil after handleStatusDone")
 }
 
 func TestRefColumnWidthAfterWindowSize(t *testing.T) {
@@ -267,10 +257,8 @@ func TestCursorRowNoWidthShift(t *testing.T) {
 	nonCursor := lipgloss.JoinHorizontal(lipgloss.Top, cells...)
 	cursor := ss.Selected.Render(nonCursor)
 
-	if lipgloss.Width(cursor) != lipgloss.Width(nonCursor) {
-		t.Errorf("cursor row width (%d) differs from non-cursor (%d)",
-			lipgloss.Width(cursor), lipgloss.Width(nonCursor))
-	}
+	assert.Equal(t, lipgloss.Width(nonCursor), lipgloss.Width(cursor),
+		"cursor row width differs from non-cursor")
 }
 
 func TestNameNotTruncatedWhenSelected(t *testing.T) {
@@ -345,9 +333,12 @@ func TestColoredSummaryAllSuccess(t *testing.T) {
 	}
 	got := m.coloredSummary()
 
-	if !strings.Contains(got, "2/2 repos completed successfully") {
-		t.Errorf("coloredSummary() = %q, want success message", got)
-	}
+	assert.Contains(
+		t,
+		got,
+		"2/2 repos completed successfully",
+		"coloredSummary should show success",
+	)
 }
 
 func TestColoredSummaryWithFailures(t *testing.T) {
@@ -362,24 +353,17 @@ func TestColoredSummaryWithFailures(t *testing.T) {
 	}
 	got := m.coloredSummary()
 
-	if !strings.Contains(got, "failed:") ||
-		!strings.Contains(got, "repo-b") ||
-		!strings.Contains(got, "repo-c") {
-		t.Errorf("coloredSummary() = %q, want summary with failures", got)
-	}
+	assert.Contains(t, got, "failed:", "coloredSummary should show failures")
+	assert.Contains(t, got, "repo-b", "coloredSummary should mention repo-b")
+	assert.Contains(t, got, "repo-c", "coloredSummary should mention repo-c")
 }
 
 func TestFormatDispatchResultLineSuccess(t *testing.T) {
 	res := runner.Result{ExitCode: 0, Output: "hello"}
 	line := formatDispatchResultLine("myrepo", res, 40)
 
-	if !strings.Contains(line, "myrepo") {
-		t.Errorf("output should contain repo name, got %q", line)
-	}
-
-	if !strings.Contains(line, "hello") {
-		t.Errorf("output should contain 'hello', got %q", line)
-	}
+	assert.Contains(t, line, "myrepo", "output should contain repo name")
+	assert.Contains(t, line, "hello", `output should contain 'hello'`)
 }
 
 func TestFormatDispatchResultLineError(t *testing.T) {
@@ -389,31 +373,22 @@ func TestFormatDispatchResultLineError(t *testing.T) {
 	}
 	line := formatDispatchResultLine("myrepo", res, 40)
 
-	if !strings.Contains(line, "error:") {
-		t.Errorf("output should contain 'error:', got %q", line)
-	}
-
-	if !strings.Contains(line, "something broke") {
-		t.Errorf("output should contain error msg, got %q", line)
-	}
+	assert.Contains(t, line, "error:", "output should contain 'error:'")
+	assert.Contains(t, line, "something broke", "output should contain error msg")
 }
 
 func TestFormatDispatchResultLineNonZeroExit(t *testing.T) {
 	res := runner.Result{ExitCode: 1, Output: "oops"}
 	line := formatDispatchResultLine("myrepo", res, 40)
 
-	if !strings.Contains(line, "exit 1") {
-		t.Errorf("output should contain 'exit 1', got %q", line)
-	}
+	assert.Contains(t, line, "exit 1", "output should contain 'exit 1'")
 }
 
 func TestFormatDispatchResultLineNoOutput(t *testing.T) {
 	res := runner.Result{ExitCode: 0}
 	line := formatDispatchResultLine("myrepo", res, 40)
 
-	if !strings.Contains(line, "myrepo") {
-		t.Errorf("output should contain repo name, got %q", line)
-	}
+	assert.Contains(t, line, "myrepo", "output should contain repo name")
 }
 
 func TestFormatExecOutput(t *testing.T) {
@@ -423,29 +398,20 @@ func TestFormatExecOutput(t *testing.T) {
 	}
 	got := formatExecOutput(results, 40)
 
-	if !strings.Contains(got, "a") {
-		t.Errorf("output should contain 'a', got %q", got)
-	}
-
-	if !strings.Contains(got, "b") {
-		t.Errorf("output should contain 'b', got %q", got)
-	}
+	assert.Contains(t, got, "a", "output should contain 'a'")
+	assert.Contains(t, got, "b", "output should contain 'b'")
 }
 
 func TestFormatExecOutputEmpty(t *testing.T) {
 	got := formatExecOutput(nil, 40)
-	if got != "" {
-		t.Errorf("expected empty output for nil results, got %q", got)
-	}
+	assert.Empty(t, got, "expected empty output for nil results")
 }
 
 func TestFormatStatusLineNoStatus(t *testing.T) {
 	m := &model{statuses: map[string]runner.StatusResult{}}
 
 	line := m.formatStatusLine("nonexistent")
-	if line == "" {
-		t.Error("expected muted placeholder for missing status")
-	}
+	assert.NotEmpty(t, line, "expected muted placeholder for missing status")
 }
 
 func TestFormatStatusLineError(t *testing.T) {
@@ -458,9 +424,7 @@ func TestFormatStatusLineError(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if !strings.Contains(line, "something went wrong") {
-		t.Errorf("expected error message in output, got %q", line)
-	}
+	assert.Contains(t, line, "something went wrong", "expected error message in output")
 }
 
 func TestFormatStatusLineWithBookmarkAndMsg(t *testing.T) {
@@ -479,13 +443,8 @@ func TestFormatStatusLineWithBookmarkAndMsg(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if !strings.Contains(line, "main") {
-		t.Errorf("expected bookmark name in output, got %q", line)
-	}
-
-	if !strings.Contains(line, "fix bug") {
-		t.Errorf("expected commit msg in output, got %q", line)
-	}
+	assert.Contains(t, line, "main", "expected bookmark name in output")
+	assert.Contains(t, line, "fix bug", "expected commit msg in output")
 }
 
 func TestFormatStatusLineRefOnly(t *testing.T) {
@@ -500,9 +459,7 @@ func TestFormatStatusLineRefOnly(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if !strings.Contains(line, "develop") {
-		t.Errorf("expected ref in output, got %q", line)
-	}
+	assert.Contains(t, line, "develop", "expected ref in output")
 }
 
 func TestFormatStatusLineEmptyStatus(t *testing.T) {
@@ -515,9 +472,7 @@ func TestFormatStatusLineEmptyStatus(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if line != "" {
-		t.Errorf("expected empty output for empty status, got %q", line)
-	}
+	assert.Empty(t, line, "expected empty output for empty status")
 }
 
 func TestRenderSymbols(t *testing.T) {
@@ -530,9 +485,7 @@ func TestRenderSymbols(t *testing.T) {
 	}
 	syms := theme.FormatSymbols(status, testColorFn)
 
-	if syms == "" {
-		t.Error("expected non-empty symbols")
-	}
+	assert.NotEmpty(t, syms, "expected non-empty symbols")
 }
 
 func TestRenderSymbolsDirty(t *testing.T) {
@@ -542,9 +495,7 @@ func TestRenderSymbolsDirty(t *testing.T) {
 	}
 	syms := theme.FormatSymbols(status, testColorFn)
 
-	if !strings.Contains(syms, "*") {
-		t.Errorf("expected dirty marker, got %q", syms)
-	}
+	assert.Contains(t, syms, "*", "expected dirty marker")
 }
 
 func TestRenderSymbolsConflict(t *testing.T) {
@@ -556,9 +507,7 @@ func TestRenderSymbolsConflict(t *testing.T) {
 	}
 	syms := theme.FormatSymbols(status, testColorFn)
 
-	if syms == "" {
-		t.Error("expected non-empty symbols for conflict")
-	}
+	assert.NotEmpty(t, syms, "expected non-empty symbols for conflict")
 }
 
 func testColorFn(colorName, symbol string) string {
@@ -580,9 +529,7 @@ func TestFormatStatusLineCommitTimeNoMsg(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if !strings.Contains(line, "yesterday") {
-		t.Errorf("expected commit time in output, got %q", line)
-	}
+	assert.Contains(t, line, "yesterday", "expected commit time in output")
 }
 
 func TestFormatStatusLineRefAndSymsOnly(t *testing.T) {
@@ -599,9 +546,7 @@ func TestFormatStatusLineRefAndSymsOnly(t *testing.T) {
 	}
 	line := m.formatStatusLine("repo1")
 
-	if line == "" {
-		t.Error("expected non-empty output for ref with symbol")
-	}
+	assert.NotEmpty(t, line, "expected non-empty output for ref with symbol")
 }
 
 func TestHandleCmdBarOpen(t *testing.T) {
@@ -611,14 +556,9 @@ func TestHandleCmdBarOpen(t *testing.T) {
 	}
 	m.initInput()
 
-	_, _ = m.handleCmdBarOpen(prefixGit)
-	if !m.commandOpen {
-		t.Error("commandOpen should be true after handleCmdBarOpen")
-	}
-
-	if m.cmdPrefix != prefixGit {
-		t.Errorf("cmdPrefix = %d, want %d", m.cmdPrefix, prefixGit)
-	}
+	_, _ = m.handleCmdBarOpen()
+	assert.True(t, m.commandOpen, "commandOpen should be true after handleCmdBarOpen")
+	assert.Equal(t, prefixNone, m.cmdPrefix, "cmdPrefix")
 }
 
 func TestHandleSelectToggle(t *testing.T) {
@@ -631,14 +571,10 @@ func TestHandleSelectToggle(t *testing.T) {
 	m.initTable()
 
 	_, _ = m.handleSelectToggle()
-	if m.mode != modeSelect {
-		t.Error("mode should be modeSelect after first toggle")
-	}
+	assert.Equal(t, modeSelect, m.mode, "mode should be modeSelect after first toggle")
 
 	_, _ = m.handleSelectToggle()
-	if m.mode == modeSelect {
-		t.Error("mode should be modeNormal after second toggle")
-	}
+	assert.NotEqual(t, modeSelect, m.mode, "mode should be modeNormal after second toggle")
 }
 
 func TestHandleSelectOne(t *testing.T) {
@@ -652,9 +588,7 @@ func TestHandleSelectOne(t *testing.T) {
 
 	_, _ = m.handleSelectOne()
 
-	if m.selected["a"] {
-		t.Error("repo 'a' should be deselected after handleSelectOne")
-	}
+	assert.False(t, m.selected["a"], "repo 'a' should be deselected after handleSelectOne")
 }
 
 func TestHandleSelectAll(t *testing.T) {
@@ -666,17 +600,21 @@ func TestHandleSelectAll(t *testing.T) {
 	m.initTable()
 
 	_, _ = m.handleSelectAll()
-	if !m.selected["a"] || !m.selected["b"] {
-		t.Error("all repos should be selected after handleSelectAll")
-	}
+	assert.True(
+		t,
+		m.selected["a"] && m.selected["b"],
+		"all repos should be selected after handleSelectAll",
+	)
 
 	_, _ = m.handleSelectAll()
-	if m.selected["a"] || m.selected["b"] {
-		t.Error("no repos should be selected after second handleSelectAll")
-	}
+	assert.False(
+		t,
+		m.selected["a"] || m.selected["b"],
+		"no repos should be selected after second handleSelectAll",
+	)
 }
 
-func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
+func TestMainKeyXTogglesSelectMode(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a"},
 		selected:  map[string]bool{"a": true},
@@ -686,43 +624,42 @@ func TestMainKeySpaceTogglesSelectMode(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
-	if m.mode != modeSelect {
-		t.Error("mode should be modeSelect after space (entered select mode)")
-	}
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	assert.Equal(
+		t,
+		modeSelect,
+		m.mode,
+		"mode should be modeSelect after pressing x (entered select mode)",
+	)
+	assert.NotEqual(
+		t,
+		modeSingle,
+		m.mode,
+		"mode should not be modeSingle after entering select mode",
+	)
+	assert.Nil(t, cmd, "expected nil cmd")
 
-	if m.mode == modeSingle {
-		t.Error("mode should not be modeSingle after entering select mode")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
-
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
-	if m.mode != modeSelect {
-		t.Error("mode should remain modeSelect after another space (stays in select mode)")
-	}
-
-	if m.selected["a"] {
-		t.Error("repo 'a' should be deselected after space in select mode")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	assert.Equal(
+		t,
+		modeSelect,
+		m.mode,
+		"mode should remain modeSelect after another x (stays in select mode)",
+	)
+	assert.False(t, m.selected["a"], "repo 'a' should be deselected after x in select mode")
+	assert.Nil(t, cmd, "expected nil cmd")
 
 	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if m.mode == modeSelect {
-		t.Error("mode should be modeNormal after enter (exited select mode)")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	assert.NotEqual(
+		t,
+		modeSelect,
+		m.mode,
+		"mode should be modeNormal after enter (exited select mode)",
+	)
+	assert.Nil(t, cmd, "expected nil cmd")
 }
 
-func TestMainKeySpaceSelectsOne(t *testing.T) {
+func TestMainKeyXSelectsOne(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true, "b": false},
@@ -733,30 +670,17 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
-	if m.selected["a"] {
-		t.Error("repo 'a' should be deselected after space in select mode")
-	}
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	assert.False(t, m.selected["a"], "repo 'a' should be deselected after x in select mode")
+	assert.Equal(t, 1, m.cursor, "cursor")
+	assert.Nil(t, cmd, "expected nil cmd")
 
-	if m.cursor != 1 {
-		t.Errorf("cursor = %d, want 1", m.cursor)
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
-
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
-	if !m.selected["b"] {
-		t.Error("repo 'b' should be selected after second space")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
+	assert.True(t, m.selected["b"], "repo 'b' should be selected after second x")
+	assert.Nil(t, cmd, "expected nil cmd")
 }
 
-func TestMainKeyXSingleToggle(t *testing.T) {
+func TestMainKeySSingleToggle(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b"},
 		selected:  map[string]bool{"a": true},
@@ -766,27 +690,19 @@ func TestMainKeyXSingleToggle(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
-	if m.mode != modeSingle {
-		t.Error("mode should be modeSingle after pressing x")
-	}
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 's'})
+	assert.Equal(t, modeSingle, m.mode, "mode should be modeSingle after pressing s")
+	assert.NotEqual(
+		t,
+		modeSelect,
+		m.mode,
+		"mode should not be modeSelect after entering single mode",
+	)
+	assert.Nil(t, cmd, "expected nil cmd")
 
-	if m.mode == modeSelect {
-		t.Error("mode should not be modeSelect after entering single mode")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
-
-	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
-	if m.mode == modeSingle {
-		t.Error("mode should be modeNormal after pressing x again")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 's'})
+	assert.NotEqual(t, modeSingle, m.mode, "mode should be modeNormal after pressing s again")
+	assert.Nil(t, cmd, "expected nil cmd")
 }
 
 func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
@@ -801,13 +717,8 @@ func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
 	m.mode = modeSingle
 
 	names := m.selectedNames()
-	if len(names) != 1 {
-		t.Fatalf("selectedNames() = %v, want [a]", names)
-	}
-
-	if names[0] != "a" {
-		t.Errorf("selectedNames()[0] = %q, want %q", names[0], "a")
-	}
+	require.Len(t, names, 1, "selectedNames() should have 1 element")
+	assert.Equal(t, "a", names[0], "selectedNames()[0]")
 }
 
 func TestEscExitsSelectMode(t *testing.T) {
@@ -822,17 +733,9 @@ func TestEscExitsSelectMode(t *testing.T) {
 	m.mode = modeSelect
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if m.mode == modeSelect {
-		t.Error("mode should be modeNormal after esc")
-	}
-
-	if m.mode == modeSingle {
-		t.Error("mode should not be modeSingle after esc")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	assert.NotEqual(t, modeSelect, m.mode, "mode should be modeNormal after esc")
+	assert.NotEqual(t, modeSingle, m.mode, "mode should not be modeSingle after esc")
+	assert.Nil(t, cmd, "expected nil cmd")
 }
 
 func TestEscExitsSingleMode(t *testing.T) {
@@ -847,17 +750,9 @@ func TestEscExitsSingleMode(t *testing.T) {
 	m.mode = modeSingle
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
-	if m.mode == modeSingle {
-		t.Error("mode should be modeNormal after esc")
-	}
-
-	if m.mode == modeSelect {
-		t.Error("mode should not be modeSelect after esc")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd")
-	}
+	assert.NotEqual(t, modeSingle, m.mode, "mode should be modeNormal after esc")
+	assert.NotEqual(t, modeSelect, m.mode, "mode should not be modeSelect after esc")
+	assert.Nil(t, cmd, "expected nil cmd")
 }
 
 func TestHandleSingleToggle(t *testing.T) {
@@ -870,14 +765,10 @@ func TestHandleSingleToggle(t *testing.T) {
 	m.initTable()
 
 	_, _ = m.handleSingleToggle()
-	if m.mode != modeSingle {
-		t.Error("mode should be modeSingle after first toggle")
-	}
+	assert.Equal(t, modeSingle, m.mode, "mode should be modeSingle after first toggle")
 
 	_, _ = m.handleSingleToggle()
-	if m.mode == modeSingle {
-		t.Error("mode should be modeNormal after second toggle")
-	}
+	assert.NotEqual(t, modeSingle, m.mode, "mode should be modeNormal after second toggle")
 }
 
 func TestHandleCursorUpDown(t *testing.T) {
@@ -891,21 +782,15 @@ func TestHandleCursorUpDown(t *testing.T) {
 
 	_, _ = m.handleCursorUp()
 
-	if m.cursor != 0 {
-		t.Errorf("cursor = %d, want 0 after up", m.cursor)
-	}
+	assert.Equal(t, 0, m.cursor, "cursor after up")
 
 	_, _ = m.handleCursorUp()
 
-	if m.cursor != 0 {
-		t.Errorf("cursor should stay at 0 when at top, got %d", m.cursor)
-	}
+	assert.Equal(t, 0, m.cursor, "cursor should stay at 0 when at top")
 
 	_, _ = m.handleCursorDown()
 
-	if m.cursor != 1 {
-		t.Errorf("cursor = %d, want 1 after down", m.cursor)
-	}
+	assert.Equal(t, 1, m.cursor, "cursor after down")
 }
 
 func TestHandleModalKeyAlert(t *testing.T) {
@@ -916,13 +801,8 @@ func TestHandleModalKeyAlert(t *testing.T) {
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: ' '})
 
-	if cmd != nil {
-		t.Error("expected nil cmd after closing alert")
-	}
-
-	if m.modal != modalNone {
-		t.Error("alert should be cleared after any key")
-	}
+	assert.Nil(t, cmd, "expected nil cmd after closing alert")
+	assert.Equal(t, modalNone, m.modal, "alert should be cleared after any key")
 }
 
 func TestHandleModalKeyAlertAt(t *testing.T) {
@@ -935,13 +815,8 @@ func TestHandleModalKeyAlertAt(t *testing.T) {
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: '@'})
 
-	if m.screen != screenGroup {
-		t.Errorf("screen should be screenGroup after @ in alert, got %v", m.screen)
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd after closing alert")
-	}
+	assert.Equal(t, screenGroup, m.screen, "screen should be screenGroup after @ in alert")
+	assert.Nil(t, cmd, "expected nil cmd after closing alert")
 }
 
 func TestHandleGroupKeyEnterNonAll(t *testing.T) {
@@ -951,25 +826,19 @@ func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupPopupOptions: []string{labelAllCap, "work"},
-		groupPopupCursor:  1,
+		repoOrder: []string{"r1"},
+		selected:  map[string]bool{},
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(1)
 
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if m.groupFilter != "work" {
-		t.Errorf("groupFilter = %q, want %q", m.groupFilter, "work")
-	}
-
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if !m.loading {
-		t.Error("loading should be true after group selection")
-	}
+	assert.Equal(t, "work", m.groupFilter, "groupFilter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.True(t, m.loading, "loading should be true after group selection")
 }
 
 func TestHandleKeyMsgRefresh(t *testing.T) {
@@ -982,9 +851,7 @@ func TestHandleKeyMsgRefresh(t *testing.T) {
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'r'})
 
-	if cmd == nil {
-		t.Error("expected non-nil cmd for refresh")
-	}
+	assert.NotNil(t, cmd, "expected non-nil cmd for refresh")
 }
 
 func TestHandleKeyMsgHelp(t *testing.T) {
@@ -993,13 +860,8 @@ func TestHandleKeyMsgHelp(t *testing.T) {
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: '?'})
 
-	if m.screen != screenHelp {
-		t.Errorf("screen = %d, want %d", m.screen, screenHelp)
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd for help")
-	}
+	assert.Equal(t, screenHelp, m.screen, "screen")
+	assert.Nil(t, cmd, "expected nil cmd for help")
 }
 
 func TestHandleKeyMsgCtrlCExecuting(t *testing.T) {
@@ -1008,9 +870,7 @@ func TestHandleKeyMsgCtrlCExecuting(t *testing.T) {
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
-	if cmd != nil {
-		t.Error("expected nil cmd when Ctrl+C during execution")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when Ctrl+C during execution")
 }
 
 func TestHandleKeyMsgQCommandOpen(t *testing.T) {
@@ -1022,9 +882,7 @@ func TestHandleKeyMsgQCommandOpen(t *testing.T) {
 
 	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'q', Text: "q"})
 
-	if got := m.input.Value(); got != "q" {
-		t.Errorf("expected input value to be 'q', got %q", got)
-	}
+	assert.Equal(t, "q", m.input.Value(), "expected input value to be 'q'")
 }
 
 func TestHandleKeyMsgQOutputScreen(t *testing.T) {
@@ -1033,9 +891,7 @@ func TestHandleKeyMsgQOutputScreen(t *testing.T) {
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
-	if cmd != nil {
-		t.Error("expected nil cmd when q pressed in output mode")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when q pressed in output mode")
 }
 
 func TestHandleKeyMsgQWithHelpScreen(t *testing.T) {
@@ -1044,13 +900,8 @@ func TestHandleKeyMsgQWithHelpScreen(t *testing.T) {
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
-	if cmd != nil {
-		t.Error("expected nil cmd when q pressed on help screen")
-	}
-
-	if m.screen != screenMain {
-		t.Error("should return to main screen after q on help")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when q pressed on help screen")
+	assert.Equal(t, screenMain, m.screen, "should return to main screen after q on help")
 }
 
 func TestHandleKeyMsgQWithAlert(t *testing.T) {
@@ -1059,22 +910,15 @@ func TestHandleKeyMsgQWithAlert(t *testing.T) {
 	}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
-	if cmd != nil {
-		t.Error("expected nil cmd when q pressed with alert")
-	}
-
-	if m.modal != modalNone {
-		t.Error("alert should be dismissed on q")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when q pressed with alert")
+	assert.Equal(t, modalNone, m.modal, "alert should be dismissed on q")
 }
 
 func TestHandleKeyMsgQQuit(t *testing.T) {
 	m := &model{}
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: 'q'})
-	if cmd == nil {
-		t.Error("expected non-nil quit cmd when q pressed on main screen")
-	}
+	assert.NotNil(t, cmd, "expected non-nil quit cmd when q pressed on main screen")
 }
 
 func TestShortcutCmdSuccess(t *testing.T) {
@@ -1088,13 +932,8 @@ func TestShortcutCmdSuccess(t *testing.T) {
 
 	cmd := shortcutCmd(m, "status", false)
 
-	if cmd == nil {
-		t.Error("expected non-nil cmd when repos selected")
-	}
-
-	if m.screen != screenOutput {
-		t.Errorf("screen = %d, want %d", m.screen, screenOutput)
-	}
+	assert.NotNil(t, cmd, "expected non-nil cmd when repos selected")
+	assert.Equal(t, screenOutput, m.screen, "screen")
 }
 
 func TestShortcutCmdNoSelected(t *testing.T) {
@@ -1104,13 +943,8 @@ func TestShortcutCmdNoSelected(t *testing.T) {
 	}
 
 	cmd := shortcutCmd(m, "status", false)
-	if cmd != nil {
-		t.Error("expected nil cmd when no repos selected")
-	}
-
-	if m.modal != modalAlert {
-		t.Errorf("modal = %d, want %d", m.modal, modalAlert)
-	}
+	assert.Nil(t, cmd, "expected nil cmd when no repos selected")
+	assert.Equal(t, modalAlert, m.modal, "modal")
 }
 
 func TestOpenGroupPopup(t *testing.T) {
@@ -1123,20 +957,13 @@ func TestOpenGroupPopup(t *testing.T) {
 		},
 		groupFilter: "work",
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupFilterMode)
 
-	if m.screen != screenGroup {
-		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
-	}
-
-	if len(m.groupPopupOptions) != 3 {
-		t.Errorf("expected 3 popup options, got %d", len(m.groupPopupOptions))
-	}
-
-	if m.groupPopupCursor != 2 {
-		t.Errorf("cursor = %d, want 2 (index of work)", m.groupPopupCursor)
-	}
+	assert.Equal(t, screenGroup, m.screen, "screen")
+	assert.Len(t, m.groupList.Items(), 3, "expected 3 popup items")
+	assert.Equal(t, 2, m.groupList.Index(), "cursor should point to work")
 }
 
 func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
@@ -1147,20 +974,13 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 			},
 		},
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupFilterMode)
 
-	if m.screen != screenGroup {
-		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
-	}
-
-	if len(m.groupPopupOptions) != 2 {
-		t.Errorf("expected 2 popup options, got %d", len(m.groupPopupOptions))
-	}
-
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 (index of [all])", m.groupPopupCursor)
-	}
+	assert.Equal(t, screenGroup, m.screen, "screen")
+	assert.Len(t, m.groupList.Items(), 2, "expected 2 popup items")
+	assert.Equal(t, 0, m.groupList.Index(), "cursor should be at [all]")
 }
 
 func TestHandleOutputKeyEsc(t *testing.T) {
@@ -1171,13 +991,8 @@ func TestHandleOutputKeyEsc(t *testing.T) {
 
 	_, cmd := m.handleOutputKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd when closing output")
-	}
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.Nil(t, cmd, "expected nil cmd when closing output")
 }
 
 func TestHandleOutputKeyQ(t *testing.T) {
@@ -1188,13 +1003,166 @@ func TestHandleOutputKeyQ(t *testing.T) {
 
 	_, cmd := m.handleOutputKey(tea.KeyPressMsg{Code: 'q'})
 
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.Nil(t, cmd, "expected nil cmd when closing output with q")
+}
+
+func TestSortedSelected(t *testing.T) {
+	selected := map[string]bool{"c": true, "a": true, "b": false}
+	got := sortedSelected(selected)
+
+	assert.Equal(t, []string{"a", "c"}, got)
+}
+
+func TestEqualStringSlices(t *testing.T) {
+	assert.True(t, equalStringSlices([]string{"a", "b"}, []string{"a", "b"}),
+		"equalStringSlices should return true for equal slices")
+	assert.False(t, equalStringSlices([]string{"a"}, []string{"a", "b"}),
+		"equalStringSlices should return false for different lengths")
+	assert.False(t, equalStringSlices([]string{"a", "b"}, []string{"a", "c"}),
+		"equalStringSlices should return false for different elements")
+}
+
+func TestPushSelectionHistory(t *testing.T) {
+	m := &model{
+		selected:  map[string]bool{"a": true, "b": true},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
 	}
 
-	if cmd != nil {
-		t.Error("expected nil cmd when closing output with q")
+	m.pushSelectionHistory()
+
+	require.Len(t, m.persState.SelectionHistory, 1)
+
+	entry := m.persState.SelectionHistory[0]
+	assert.Equal(t, []string{"a", "b"}, entry.Repos)
+	assert.False(t, entry.Timestamp.IsZero())
+
+	// Push identical state — should be deduped
+	m.pushSelectionHistory()
+
+	assert.Len(t, m.persState.SelectionHistory, 1, "SelectionHistory should be deduped")
+
+	// Push different state
+	m.selected = map[string]bool{"a": true}
+	m.pushSelectionHistory()
+
+	assert.Len(t, m.persState.SelectionHistory, 2, "SelectionHistory length")
+}
+
+func TestOpenSelHistoryPopup(t *testing.T) {
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{"a": {}, "b": {}},
+		},
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b"}},
+			},
+		},
 	}
+	m.initHistoryList()
+	openSelHistoryPopup(m)
+
+	assert.Equal(t, screenSelHistory, m.screen, "screen")
+	assert.Equal(t, 0, m.historyList.Index(), "cursor")
+}
+
+func TestHandleSelHistoryKeyNavigation(t *testing.T) {
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{"a": {}, "b": {}, "c": {}, "d": {}},
+		},
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b"}},
+				{Repos: []string{"c"}},
+				{Repos: []string{"d"}},
+			},
+		},
+	}
+	m.initTable()
+	m.initHistoryList()
+
+	openSelHistoryPopup(m)
+
+	require.Equal(t, 0, m.historyList.Index(), "initial cursor")
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyDown})
+	assert.Equal(t, 1, m.historyList.Index(), "cursor after down")
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	assert.Equal(t, 0, m.historyList.Index(), "cursor after up")
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'j'})
+	assert.Equal(t, 1, m.historyList.Index(), "cursor after j")
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: 'k'})
+	assert.Equal(t, 0, m.historyList.Index(), "cursor after k")
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyUp})
+	assert.Equal(t, 0, m.historyList.Index(), "cursor at top")
+}
+
+func TestHandleSelHistoryKeyEmpty(t *testing.T) {
+	m := &model{
+		screen:    screenSelHistory,
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+	m.initTable()
+	m.initHistoryList()
+
+	_, _ = m.handleSelHistoryKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.Equal(t, screenSelHistory, m.screen, "empty list, no-op")
+}
+
+func TestHandleSelHistoryRestore(t *testing.T) {
+	m := &model{
+		ctx:       context.Background(),
+		repoOrder: []string{"a", "b", "c"},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"a": {},
+				"b": {},
+				"c": {},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+		mode:      modeSingle,
+	}
+	m.initTable()
+
+	repos := []string{"a", "c"}
+	_, cmd := m.handleSelHistoryRestore(repos)
+
+	assert.Equal(t, modeNormal, m.mode, "mode should be modeNormal after restore")
+	assert.True(t, m.selected["a"] && m.selected["c"] && !m.selected["b"],
+		"restore should set correct selected repos")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) after restore")
+	assert.Equal(t, modalNone, m.modal, "modal should not be set when all repos exist")
+}
+
+func TestHandleSelHistoryRestoreMissingRepo(t *testing.T) {
+	m := &model{
+		ctx:       context.Background(),
+		repoOrder: []string{"a"},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"a": {},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
+	}
+	m.initTable()
+
+	repos := []string{"a", "stale_repo"}
+	_, _ = m.handleSelHistoryRestore(repos)
+
+	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert when repos are missing")
+	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set when repos are missing")
+	assert.True(t, m.selected["a"], "existing repos should still be selected")
 }
 
 func TestHandleExecResultSuccess(t *testing.T) {
@@ -1211,14 +1179,15 @@ func TestHandleExecResultSuccess(t *testing.T) {
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 0}},
 	})
 
-	if cmd == nil {
-		t.Fatal("expected non-nil cmd after exec result")
-	}
+	require.NotNil(t, cmd, "expected non-nil cmd after exec result")
 
 	msg := cmd()
-	if _, ok := msg.(execDoneMsg); !ok {
-		t.Fatalf("expected execDoneMsg from streamNextResult with closed channel, got %T", msg)
-	}
+	require.IsType(
+		t,
+		execDoneMsg{},
+		msg,
+		"expected execDoneMsg from streamNextResult with closed channel",
+	)
 }
 
 func TestHandleExecResultError(t *testing.T) {
@@ -1231,13 +1200,8 @@ func TestHandleExecResultError(t *testing.T) {
 		done: true,
 	})
 
-	if m.executing {
-		t.Error("executing should be false after error")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd after error")
-	}
+	assert.False(t, m.executing, "executing should be false after error")
+	assert.Nil(t, cmd, "expected nil cmd after error")
 }
 
 func TestHandleExecDone(t *testing.T) {
@@ -1248,13 +1212,8 @@ func TestHandleExecDone(t *testing.T) {
 
 	_, cmd := m.handleExecDone(execDoneMsg{})
 
-	if m.executing {
-		t.Error("executing should be false after exec done")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd after exec done")
-	}
+	assert.False(t, m.executing, "executing should be false after exec done")
+	assert.Nil(t, cmd, "expected nil cmd after exec done")
 }
 
 func TestHandleInputKeyEnterEmptyString(t *testing.T) {
@@ -1266,9 +1225,7 @@ func TestHandleInputKeyEnterEmptyString(t *testing.T) {
 
 	_, cmd := m.handleInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if cmd != nil {
-		t.Error("expected nil cmd for whitespace-only command")
-	}
+	assert.Nil(t, cmd, "expected nil cmd for whitespace-only command")
 }
 
 func TestHandleInputKeyEnterEmpty(t *testing.T) {
@@ -1279,9 +1236,7 @@ func TestHandleInputKeyEnterEmpty(t *testing.T) {
 
 	_, cmd := m.handleInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if cmd != nil {
-		t.Error("expected nil cmd for empty command")
-	}
+	assert.Nil(t, cmd, "expected nil cmd for empty command")
 }
 
 func TestHandleInputKeyEnterExecuting(t *testing.T) {
@@ -1294,9 +1249,7 @@ func TestHandleInputKeyEnterExecuting(t *testing.T) {
 
 	_, cmd := m.handleInputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if cmd != nil {
-		t.Error("expected nil cmd when already executing")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when already executing")
 }
 
 func TestHandleInputKeyEsc(t *testing.T) {
@@ -1307,13 +1260,8 @@ func TestHandleInputKeyEsc(t *testing.T) {
 
 	_, cmd := m.handleInputKey(tea.KeyPressMsg{Code: tea.KeyEsc})
 
-	if m.commandOpen {
-		t.Error("commandOpen should be false after Esc")
-	}
-
-	if cmd != nil {
-		t.Error("expected nil cmd after Esc in input mode")
-	}
+	assert.False(t, m.commandOpen, "commandOpen should be false after Esc")
+	assert.Nil(t, cmd, "expected nil cmd after Esc in input mode")
 }
 
 func TestContentHeightWithCommandOpen(t *testing.T) {
@@ -1323,9 +1271,7 @@ func TestContentHeightWithCommandOpen(t *testing.T) {
 	}
 	h := m.contentHeight()
 
-	if h < 3 {
-		t.Errorf("contentHeight() = %d, want >= 3", h)
-	}
+	assert.GreaterOrEqual(t, h, 3, "contentHeight()")
 }
 
 func TestContentHeightSmall(t *testing.T) {
@@ -1334,18 +1280,14 @@ func TestContentHeightSmall(t *testing.T) {
 	}
 	h := m.contentHeight()
 
-	if h < 3 {
-		t.Errorf("contentHeight() = %d, want >= 3", h)
-	}
+	assert.GreaterOrEqual(t, h, 3, "contentHeight()")
 }
 
 func TestInputWidthNarrow(t *testing.T) {
 	m := &model{width: 5}
 	w := m.inputWidth()
 
-	if w < minInputWidth {
-		t.Errorf("inputWidth() = %d, want >= %d", w, minInputWidth)
-	}
+	assert.GreaterOrEqual(t, w, minInputWidth, "inputWidth()")
 }
 
 func TestHandleExecDoneWithSideEffect(t *testing.T) {
@@ -1357,17 +1299,9 @@ func TestHandleExecDoneWithSideEffect(t *testing.T) {
 
 	_, cmd := m.handleExecDone(execDoneMsg{})
 
-	if m.executing {
-		t.Error("executing should be false after exec done")
-	}
-
-	if m.execSideEffect {
-		t.Error("execSideEffect should be reset after exec done")
-	}
-
-	if cmd == nil {
-		t.Error("expected non-nil cmd (refresh) when execSideEffect is true")
-	}
+	assert.False(t, m.executing, "executing should be false after exec done")
+	assert.False(t, m.execSideEffect, "execSideEffect should be reset after exec done")
+	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) when execSideEffect is true")
 }
 
 func TestOpenGroupPopupAddMode(t *testing.T) {
@@ -1382,24 +1316,13 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 			},
 		},
 	}
+	m.initGroupList()
 
 	openGroupPopup(m, groupAddMode)
 
-	if m.screen != screenGroup {
-		t.Errorf("screen = %d, want %d", m.screen, screenGroup)
-	}
-
-	if len(m.groupPopupOptions) != 3 {
-		t.Errorf("expected 3 popup options (2 groups + new), got %d", len(m.groupPopupOptions))
-	}
-
-	if m.groupPopupOptions[2] != labelNew {
-		t.Errorf("last option = %q, want %q", m.groupPopupOptions[2], labelNew)
-	}
-
-	if m.groupMode != groupAddMode {
-		t.Errorf("groupMode = %d, want %d", m.groupMode, groupAddMode)
-	}
+	assert.Equal(t, screenGroup, m.screen, "screen")
+	assert.Len(t, m.groupList.Items(), 3, "expected 3 popup items")
+	assert.Equal(t, groupAddMode, m.groupMode, "groupMode")
 }
 
 func TestHandleGroupEnterFilterModeAll(t *testing.T) {
@@ -1409,25 +1332,20 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {Groups: []string{"work"}}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupFilter:       "work",
-		groupPopupOptions: []string{labelAllCap, "work"},
+		repoOrder:   []string{"r1"},
+		selected:    map[string]bool{},
+		groupFilter: "work",
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupEnter()
 
-	if m.groupFilter != "" {
-		t.Errorf("groupFilter = %q, want empty", m.groupFilter)
-	}
-
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if cmd == nil {
-		t.Error("expected non-nil cmd (refresh) after group selection")
-	}
+	assert.Empty(t, m.groupFilter, "groupFilter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) after group selection")
 }
 
 func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
@@ -1442,27 +1360,21 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 			},
 			Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},
 		},
-		opts:              Options{ConfigPath: cfgPath},
-		repoOrder:         []string{"repo1", "repo2"},
-		selected:          map[string]bool{"repo2": true},
-		groupPopupOptions: []string{"work", labelNew},
-		groupPopupCursor:  0,
-		groupMode:         groupAddMode,
+		opts:      Options{ConfigPath: cfgPath},
+		repoOrder: []string{"repo1", "repo2"},
+		selected:  map[string]bool{"repo2": true},
+		groupMode: groupAddMode,
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupEnter()
 
-	if cmd != nil {
-		t.Error("expected nil cmd after adding to existing group")
-	}
-
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if len(m.cfg.Groups["work"].Repos) != 2 {
-		t.Errorf("expected 2 repos in work group, got %v", m.cfg.Groups["work"].Repos)
-	}
+	assert.Nil(t, cmd, "expected nil cmd after adding to existing group")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.Len(t, m.cfg.Groups["work"].Repos, 2, "expected 2 repos in work group")
 }
 
 func TestHandleGroupEnterAddModeNew(t *testing.T) {
@@ -1470,23 +1382,19 @@ func TestHandleGroupEnterAddModeNew(t *testing.T) {
 		cfg: config.Config{
 			Repos: map[string]config.Repo{"repo1": {}},
 		},
-		repoOrder:         []string{"repo1"},
-		selected:          map[string]bool{"repo1": true},
-		groupPopupOptions: []string{"work", labelNew},
-		groupPopupCursor:  1,
-		groupMode:         groupAddMode,
+		repoOrder: []string{"repo1"},
+		selected:  map[string]bool{"repo1": true},
+		groupMode: groupAddMode,
 	}
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
 	m.initInput()
 
 	_, cmd := m.handleGroupEnter()
 
-	if cmd != nil {
-		t.Error("expected nil cmd when entering new group name")
-	}
-
-	if !m.groupNewInput {
-		t.Error("groupNewInput should be true after selecting [new...]")
-	}
+	assert.Nil(t, cmd, "expected nil cmd when entering new group name")
+	assert.True(t, m.groupNewInput, "groupNewInput should be true after selecting [new...]")
 }
 
 func TestHandleGroupNewInputEnter(t *testing.T) {
@@ -1511,21 +1419,10 @@ func TestHandleGroupNewInputEnter(t *testing.T) {
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if cmd != nil {
-		t.Error("expected nil cmd after creating new group")
-	}
-
-	if m.groupNewInput {
-		t.Error("groupNewInput should be false after Enter")
-	}
-
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if _, ok := m.cfg.Groups["my-group"]; !ok {
-		t.Error("my-group should exist in config after creation")
-	}
+	assert.Nil(t, cmd, "expected nil cmd after creating new group")
+	assert.False(t, m.groupNewInput, "groupNewInput should be false after Enter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.Contains(t, m.cfg.Groups, "my-group", "my-group should exist in config after creation")
 }
 
 func TestHandleGroupNewInputEmpty(t *testing.T) {
@@ -1536,13 +1433,8 @@ func TestHandleGroupNewInputEmpty(t *testing.T) {
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if cmd != nil {
-		t.Error("expected nil cmd for empty group name")
-	}
-
-	if !m.groupNewInput {
-		t.Error("groupNewInput should remain true when name is empty")
-	}
+	assert.Nil(t, cmd, "expected nil cmd for empty group name")
+	assert.True(t, m.groupNewInput, "groupNewInput should remain true when name is empty")
 }
 
 func TestHandleGroupNewInputEsc(t *testing.T) {
@@ -1553,58 +1445,37 @@ func TestHandleGroupNewInputEsc(t *testing.T) {
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEsc})
 
-	if cmd != nil {
-		t.Error("expected nil cmd after Esc")
-	}
-
-	if m.groupNewInput {
-		t.Error("groupNewInput should be false after Esc")
-	}
+	assert.Nil(t, cmd, "expected nil cmd after Esc")
+	assert.False(t, m.groupNewInput, "groupNewInput should be false after Esc")
 }
 
 func TestHandleGroupKeyNavigation(t *testing.T) {
 	m := &model{
-		groupPopupOptions: []string{"a", "b", "c"},
-		groupPopupCursor:  1,
+		groupMode: groupFilterMode,
 	}
+	m.initGroupList()
+	m.groupList.SetItems([]list.Item{
+		groupItem{name: "a"},
+		groupItem{name: "b"},
+		groupItem{name: "c"},
+	})
+	m.groupList.Select(1)
 
-	// Press up
 	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
+	assert.Nil(t, cmd, "expected nil cmd after up")
+	assert.Equal(t, 0, m.groupList.Index(), "cursor after up")
 
-	if cmd != nil {
-		t.Error("expected nil cmd after up")
-	}
-
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 after up", m.groupPopupCursor)
-	}
-
-	// Press down
 	_, cmd = m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
+	assert.Nil(t, cmd, "expected nil cmd after down")
+	assert.Equal(t, 1, m.groupList.Index(), "cursor after down")
 
-	if cmd != nil {
-		t.Error("expected nil cmd after down")
-	}
-
-	if m.groupPopupCursor != 1 {
-		t.Errorf("cursor = %d, want 1 after down", m.groupPopupCursor)
-	}
-
-	// Up at top clamps to 0
-	m.groupPopupCursor = 0
+	m.groupList.Select(0)
 	m.handleGroupKey(tea.KeyPressMsg{Code: 'k'})
+	assert.Equal(t, 0, m.groupList.Index(), "cursor at top")
 
-	if m.groupPopupCursor != 0 {
-		t.Errorf("cursor = %d, want 0 at top", m.groupPopupCursor)
-	}
-
-	// Down at bottom clamps to len-1
-	m.groupPopupCursor = 2
+	m.groupList.Select(2)
 	m.handleGroupKey(tea.KeyPressMsg{Code: 'j'})
-
-	if m.groupPopupCursor != 2 {
-		t.Errorf("cursor = %d, want 2 at bottom", m.groupPopupCursor)
-	}
+	assert.Equal(t, 2, m.groupList.Index(), "cursor at bottom")
 }
 
 func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
@@ -1614,22 +1485,17 @@ func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
 		},
-		repoOrder:         []string{"r1"},
-		selected:          map[string]bool{},
-		groupPopupOptions: []string{labelAllCap, "work"},
+		repoOrder: []string{"r1"},
+		selected:  map[string]bool{},
 	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupFilterMode)
+	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	if m.groupFilter != "" {
-		t.Errorf("groupFilter = %q, want empty", m.groupFilter)
-	}
-
-	if m.screen != screenMain {
-		t.Errorf("screen = %d, want %d", m.screen, screenMain)
-	}
-
-	if cmd == nil {
-		t.Error("expected non-nil cmd (refresh) after group selection")
-	}
+	assert.Empty(t, m.groupFilter, "groupFilter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) after group selection")
 }

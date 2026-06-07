@@ -148,10 +148,10 @@ COMMANDS:
    fetch       fetch from remotes (git fetch or jj git fetch)
    pull        pull from remotes (git pull or jj git pull)
    push        push to remotes (git push or jj git push)
-   git         run a git command across repos
-   jj          run a jj command across repos
    shell       run an arbitrary shell command across repos
    tui, i      interactive terminal UI for browsing and running commands across repos
+   jj          run a jj command across repos
+   git         run a git command across repos
    help, h     Shows a list of commands or help for one command
    completion  Output shell completion script for bash, zsh, fish, or Powershell
 

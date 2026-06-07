@@ -6,39 +6,26 @@ import (
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStartExecEmptyPrefix(t *testing.T) {
 	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "", "status", 1)
-	if err != nil {
-		t.Fatalf("startExec() error = %v", err)
-	}
-
-	if ch == nil {
-		t.Fatal("startExec() returned nil channel")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, ch)
 }
 
 func TestStartExecFetch(t *testing.T) {
 	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "", "fetch", 1)
-	if err != nil {
-		t.Fatalf("startExec() error = %v", err)
-	}
-
-	if ch == nil {
-		t.Fatal("startExec() returned nil channel for fetch")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, ch)
 }
 
 func TestStartExecShellPrefix(t *testing.T) {
 	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "sh", "echo hello", 1)
-	if err != nil {
-		t.Fatalf("startExec() error = %v", err)
-	}
-
-	if ch == nil {
-		t.Fatal("startExec() returned nil channel")
-	}
+	require.NoError(t, err)
+	require.NotNil(t, ch)
 }
 
 func TestExecCmd(t *testing.T) {
@@ -50,27 +37,17 @@ func TestExecCmd(t *testing.T) {
 		},
 	}
 
-	// When no repos, startExec with empty prefix returns a VCS channel,
-	// so this should not be an error case. We're just verifying cmd runs.
 	cmd := execCmd(m, nil, "", "status")
-
-	if cmd == nil {
-		t.Fatal("execCmd() returned nil")
-	}
+	require.NotNil(t, cmd)
 }
 
 func TestShortcutCmdPrefixIndependent(t *testing.T) {
-	// Regression test: VCS shortcuts (s/l/d/f/p/P) must use empty prefix so they
-	// always route through runner.VCSSubcmd, never through runner.Shell
-	// when the model's cmdPrefix happens to be prefixShell.
 	tests := []struct {
 		name   string
 		prefix cmdPrefix
 	}{
 		{"default prefix", prefixNone},
-		{"git prefix", prefixGit},
-		{"jj prefix", prefixJj},
-		{"shell prefix", prefixShell}, // this was the bug
+		{"shell prefix", prefixShell},
 	}
 
 	for _, tt := range tests {
@@ -85,12 +62,8 @@ func TestShortcutCmdPrefixIndependent(t *testing.T) {
 				},
 			}
 
-			// shortcutCmd should always dispatch VCS subcommands with empty prefix.
 			cmd := shortcutCmd(m, "status", false)
-
-			if cmd == nil {
-				t.Fatal("shortcutCmd() returned nil")
-			}
+			require.NotNil(t, cmd)
 		})
 	}
 }
@@ -99,10 +72,7 @@ func TestStreamNextResultNilChannel(t *testing.T) {
 	m := &model{}
 
 	cmd := streamNextResult(m)
-
-	if cmd != nil {
-		t.Error("streamNextResult() with nil channel should return nil")
-	}
+	assert.Nil(t, cmd)
 }
 
 func TestLoadStatusesCmdEmptyRepos(t *testing.T) {
@@ -113,17 +83,11 @@ func TestLoadStatusesCmdEmptyRepos(t *testing.T) {
 	}
 
 	cmd := loadStatusesCmd(m)
-	if cmd == nil {
-		t.Fatal("loadStatusesCmd() returned nil")
-	}
+	require.NotNil(t, cmd)
 
 	msg := cmd()
-
-	switch msg.(type) {
-	case statusDoneMsg:
-	default:
-		t.Fatalf("expected statusDoneMsg, got %T", msg)
-	}
+	_, ok := msg.(statusDoneMsg)
+	require.True(t, ok)
 }
 
 func TestLoadStatusesCmdStreaming(t *testing.T) {
@@ -138,54 +102,36 @@ func TestLoadStatusesCmdStreaming(t *testing.T) {
 	}
 
 	cmd := loadStatusesCmd(m)
-	if cmd == nil {
-		t.Fatal("loadStatusesCmd() returned nil")
-	}
+	require.NotNil(t, cmd)
 
 	msg := cmd()
-
-	switch msg.(type) {
-	case statusUpdateMsg:
-	default:
-		t.Fatalf("expected statusUpdateMsg, got %T", msg)
-	}
+	_, ok := msg.(statusUpdateMsg)
+	require.True(t, ok)
 }
 
 func TestStreamNextStatusCmdNilChannel(t *testing.T) {
 	m := &model{}
 
 	cmd := streamNextStatusCmd(m)
-	if cmd != nil {
-		t.Error("streamNextStatusCmd() with nil channel should return nil")
-	}
+	assert.Nil(t, cmd)
 }
 
 func TestStreamNextStatusCmdClosedChannel(t *testing.T) {
 	ch := make(chan runner.StatusResult)
 	close(ch)
 
-	m := &model{
-		statusCh: ch,
-	}
+	m := &model{statusCh: ch}
 
 	cmd := streamNextStatusCmd(m)
-	if cmd == nil {
-		t.Fatal("streamNextStatusCmd() with open channel should return a cmd")
-	}
+	require.NotNil(t, cmd)
 
 	msg := cmd()
-	if _, ok := msg.(statusDoneMsg); !ok {
-		t.Fatalf("expected statusDoneMsg from closed channel, got %T", msg)
-	}
-
-	if m.statusCh != nil {
-		t.Error("statusCh should be nil after closed channel read")
-	}
+	_, ok := msg.(statusDoneMsg)
+	require.True(t, ok)
+	assert.Nil(t, m.statusCh)
 }
 
 func TestStartExecGitJjQuotedArgs(t *testing.T) {
-	// Regression: jj commit -m 'fix: tasks' was broken because strings.Fields
-	// passed literal quotes to jj, which it parsed as fileset patterns.
 	tests := []struct {
 		name  string
 		cmd   string
@@ -228,11 +174,8 @@ func TestStartExecGitJjQuotedArgs(t *testing.T) {
 				tt.cmd,
 				1,
 			)
-			if err != nil {
-				t.Fatalf("startExec() error = %v", err)
-			}
+			require.NoError(t, err)
 
-			// Drain the channel (empty repos = immediately closed)
 			for range ch {
 			}
 		})
@@ -264,9 +207,7 @@ func TestStartExecGitJjUnclosedQuotes(t *testing.T) {
 				tt.cmd,
 				1,
 			)
-			if err == nil {
-				t.Fatal("startExec() expected error for unclosed quotes")
-			}
+			assert.Error(t, err)
 		})
 	}
 }
@@ -275,19 +216,13 @@ func TestStreamNextResultClosedChannel(t *testing.T) {
 	ch := make(chan runner.Result)
 	close(ch)
 
-	m := &model{
-		resultsCh: ch,
-	}
+	m := &model{resultsCh: ch}
 
 	cmd := streamNextResult(m)
-	if cmd == nil {
-		t.Fatal("streamNextResult() with closed channel should return a cmd")
-	}
+	require.NotNil(t, cmd)
 
 	msg := cmd()
 
 	_, ok := msg.(execDoneMsg)
-	if !ok {
-		t.Fatalf("expected execDoneMsg, got %T", msg)
-	}
+	require.True(t, ok)
 }

@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSaveAndLoadState(t *testing.T) {
@@ -20,170 +23,108 @@ func TestSaveAndLoadState(t *testing.T) {
 		LastGroup: "work",
 	}
 
-	if err := saveState(path, original); err != nil {
-		t.Fatalf("saveState() error = %v", err)
-	}
+	require.NoError(t, saveState(path, original))
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("saveState() did not create file")
-	}
+	_, err := os.Stat(path)
+	require.False(t, os.IsNotExist(err))
 
 	loaded, err := loadState(path)
-	if err != nil {
-		t.Fatalf("loadState() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if loaded.Version != currentStateVersion {
-		t.Errorf("loadState().Version = %d, want %d", loaded.Version, currentStateVersion)
-	}
-
-	if len(loaded.History) != 2 {
-		t.Errorf("loadState().History = %v, want 2 entries", loaded.History)
-	}
-
-	if loaded.LastGroup != "work" {
-		t.Errorf("loadState().LastGroup = %q, want %q", loaded.LastGroup, "work")
-	}
+	assert.Equal(t, currentStateVersion, loaded.Version)
+	assert.Len(t, loaded.History, 2)
+	assert.Equal(t, "work", loaded.LastGroup)
 }
 
 func TestLoadStateMissingFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nonexistent.json")
 
 	state, err := loadState(path)
-	if err != nil {
-		t.Fatalf("loadState() for missing file should not error, got %v", err)
-	}
+	require.NoError(t, err)
 
-	if state.Version != currentStateVersion {
-		t.Errorf("loadState().Version = %d, want %d", state.Version, currentStateVersion)
-	}
+	assert.Equal(t, currentStateVersion, state.Version)
 }
 
 func TestLoadStateCorruptFile(t *testing.T) {
 	dir := t.TempDir()
 
 	path := filepath.Join(dir, "corrupt.json")
-	if err := os.WriteFile(path, []byte("not valid json"), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, os.WriteFile(path, []byte("not valid json"), 0o600))
 
 	state, err := loadState(path)
-	if err != nil {
-		t.Fatalf("loadState() for corrupt file should not error, got %v", err)
-	}
+	require.NoError(t, err)
 
-	if state.Version != currentStateVersion {
-		t.Errorf("loadState().Version = %d, want %d", state.Version, currentStateVersion)
-	}
+	assert.Equal(t, currentStateVersion, state.Version)
 }
 
 func TestLoadStateReadError(t *testing.T) {
-	// Use a directory path instead of a file path to trigger a non-NotExist error
 	dir := t.TempDir()
 
 	state, err := loadState(dir)
-	if err == nil {
-		t.Fatal("loadState() on directory should error")
-	}
-	// state should be zero value on error
-	if state.Version != 0 {
-		t.Errorf("loadState().Version = %d, want 0", state.Version)
-	}
+	require.Error(t, err)
+	assert.Equal(t, 0, state.Version)
 }
 
 func TestSaveStateCreatesDir(t *testing.T) {
-	// Directory doesn't exist yet — saveState should create it
 	base := t.TempDir()
 	path := filepath.Join(base, "subdir", "state.json")
 
 	state := PersistentState{Version: currentStateVersion, History: []HistoryEntry{}}
-	if err := saveState(path, state); err != nil {
-		t.Fatalf("saveState() error = %v", err)
-	}
+	require.NoError(t, saveState(path, state))
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("saveState() did not create file in new directory")
-	}
+	_, err := os.Stat(path)
+	require.False(t, os.IsNotExist(err))
 }
 
 func TestSaveStateSetsVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
 
-	state := PersistentState{Version: 0} // version 0 should be updated to current
-	if err := saveState(path, state); err != nil {
-		t.Fatalf("saveState() error = %v", err)
-	}
+	state := PersistentState{Version: 0}
+	require.NoError(t, saveState(path, state))
 
 	loaded, _ := loadState(path)
-	if loaded.Version != currentStateVersion {
-		t.Errorf("Version = %d, want %d", loaded.Version, currentStateVersion)
-	}
+	assert.Equal(t, currentStateVersion, loaded.Version)
 }
 
 func TestLoadStateVersionMismatchResetsHistory(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "old_version.json")
 
-	// Version 1 used the same struct format, so this exercises the version
-	// mismatch path (not the corrupt-file path).
-	if err := os.WriteFile(
+	require.NoError(t, os.WriteFile(
 		path,
 		[]byte(`{"version":1,"history":[{"p":"git","c":"old cmd"}]}`),
 		0o600,
-	); err != nil {
-		t.Fatal(err)
-	}
+	))
 
 	loaded, err := loadState(path)
-	if err != nil {
-		t.Fatalf("loadState() error = %v", err)
-	}
+	require.NoError(t, err)
 
-	if len(loaded.History) != 0 {
-		t.Errorf("expected history to be empty after version mismatch, got %v", loaded.History)
-	}
-
-	if loaded.Version != currentStateVersion {
-		t.Errorf("Version = %d, want %d", loaded.Version, currentStateVersion)
-	}
+	assert.Empty(t, loaded.History)
+	assert.Equal(t, currentStateVersion, loaded.Version)
 }
 
 func TestSaveStateMkdirError(t *testing.T) {
-	// Path in a non-writable location should fail
 	err := saveState("/nonexistent-dir-12345/state.json", PersistentState{})
-	if err == nil {
-		t.Error("saveState with bad path should error")
-	}
+	assert.Error(t, err)
 }
 
 func TestDefaultStatePath(t *testing.T) {
 	path := defaultStatePath()
-	if path == "" {
-		t.Fatal("defaultStatePath() returned empty")
-	}
+	require.NotEmpty(t, path)
 }
 
 func TestDefaultStatePathWithXdg(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
 
 	path := defaultStatePath()
-
-	want := "/custom/config/hrd/tui-state.json"
-	if path != want {
-		t.Errorf("defaultStatePath() = %q, want %q", path, want)
-	}
+	assert.Equal(t, "/custom/config/hrd/tui-state.json", path)
 }
 
 func TestDefaultStatePathNoXdg(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 
 	path := defaultStatePath()
-	if path == "" {
-		t.Fatal("defaultStatePath() returned empty")
-	}
-
-	if len(path) < len("/.config/hrd/tui-state.json") {
-		t.Errorf("defaultStatePath() = %q, too short", path)
-	}
+	require.NotEmpty(t, path)
+	assert.Greater(t, len(path), len("/.config/hrd/tui-state.json"))
 }

@@ -1,63 +1,49 @@
 package tui
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRestoreSelectedReposStillExist(t *testing.T) {
 	lastRepos := []string{"a", "b", "c"}
 	repos := map[string]config.Repo{"a": {}, "b": {}, "c": {}}
-	want := map[string]bool{"a": true, "b": true, "c": true}
 
 	got := restoreSelected(lastRepos, repos)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("restoreSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, map[string]bool{"a": true, "b": true, "c": true}, got)
 }
 
 func TestRestoreSelectedSomeRemoved(t *testing.T) {
 	lastRepos := []string{"a", "b", "c"}
 	repos := map[string]config.Repo{"a": {}, "c": {}}
-	want := map[string]bool{"a": true, "c": true}
 
 	got := restoreSelected(lastRepos, repos)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("restoreSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, map[string]bool{"a": true, "c": true}, got)
 }
 
 func TestRestoreSelectedAllRemoved(t *testing.T) {
 	lastRepos := []string{"a", "b"}
 	repos := map[string]config.Repo{"c": {}, "d": {}}
-	want := map[string]bool{}
 
 	got := restoreSelected(lastRepos, repos)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("restoreSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, map[string]bool{}, got)
 }
 
 func TestRestoreSelectedEmptyLastRepos(t *testing.T) {
 	repos := map[string]config.Repo{"a": {}, "b": {}}
-	want := map[string]bool{}
 
 	got := restoreSelected(nil, repos)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("restoreSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, map[string]bool{}, got)
 }
 
 func TestRestoreSelectedEmptyRepos(t *testing.T) {
 	lastRepos := []string{"a", "b"}
-	want := map[string]bool{}
 
 	got := restoreSelected(lastRepos, map[string]config.Repo{})
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("restoreSelected() = %v, want %v", got, want)
-	}
+	assert.Equal(t, map[string]bool{}, got)
 }
 
 //nolint:gochecknoglobals // shared test config
@@ -70,69 +56,40 @@ var cfg = config.Config{
 
 func TestResolveGroupFilterOptGroupTakesPriority(t *testing.T) {
 	got, err := resolveGroupFilter("personal", "work", cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != "personal" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterFallsBackToLastGroup(t *testing.T) {
 	got, err := resolveGroupFilter("", "personal", cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != "personal" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterLastGroupNotInConfig(t *testing.T) {
 	got, err := resolveGroupFilter("", "nonexistent", cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != "" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 func TestResolveGroupFilterAllEmpty(t *testing.T) {
 	got, err := resolveGroupFilter("", "", config.Config{Groups: map[string]config.Group{}})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != "" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "")
-	}
+	require.NoError(t, err)
+	assert.Empty(t, got)
 }
 
 func TestResolveGroupFilterOptGroupUnknown(t *testing.T) {
 	_, err := resolveGroupFilter("nonexistent", "", cfg)
-	if err == nil {
-		t.Fatal("expected error for unknown group, got nil")
-	}
+	assert.Error(t, err)
 }
 
 func TestResolveGroupFilterOptGroupWithAtPrefix(t *testing.T) {
 	got, err := resolveGroupFilter("@personal", "", cfg)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if got != "personal" {
-		t.Errorf("resolveGroupFilter() = %q, want %q", got, "personal")
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterAtPrefixUnknown(t *testing.T) {
 	_, err := resolveGroupFilter("@nonexistent", "", cfg)
-	if err == nil {
-		t.Fatal("expected error for unknown group with @ prefix, got nil")
-	}
+	assert.Error(t, err)
 }

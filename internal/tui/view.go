@@ -11,7 +11,9 @@ import (
 	"github.com/hugoh/hrd/internal/ui"
 )
 
-const progressBarW = 10
+const (
+	progressBarW = 10
+)
 
 //nolint:gochecknoglobals // effectively constant, progress bar model
 var progressModel = progress.New(
@@ -35,6 +37,8 @@ func (m *model) View() tea.View {
 		content = m.helpView()
 	case screenGroup:
 		content = m.groupView()
+	case screenSelHistory:
+		content = m.selHistoryView()
 	}
 
 	v := tea.NewView(content)
@@ -43,8 +47,6 @@ func (m *model) View() tea.View {
 
 	return v
 }
-
-// --- Main screen ------------------------------------------------------------
 
 func (m *model) mainView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
@@ -61,10 +63,7 @@ func (m *model) mainView() string {
 			Height(m.contentHeight()).
 			Align(lipgloss.Center).
 			AlignVertical(lipgloss.Center).
-			Render(
-				styleWarn.Render("No repos selected") + "\n" +
-					ui.Muted("Select a group with @ or specific repos with Space"),
-			)
+			Render(m.alertContent())
 	case len(m.repoTable.Rows()) == 0 && m.mode != modeSelect:
 		tableContent = m.emptyTableView()
 	default:
@@ -82,7 +81,7 @@ func (m *model) mainView() string {
 }
 
 func (m *model) emptyTableView() string {
-	msg := "No repos selected\nSelect a group with @ or specific repos with Space"
+	msg := "No repos selected\nSelect a group with @ or specific repos with x"
 	if len(m.repoOrder) == 0 {
 		msg = "No repos configured\nUse `hrd repo add <path>` to add one"
 	}
@@ -93,6 +92,15 @@ func (m *model) emptyTableView() string {
 		Align(lipgloss.Center).
 		Foreground(lipgloss.Color("8")).
 		Render(msg)
+}
+
+func (m *model) alertContent() string {
+	if m.alertMsg != "" {
+		return styleWarn.Render(m.alertMsg)
+	}
+
+	return styleWarn.Render("No repos selected") + "\n" +
+		ui.Muted("Select a group with @ or specific repos with x")
 }
 
 func (m *model) renderHeader() string {
@@ -106,7 +114,7 @@ func (m *model) renderHeader() string {
 	case modeSelect:
 		left += styleSelectMarker.Render(" x:select")
 	case modeSingle:
-		left += styleSelectMarker.Render(" x:single")
+		left += styleSelectMarker.Render(" s:single")
 	case modeNormal:
 	}
 
@@ -163,9 +171,15 @@ func (m *model) renderHeaderRight() string {
 }
 
 func (m *model) renderInputLine() string {
-	prompt := styleWarn.Render(fmt.Sprintf("[%s] $ ", prefixLabels[m.cmdPrefix]))
+	var prompt string
 
-	return prompt + m.input.View()
+	if m.cmdPrefix == prefixNone {
+		prompt = ":"
+	} else {
+		prompt = fmt.Sprintf("[%s] $ ", prefixLabels[m.cmdPrefix])
+	}
+
+	return styleWarn.Render(prompt) + m.input.View()
 }
 
 func (*model) renderFooter() string {
@@ -186,8 +200,6 @@ func (*model) renderFooter() string {
 
 	return styleFooter.Render(strings.Join(parts, " "))
 }
-
-// --- Output screen ----------------------------------------------------------
 
 func (m *model) outputView() string {
 	var header string
@@ -261,25 +273,8 @@ func (m *model) groupView() string {
 		return m.groupNewInputView()
 	}
 
-	items := m.renderGroupItems()
-
-	ch := m.contentHeight()
-
-	var visible []string
-
-	if len(items) <= ch {
-		visible = items
-	} else {
-		scrollOff := m.groupPopupCursor
-
-		if scrollOff+ch > len(items) {
-			scrollOff = len(items) - ch
-		}
-
-		visible = items[scrollOff : scrollOff+ch]
-	}
-
-	content := strings.Join(visible, "\n")
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(m.contentHeight())
 
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
@@ -290,7 +285,7 @@ func (m *model) groupView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := styleFooter.Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, sep, content, sep, footer)
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.groupList.View(), sep, footer)
 }
 
 func (m *model) groupNewInputView() string {
@@ -304,23 +299,19 @@ func (m *model) groupNewInputView() string {
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
 }
 
-func (m *model) renderGroupItems() []string {
-	items := make([]string, 0, len(m.groupPopupOptions))
-	for i, opt := range m.groupPopupOptions {
-		marker := "  "
-		if i == m.groupPopupCursor {
-			marker = "▸ "
-		}
-
-		name := opt
-		if m.groupMode == groupFilterMode && (opt == m.groupFilter || opt == "@"+m.groupFilter) {
-			name = styleBold.Render(opt)
-		}
-
-		items = append(items, marker+name)
+func (m *model) selHistoryView() string {
+	if len(m.persState.SelectionHistory) == 0 {
+		return ""
 	}
 
-	return items
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(m.contentHeight())
+
+	header := styleHeader.Render(" Selection History ")
+	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
+	footer := styleFooter.Render(" ↑/↓:navigate  Enter:restore  Esc/q:close")
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.historyList.View(), sep, footer)
 }
 
 func buildHelp(bindings []binding) string {
@@ -377,7 +368,7 @@ func buildHelp(bindings []binding) string {
 	return bld.String()
 }
 
-//nolint:gochecknoglobals // pre-built help string from bindings
+//nolint:gochecknoglobals // cached help text, built once at init
 var helpStr string
 
 func init() { //nolint:gochecknoinits

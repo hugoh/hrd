@@ -11,6 +11,100 @@ import (
 
 var errUnknownGroup = errors.New("unknown group")
 
+const labelAllRepos = "[all]"
+
+func matchingGroups(
+	repos []string,
+	allRepoSet map[string]struct{},
+	groups map[string]config.Group,
+) ([]string, []string) {
+	if isAllRepos(repos, allRepoSet) {
+		return []string{labelAllRepos}, nil
+	}
+
+	if len(groups) == 0 {
+		return nil, repos
+	}
+
+	repoSet := buildSet(repos)
+	covered := make(map[string]struct{})
+
+	var labels []string
+
+	for name, g := range groups {
+		if len(g.Repos) == 0 {
+			continue
+		}
+
+		if !isSubset(g.Repos, repoSet) {
+			continue
+		}
+
+		labels = append(labels, "@"+name)
+
+		for _, r := range g.Repos {
+			covered[r] = struct{}{}
+		}
+	}
+
+	sort.Strings(labels)
+
+	if len(labels) == 0 {
+		return nil, repos
+	}
+
+	return labels, setDifference(repos, covered)
+}
+
+func buildSet(repos []string) map[string]struct{} {
+	set := make(map[string]struct{}, len(repos))
+	for _, r := range repos {
+		set[r] = struct{}{}
+	}
+
+	return set
+}
+
+func isSubset(repos []string, repoSet map[string]struct{}) bool {
+	for _, r := range repos {
+		if _, ok := repoSet[r]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isAllRepos(repos []string, allRepoSet map[string]struct{}) bool {
+	if len(repos) != len(allRepoSet) {
+		return false
+	}
+
+	if len(repos) == 0 {
+		return false
+	}
+
+	for _, r := range repos {
+		if _, ok := allRepoSet[r]; !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func setDifference(repos []string, covered map[string]struct{}) []string {
+	var diff []string
+
+	for _, r := range repos {
+		if _, ok := covered[r]; !ok {
+			diff = append(diff, r)
+		}
+	}
+
+	return diff
+}
+
 func (m *model) groupLabel() string {
 	if m.groupFilter != "" {
 		return "@" + m.groupFilter
@@ -129,6 +223,15 @@ func restoreSelected(lastRepos []string, repos map[string]config.Repo) map[strin
 		if _, ok := repos[name]; ok {
 			selected[name] = true
 		}
+	}
+
+	return selected
+}
+
+func makeSelectedMap(names []string) map[string]bool {
+	selected := make(map[string]bool, len(names))
+	for _, n := range names {
+		selected[n] = true
 	}
 
 	return selected

@@ -57,12 +57,9 @@ func (s RefState) String() string {
 }
 
 const (
-	// PriorityJj is the detection priority for the jj backend.
-	PriorityJj = 20
-	// PriorityGit is the detection priority for the git backend.
+	PriorityJj  = 20
 	PriorityGit = 10
 
-	// Severity ranks for RefState.
 	rankDiverged = 4
 	rankBehind   = 3
 	rankAhead    = 2
@@ -70,7 +67,6 @@ const (
 	rankSynced   = 0
 )
 
-// Severity returns the relative severity of the state (higher is worse).
 // Severity order: Conflict > Diverged > Behind > Ahead > NoRemote > Synced.
 func (s RefState) Severity() int {
 	switch s {
@@ -95,23 +91,19 @@ func (s RefState) Severity() int {
 // the current branch (git). Both backends populate this struct so the UI
 // can render them identically.
 type BookmarkStatus struct {
-	// Name is the local bookmark/branch name.
 	Name string
 
-	// Remote is the remote name (e.g. "origin"). Empty when no remote.
+	// Remote name (e.g. "origin"). Empty when no remote.
 	Remote string
 
-	// Ahead is the number of local commits not present on the remote.
-	Ahead int
-
-	// Behind is the number of remote commits not present locally.
+	Ahead  int
 	Behind int
 
-	// Conflict is true when jj reports a bookmark conflict (diverged push).
+	// True when jj reports a bookmark conflict (diverged push).
 	// For git this is always false; git represents this as a diverged state.
 	Conflict bool
 
-	// State is the computed sync state derived from Ahead/Behind/Remote.
+	// Computed sync state derived from Ahead/Behind/Remote.
 	State RefState
 }
 
@@ -130,22 +122,19 @@ type RepoStatus struct {
 	// used for sorting and the summary colour in the ll table.
 	OverallState RefState
 
-	// Dirty is true when there are uncommitted changes in the working copy.
 	Dirty bool
 
-	// Conflict is true when the repo itself has unresolved VCS conflicts
+	// True when the repo has unresolved VCS conflicts
 	// (jj conflict markers, git merge conflicts).
 	Conflict bool
 
-	// CommitMsg is the last commit/change message.
 	CommitMsg string
 
-	// CommitTime is the relative commit time (e.g. "3 days ago").
+	// Relative commit time (e.g. "3 days ago").
 	CommitTime string
 
-	// LocalAhead is the number of commits the working copy (@) is ahead of
-	// the HEAD bookmark/branch. Only populated by the jj backend (git's
-	// working copy is always at the branch tip).
+	// Working copy (@) commits ahead of HEAD bookmark. Only populated by
+	// the jj backend (git's working copy is always at the branch tip).
 	LocalAhead int
 }
 
@@ -224,6 +213,11 @@ type Backend interface {
 	// because jj wraps git operations under the "git" subcommand.
 	SubcommandArgs(op string) []string
 
+	// Subcommands returns available subcommands for the VCS tool, e.g.
+	// ["add", "branch", "log", "status"] for git. Returns an empty slice
+	// when subcommands cannot be loaded (tool not found, parse error, etc).
+	Subcommands(ctx context.Context) ([]string, error)
+
 	// Run executes the given args using this VCS tool in path.
 	// When interactive is true, the caller has already arranged for the
 	// subprocess to inherit the terminal; Run must not capture output.
@@ -233,15 +227,17 @@ type Backend interface {
 // Detection priority follows registration order.
 //
 //nolint:gochecknoglobals // intentional: plugin registry
-var registry []Backend
+var (
+	errDuplicateBackend = errors.New("duplicate backend")
+	registry            []Backend
+)
 
 // Register adds a backend to the global registry.
 // Detection priority follows Backend.Priority() order (higher first).
-// It panics on duplicate names to catch wiring mistakes at startup.
-func Register(backend Backend) {
+func Register(backend Backend) error {
 	for _, existing := range registry {
 		if existing.Name() == backend.Name() {
-			panic(fmt.Sprintf("backend %q already registered", backend.Name()))
+			return fmt.Errorf("%w: %q", errDuplicateBackend, backend.Name())
 		}
 	}
 
@@ -258,6 +254,18 @@ func Register(backend Backend) {
 	registry = append(registry, nil)
 	copy(registry[idx+1:], registry[idx:])
 	registry[idx] = backend
+
+	return nil
+}
+
+// Names returns all registered backend names, in priority order.
+func Names() []string {
+	names := make([]string, len(registry))
+	for i, be := range registry {
+		names[i] = be.Name()
+	}
+
+	return names
 }
 
 // ByName returns the backend with the given name, or an error if not found.

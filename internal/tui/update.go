@@ -1,13 +1,17 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -38,8 +42,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// --- Window size ------------------------------------------------------------
-
 func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
@@ -51,6 +53,10 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.output.SetHeight(m.contentHeight())
 	m.helpViewport.SetWidth(m.width)
 	m.helpViewport.SetHeight(m.contentHeight())
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(m.contentHeight())
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
 
 	const (
@@ -78,8 +84,7 @@ func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// --- Key messages -----------------------------------------------------------
-
+//nolint:cyclop // key dispatch with multiple screens
 func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if msg.String() == "ctrl+c" {
 		return m.handleCtrlC()
@@ -110,6 +115,8 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleHelpKey(msg)
 	case screenGroup:
 		return m.handleGroupKey(msg)
+	case screenSelHistory:
+		return m.handleSelHistoryKey(msg)
 	}
 
 	return m, nil
@@ -136,7 +143,7 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		m.output.SetContent("")
 
 		return m, nil
-	case screenHelp, screenGroup:
+	case screenHelp, screenGroup, screenSelHistory:
 		m.screen = screenMain
 
 		return m, nil
@@ -164,6 +171,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 
 	if m.modal == modalAlert {
 		m.modal = modalNone
+		m.alertMsg = ""
 
 		return m, nil
 	}
@@ -174,7 +182,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 		m.output.SetContent("")
 
 		return m, nil
-	case screenHelp, screenGroup:
+	case screenHelp, screenGroup, screenSelHistory:
 		m.groupNewInput = false
 		m.screen = screenMain
 
@@ -208,28 +216,24 @@ func (m *model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleGroupKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "up", "k":
-		if m.groupPopupCursor > 0 {
-			m.groupPopupCursor--
-		}
-
-		return m, nil
-	case "down", "j":
-		if m.groupPopupCursor < len(m.groupPopupOptions)-1 {
-			m.groupPopupCursor++
-		}
-
-		return m, nil
-	case keyEnter:
+	if msg.String() == keyEnter {
 		return m.handleGroupEnter()
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+
+	m.groupList, cmd = m.groupList.Update(msg)
+
+	return m, cmd
 }
 
 func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
-	selected := m.groupPopupOptions[m.groupPopupCursor]
+	item, ok := m.groupList.SelectedItem().(groupItem)
+	if !ok {
+		return m, nil
+	}
+
+	selected := item.name
 
 	switch m.groupMode {
 	case groupFilterMode:
@@ -242,7 +246,7 @@ func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
-	if selected == labelAllCap {
+	if selected == labelAllRepos {
 		m.groupFilter = ""
 	} else {
 		m.groupFilter = selected
@@ -257,6 +261,7 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 
 	m.screen = screenMain
 	m.loading = true
+	m.pushSelectionHistory()
 	m.savePersState()
 
 	return m, loadStatusesCmd(m)
@@ -322,45 +327,34 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	if m.suggestionsActive() {
+		switch msg.String() {
+		case "up", "down":
+			m.input, cmd = m.input.Update(msg)
+
+			return m, cmd
+		}
+	}
+
 	switch msg.String() {
 	case "up":
+		m.updateHistoryFilter()
 		m.historyPrev()
 
 		return m, nil
 	case "down":
+		m.updateHistoryFilter()
 		m.historyNext()
 
 		return m, nil
 	}
 
 	m.input, cmd = m.input.Update(msg)
+	m.updateCompletions()
 
 	switch msg.String() {
 	case keyEnter:
-		cmdStr := strings.TrimSpace(m.input.Value())
-		if cmdStr == "" {
-			return m, nil
-		}
-
-		if m.executing {
-			return m, nil
-		}
-
-		selected := m.selectedNames()
-		if len(selected) == 0 {
-			m.modal = modalAlert
-			m.commandOpen = false
-
-			return m, nil
-		}
-
-		m.commandOpen = false
-		m.screen = screenOutput
-		m.output.SetContent("running...")
-
-		m.execSideEffect = true
-
-		return m, execCmd(m, selected, prefixLabels[m.cmdPrefix], cmdStr)
+		return m.handleInputEnter()
 	case keyEsc:
 		m.commandOpen = false
 
@@ -368,6 +362,135 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, cmd
+}
+
+func (m *model) handleInputEnter() (tea.Model, tea.Cmd) {
+	cmdStr := strings.TrimSpace(m.input.Value())
+	if cmdStr == "" {
+		return m, nil
+	}
+
+	if m.executing {
+		return m, nil
+	}
+
+	selected := m.selectedNames()
+	if len(selected) == 0 {
+		m.modal = modalAlert
+		m.commandOpen = false
+
+		return m, nil
+	}
+
+	m.commandOpen = false
+	m.screen = screenOutput
+	m.output.SetContent("running...")
+
+	m.execSideEffect = true
+
+	prefix := prefixLabels[m.cmdPrefix]
+	cmd := cmdStr
+
+	if m.cmdPrefix == prefixNone {
+		prefix, cmd = parseUnifiedCmd(cmdStr)
+	}
+
+	m.pushHistory(prefix, cmd)
+
+	return m, execCmd(m, selected, prefix, cmd)
+}
+
+func (m *model) suggestionsActive() bool {
+	return m.input.ShowSuggestions && len(m.input.MatchedSuggestions()) > 0
+}
+
+func (m *model) updateCompletions() {
+	input := m.input.Value()
+	m.input.ShowSuggestions = false
+
+	if input == "" {
+		return
+	}
+
+	if strings.HasPrefix(input, "!") {
+		return
+	}
+
+	if m.updateVCSCompletions(input) {
+		return
+	}
+
+	if m.cmdPrefix == prefixNone && len(vcsSubcommands) > 0 {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions(vcsSubcommands)
+	}
+}
+
+func (m *model) updateVCSCompletions(input string) bool {
+	for _, name := range backend.Names() {
+		if m.matchVCSCompletions(input, name) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (m *model) matchVCSCompletions(input, name string) bool {
+	prefix := name + " "
+
+	if !strings.HasPrefix(input, prefix) && !strings.HasPrefix(prefix, input) {
+		return false
+	}
+
+	// Phase 1: partial prefix ("g" / "gi") → suggest backend name.
+	if strings.HasPrefix(prefix, input) && prefix != input {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions([]string{name})
+
+		return true
+	}
+
+	// Phase 2: full prefix typed → load and suggest subcommands.
+	m.loadVCSCompletions(name)
+
+	if len(m.vcsCompletions[name]) > 0 {
+		m.input.ShowSuggestions = true
+		m.input.SetSuggestions(m.vcsCompletions[name])
+	}
+
+	return true
+}
+
+func (m *model) loadVCSCompletions(name string) {
+	if m.vcsCompletions == nil {
+		m.vcsCompletions = make(map[string][]string)
+	}
+
+	if _, ok := m.vcsCompletions[name]; ok {
+		return
+	}
+
+	b, err := backend.ByName(name)
+	if err != nil {
+		m.vcsCompletions[name] = []string{}
+
+		return
+	}
+
+	cmds, err := b.Subcommands(context.Background())
+	if err != nil || cmds == nil {
+		m.vcsCompletions[name] = []string{}
+
+		return
+	}
+
+	prefixed := make([]string, len(cmds))
+	for i, c := range cmds {
+		prefixed[i] = name + " " + c
+	}
+
+	m.vcsCompletions[name] = prefixed
 }
 
 func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -389,11 +512,12 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Clear alert on any key.
 	if m.modal == modalAlert {
 		m.modal = modalNone
+		m.alertMsg = ""
 	}
 
 	key := msg.String()
 
-	handler, ok := mainKeyHandlers[key]
+	handler, ok := getKeyHandlers()[key]
 	if ok {
 		return handler(m)
 	}
@@ -493,6 +617,7 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	}
 
 	m.updateTableRows()
+	m.pushSelectionHistory()
 	m.savePersState()
 
 	return m, nil
@@ -516,8 +641,8 @@ func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *model) handleCmdBarOpen(p cmdPrefix) (tea.Model, tea.Cmd) {
-	openCommandBar(m, p)
+func (m *model) handleCmdBarOpen() (tea.Model, tea.Cmd) {
+	openCommandBar(m, prefixNone)
 
 	return m, nil
 }
@@ -594,10 +719,141 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 	return execCmd(m, selected, "", subcmd)
 }
 
-func openCommandBar(m *model, p cmdPrefix) {
-	m.cmdPrefix = p
+func parseUnifiedCmd(input string) (string, string) {
+	if strings.HasPrefix(input, "!") {
+		return "sh", strings.TrimSpace(input[1:])
+	}
+
+	for _, name := range backend.Names() {
+		prefix := name + " "
+		if strings.HasPrefix(input, prefix) {
+			return name, strings.TrimSpace(input[len(prefix):])
+		}
+	}
+
+	return "", input
+}
+
+func (m *model) pushSelectionHistory() {
+	current := sortedSelected(m.selected)
+	if len(current) == 0 {
+		return
+	}
+
+	if len(m.persState.SelectionHistory) > 0 {
+		last := m.persState.SelectionHistory[0].Repos
+		if equalStringSlices(current, last) {
+			return
+		}
+	}
+
+	entry := SelectionEntry{
+		Timestamp: time.Now(),
+		Repos:     current,
+	}
+
+	m.persState.SelectionHistory = append([]SelectionEntry{entry}, m.persState.SelectionHistory...)
+	if len(m.persState.SelectionHistory) > selectionHistoryCap {
+		m.persState.SelectionHistory = m.persState.SelectionHistory[:selectionHistoryCap]
+	}
+}
+
+func openSelHistoryPopup(m *model) {
+	if len(m.persState.SelectionHistory) == 0 {
+		return
+	}
+
+	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	for name := range m.cfg.Repos {
+		allRepoSet[name] = struct{}{}
+	}
+
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
+	m.historyList.SetItems(items)
+	m.historyList.Select(0)
+
+	m.screen = screenSelHistory
+}
+
+func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == keyEnter {
+		item, ok := m.historyList.SelectedItem().(historyItem)
+		if !ok {
+			return m, nil
+		}
+
+		return m.handleSelHistoryRestore(item.repos)
+	}
+
+	var cmd tea.Cmd
+
+	m.historyList, cmd = m.historyList.Update(msg)
+
+	return m, cmd
+}
+
+func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
+	selected := make(map[string]bool)
+
+	var missing []string
+
+	for _, name := range repos {
+		if _, ok := m.cfg.Repos[name]; ok {
+			selected[name] = true
+		} else {
+			missing = append(missing, name)
+		}
+	}
+
+	if len(missing) > 0 {
+		m.modal = modalAlert
+		m.alertMsg = fmt.Sprintf("Warning: %d repo(s) no longer exist:\n%s",
+			len(missing), strings.Join(missing, "\n"))
+	}
+
+	m.selected = selected
+	m.mode = modeNormal
+	m.repoTable.SetStyles(tableStyles(false))
+	m.updateTableRows()
+	m.pushSelectionHistory()
+	m.savePersState()
+	m.screen = screenMain
+
+	return m, loadStatusesCmd(m)
+}
+
+func sortedSelected(selected map[string]bool) []string {
+	out := make([]string, 0, len(selected))
+	for name, sel := range selected {
+		if sel {
+			out = append(out, name)
+		}
+	}
+
+	sort.Strings(out)
+
+	return out
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func openCommandBar(m *model, _ cmdPrefix) {
+	m.cmdPrefix = prefixNone
 	m.commandOpen = true
 	m.input.SetValue("")
+	m.input.ShowSuggestions = false
 	m.input.Focus()
 	m.input.SetWidth(m.inputWidth())
 	m.historyReset()
@@ -611,7 +867,7 @@ func openGroupPopup(m *model, mode groupMode) {
 	switch mode {
 	case groupFilterMode:
 		options = make([]string, 0, 1+len(groupNames))
-		options = append(options, labelAllCap)
+		options = append(options, labelAllRepos)
 		options = append(options, groupNames...)
 	case groupAddMode:
 		options = make([]string, 0, len(groupNames)+1)
@@ -619,20 +875,26 @@ func openGroupPopup(m *model, mode groupMode) {
 		options = append(options, labelNew)
 	}
 
-	m.groupPopupOptions = options
 	m.groupMode = mode
+	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
+	m.groupList.SetHeight(m.contentHeight())
 
-	m.groupPopupCursor = 0
+	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos))
+	m.groupList.SetItems(items)
+
+	cursor := 0
+
 	if m.groupFilter != "" && mode == groupFilterMode {
 		for i, opt := range options {
 			if opt == m.groupFilter || opt == "@"+m.groupFilter {
-				m.groupPopupCursor = i
+				cursor = i
 
 				break
 			}
 		}
 	}
 
+	m.groupList.Select(cursor)
 	m.screen = screenGroup
 }
 

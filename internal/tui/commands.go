@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/google/shlex"
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
@@ -59,24 +60,25 @@ func startExec(
 	prefix, cmdStr string,
 	concurrency int64,
 ) (<-chan runner.Result, error) {
-	switch prefix {
-	case vcsGit, vcsJj:
-		args, err := shlex.Split(cmdStr)
-		if err != nil {
-			return nil, fmt.Errorf("parse command: %w", err)
+	if prefix == "" {
+		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
+	}
+
+	if _, err := backend.ByName(prefix); err == nil {
+		args, shErr := shlex.Split(cmdStr)
+		if shErr != nil {
+			return nil, fmt.Errorf("parse command: %w", shErr)
 		}
 
-		res, err := runner.Dispatch(ctx, repos, selected, prefix, args, concurrency)
-		if err != nil {
-			return nil, fmt.Errorf("dispatch: %w", err)
+		res, dispatchErr := runner.Dispatch(ctx, repos, selected, prefix, args, concurrency)
+		if dispatchErr != nil {
+			return nil, fmt.Errorf("dispatch: %w", dispatchErr)
 		}
 
 		return res, nil
-	case "":
-		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
-	default:
-		return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 	}
+
+	return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 }
 
 // execCmd starts execution with the given prefix and command string.
@@ -86,12 +88,13 @@ func startExec(
 // VCS shortcuts (s/l/d/f) should pass "" so they always use VCS routing
 // regardless of the current command-bar prefix.
 func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
+	m.execCancelAll()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.execCancel = cancel
 	m.executing = true
 	m.execTotal = len(selected)
 	m.execResults = nil
-	m.pushHistory(prefix, cmdStr)
 
 	concurrency := int64(m.cfg.Settings.Concurrency)
 	if concurrency < 1 {

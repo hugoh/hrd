@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSavePersState(t *testing.T) {
@@ -28,9 +29,7 @@ func TestSavePersState(t *testing.T) {
 
 	m.savePersState()
 
-	if m.persState.LastGroup != "work" {
-		t.Errorf("LastGroup = %q, want %q", m.persState.LastGroup, "work")
-	}
+	assert.Equal(t, "work", m.persState.LastGroup)
 }
 
 func TestExecCancelAllNoCancel(t *testing.T) {
@@ -38,9 +37,7 @@ func TestExecCancelAllNoCancel(t *testing.T) {
 
 	m.execCancelAll()
 
-	if m.executing {
-		t.Error("executing should be false after execCancelAll")
-	}
+	assert.False(t, m.executing)
 }
 
 func TestExecCancelAllWithCancel(t *testing.T) {
@@ -52,9 +49,7 @@ func TestExecCancelAllWithCancel(t *testing.T) {
 
 	m.execCancelAll()
 
-	if m.executing {
-		t.Error("executing should be false after execCancelAll")
-	}
+	assert.False(t, m.executing)
 
 	select {
 	case <-ctx.Done():
@@ -77,12 +72,8 @@ func TestQuit(t *testing.T) {
 
 	m.quit()
 
-	if m.persState.LastRepos == nil {
-		t.Error("LastRepos should be set after quit")
-	}
+	assert.NotNil(t, m.persState.LastRepos)
 
 	_, err := os.Stat(m.stateFile)
-	if os.IsNotExist(err) {
-		t.Error("state file should exist after quit")
-	}
+	assert.False(t, os.IsNotExist(err), "state file should exist after quit")
 }

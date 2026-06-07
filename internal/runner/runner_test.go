@@ -22,7 +22,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
-	backend.Register(&gitBackend{})
+	if err := backend.Register(&gitBackend{}); err != nil {
+		panic(err)
+	}
 
 	os.Exit(m.Run())
 }
@@ -40,7 +42,8 @@ func (*gitBackend) Detect(path string) (bool, error) {
 func (*gitBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
 	return backend.RepoStatus{}, nil
 }
-func (*gitBackend) SubcommandArgs(op string) []string { return []string{op} }
+func (*gitBackend) SubcommandArgs(op string) []string               { return []string{op} }
+func (*gitBackend) Subcommands(_ context.Context) ([]string, error) { return nil, nil }
 func (*gitBackend) Run(
 	ctx context.Context,
 	path string,

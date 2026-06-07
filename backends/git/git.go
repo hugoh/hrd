@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,13 +26,12 @@ type Backend struct{}
 
 var _ backend.Backend = (*Backend)(nil)
 
-// Name returns the backend identifier "git".
 func (*Backend) Name() string { return "git" }
 
 // Priority returns the git detection priority.
 func (*Backend) Priority() int { return priorityGit }
 
-// Detect returns true if path contains a .git directory.
+// Detect checks for a .git directory.
 func (*Backend) Detect(path string) (bool, error) {
 	ok, err := backend.DetectDir(path, ".git")
 	if err != nil {
@@ -65,6 +65,44 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 
 func (*Backend) SubcommandArgs(op string) []string {
 	return []string{op}
+}
+
+// Subcommands shells out to git help -a and returns available subcommands.
+func (*Backend) Subcommands(ctx context.Context) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "git", "help", "-a").Output()
+	if err != nil {
+		return nil, fmt.Errorf("git help: %w", err)
+	}
+
+	return parseGitCmdList(string(out)), nil
+}
+
+func parseGitCmdList(help string) []string {
+	seen := make(map[string]bool)
+
+	var cmds []string
+
+	for line := range strings.SplitSeq(help, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+
+		if !strings.HasPrefix(line, "   ") && !strings.HasPrefix(line, "\t") {
+			continue
+		}
+
+		name, _, _ := strings.Cut(trimmed, " ")
+
+		if !seen[name] {
+			seen[name] = true
+			cmds = append(cmds, name)
+		}
+	}
+
+	slices.Sort(cmds)
+
+	return cmds
 }
 
 // Run executes arbitrary git args in path.
@@ -216,5 +254,7 @@ func handleAheadBehind(ab string) (int, int) {
 
 // Register registers the git backend with the backend registry.
 func Register() {
-	backend.Register(&Backend{})
+	if err := backend.Register(&Backend{}); err != nil {
+		panic(fmt.Sprintf("git: %v", err))
+	}
 }

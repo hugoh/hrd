@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
@@ -36,6 +37,7 @@ const (
 	screenOutput
 	screenHelp
 	screenGroup
+	screenSelHistory
 )
 
 type mode int
@@ -64,17 +66,19 @@ type cmdPrefix int
 
 const (
 	prefixNone cmdPrefix = iota
-	prefixGit
-	prefixJj
 	prefixShell
 	numPrefixes
 )
 
+// VCS subcommands known by the TUI, used for tab completion in the unified
+// command bar.
+//
+//nolint:gochecknoglobals,goconst // command names are effectively constant
+var vcsSubcommands = []string{"status", "diff", "log", "fetch", "pull", "push"}
+
 //nolint:gochecknoglobals // effectively constant, prefix label lookup
 var prefixLabels = [numPrefixes]string{
 	"",
-	vcsGit,
-	vcsJj,
 	"sh",
 }
 
@@ -99,13 +103,10 @@ const (
 
 	initInputW = 40
 
-	vcsGit      = "git"
-	vcsJj       = "jj"
-	labelAll    = "all"
-	labelAllCap = "[all]"
-	labelNew    = "[new...]"
-	keyEsc      = "esc"
-	keyEnter    = "enter"
+	labelAll = "all"
+	labelNew = "[new...]"
+	keyEsc   = "esc"
+	keyEnter = "enter"
 
 	secNavigation = "Navigation"
 	secSelection  = "Selection"
@@ -153,15 +154,19 @@ type model struct {
 	spinner  spinner.Model
 	statuses map[string]runner.StatusResult
 
-	groupPopupCursor  int
-	groupPopupOptions []string
-	groupMode         groupMode
-	groupNewInput     bool
+	groupList     list.Model
+	groupMode     groupMode
+	groupNewInput bool
 
-	commandOpen bool
-	input       textinput.Model
-	cmdPrefix   cmdPrefix
-	historyIdx  int
+	historyList list.Model
+	alertMsg    string
+
+	commandOpen         bool
+	input               textinput.Model
+	cmdPrefix           cmdPrefix
+	historyIdx          int
+	historyFilterPrefix string
+	vcsCompletions      map[string][]string
 
 	executing      bool
 	execSideEffect bool
@@ -180,6 +185,7 @@ type model struct {
 	persState PersistentState
 }
 
+//nolint:funlen // model initialization with many setup steps
 func newModel(ctx context.Context, opts Options) (*model, error) {
 	statePath := opts.StatePath
 	if statePath == "" {
@@ -198,10 +204,21 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 
 	repoOrder := sortedRepoKeys(cfg.Repos)
 
-	selected := restoreSelected(persState.LastRepos, cfg.Repos)
-	if len(persState.LastRepos) == 0 {
-		for _, name := range repoOrder {
-			selected[name] = true
+	var selected map[string]bool
+
+	if len(opts.Repos) > 0 {
+		resolved, err := cfg.ResolveScope(opts.Repos)
+		if err != nil {
+			return nil, fmt.Errorf("new model: resolving repos: %w", err)
+		}
+
+		selected = makeSelectedMap(resolved)
+	} else {
+		selected = restoreSelected(persState.LastRepos, cfg.Repos)
+		if len(persState.LastRepos) == 0 {
+			for _, name := range repoOrder {
+				selected[name] = true
+			}
 		}
 	}
 
@@ -228,11 +245,14 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		historyIdx:  -1,
 	}
 
+	m.pushSelectionHistory()
 	m.initTable()
 	m.updateTableRows()
 	m.initInput()
 	m.initOutput()
 	m.initHelpViewport()
+	m.initHistoryList()
+	m.initGroupList()
 
 	return m, nil
 }
@@ -301,6 +321,20 @@ func (m *model) initHelpViewport() {
 	m.helpViewport.SetContent(m.helpContent())
 }
 
+func (m *model) initHistoryList() {
+	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	for name := range m.cfg.Repos {
+		allRepoSet[name] = struct{}{}
+	}
+
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
+	m.historyList = initList(defaultItemDelegate(0), items, defaultViewW)
+}
+
+func (m *model) initGroupList() {
+	m.groupList = initList(defaultItemDelegate(0), nil, defaultViewW)
+}
+
 // Run starts the Bubble Tea event loop and blocks until the user quits.
 func Run(ctx context.Context, opts Options) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
@@ -321,6 +355,7 @@ func Run(ctx context.Context, opts Options) error {
 }
 
 func (m *model) quit() {
+	m.pushSelectionHistory()
 	m.savePersState()
 	m.execCancelAll()
 }

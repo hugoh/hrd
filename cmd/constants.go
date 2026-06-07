@@ -8,5 +8,4 @@ const (
 	StatusLabel = "STATUS"
 )
 
-// These format constants were moved to internal/ui to share between
-// CLI and TUI. See ui.FormatSummary().
+// Format labels used by both CLI and TUI.

@@ -1,6 +1,10 @@
 package tui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"sync"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 //nolint:gochecknoglobals,goconst,mnd // binding definitions
 var mainBindings = []binding{
@@ -34,13 +38,13 @@ var mainBindings = []binding{
 
 	// Selection
 	{
-		key: "space", displayKey: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
+		key: "x", displayKey: "x", handler: func(m *model) (tea.Model, tea.Cmd) {
 			if m.mode == modeSelect {
 				return m.handleSelectOne()
 			}
 
 			return m.handleSelectToggle()
-		}, label: "select", desc: "Toggle selection mode / select one", hrd: true,
+		}, label: "select", desc: "Toggle selection mode / toggle repo", hrd: true,
 		section: secSelection, order: 10,
 	},
 	{key: "enter", handler: func(m *model) (tea.Model, tea.Cmd) {
@@ -60,7 +64,7 @@ var mainBindings = []binding{
 		order:   20,
 	},
 	{
-		key:     "x",
+		key:     "s",
 		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleSingleToggle() },
 		label:   "single",
 		desc:    "Focus commands on one repo",
@@ -90,7 +94,7 @@ var mainBindings = []binding{
 
 	// Commands
 	{
-		key:     "s",
+		key:     "S",
 		handler: func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "status", false) },
 		label:   "status",
 		desc:    "Run status on selected",
@@ -154,43 +158,38 @@ var mainBindings = []binding{
 
 		return m, nil
 	}, label: "help", desc: "Toggle this help", hrd: true, section: secGeneral, order: 20},
+	{key: "H", handler: func(m *model) (tea.Model, tea.Cmd) {
+		openSelHistoryPopup(m)
+
+		return m, nil
+	}, label: "history", desc: "Restore a previous repo selection", hrd: true, section: secGeneral, order: 25},
 
 	// Cmd bar
 	{
-		key:        "G",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixGit) },
-		label:      "git",
-		desc:       "Open command bar (git)",
+		key:        ":",
+		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen() },
+		label:      "cmd",
+		desc:       "Open command bar",
+		hrd:        true,
 		section:    secCmdBar,
 		sideEffect: true,
 		order:      10,
 	},
-	{
-		key:        "J",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixJj) },
-		label:      "jj",
-		desc:       "Open command bar (jj)",
-		section:    secCmdBar,
-		sideEffect: true,
-		order:      20,
-	},
-	{
-		key:        "S",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen(prefixShell) },
-		label:      "sh",
-		desc:       "Open command bar (shell)",
-		section:    secCmdBar,
-		sideEffect: true,
-		order:      30,
-	},
 }
 
-//nolint:gochecknoglobals // key dispatch table built from bindings
-var mainKeyHandlers map[string]func(*model) (tea.Model, tea.Cmd)
+//nolint:gochecknoglobals // cache for key dispatch table, built lazily
+var (
+	mainKeyHandlers   map[string]func(*model) (tea.Model, tea.Cmd)
+	buildHandlersOnce sync.Once
+)
 
-func init() { //nolint:gochecknoinits
-	mainKeyHandlers = make(map[string]func(*model) (tea.Model, tea.Cmd), len(mainBindings))
-	for _, b := range mainBindings {
-		mainKeyHandlers[b.key] = b.handler
-	}
+func getKeyHandlers() map[string]func(*model) (tea.Model, tea.Cmd) {
+	buildHandlersOnce.Do(func() {
+		mainKeyHandlers = make(map[string]func(*model) (tea.Model, tea.Cmd), len(mainBindings))
+		for _, b := range mainBindings {
+			mainKeyHandlers[b.key] = b.handler
+		}
+	})
+
+	return mainKeyHandlers
 }

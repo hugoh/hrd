@@ -1,21 +1,21 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
+	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMainView(t *testing.T) {
 	m := testModel()
 
-	view := m.mainView()
-	if view == "" {
-		t.Fatal("mainView() returned empty")
-	}
+	require.NotEmpty(t, m.mainView())
 }
 
 // testModel creates a model with default test configuration ready for View().
@@ -44,17 +44,9 @@ func TestViewHelpScreen(t *testing.T) {
 	})
 
 	view := m.View()
-	if view.Content == "" {
-		t.Fatal("View() with help screen returned empty")
-	}
-
-	if !view.AltScreen {
-		t.Error("View() should have AltScreen = true")
-	}
-
-	if view.MouseMode != tea.MouseModeCellMotion {
-		t.Error("View() should have MouseModeCellMotion")
-	}
+	require.NotEmpty(t, view.Content)
+	assert.True(t, view.AltScreen)
+	assert.Equal(t, tea.MouseModeCellMotion, view.MouseMode)
 }
 
 func TestViewNotReady(t *testing.T) {
@@ -63,35 +55,27 @@ func TestViewNotReady(t *testing.T) {
 		width:  80,
 		height: 30,
 	}
-
 	m.ready = false
 
-	view := m.View()
-	if view.Content != "" {
-		t.Errorf("View() should return empty content when not ready, got %q", view.Content)
-	}
+	assert.Empty(t, m.View().Content)
 }
 
 func TestViewGroupScreen(t *testing.T) {
 	m := testModel(func(m *model) {
 		m.screen = screenGroup
-		m.groupPopupOptions = []string{labelAllCap}
-		m.groupPopupCursor = 0
+		m.initGroupList()
+		m.groupList.SetItems([]list.Item{groupItem{name: labelAllRepos}})
+		m.groupList.SetWidth(m.width)
+		m.groupList.SetHeight(m.contentHeight())
 	})
 
-	view := m.View()
-	if view.Content == "" {
-		t.Fatal("View() with group screen returned empty")
-	}
+	require.NotEmpty(t, m.View().Content)
 }
 
 func TestViewAlertInline(t *testing.T) {
 	m := testModel(func(m *model) { m.modal = modalAlert })
 
-	view := m.View()
-	if view.Content == "" {
-		t.Fatal("View() with alert returned empty")
-	}
+	require.NotEmpty(t, m.View().Content)
 }
 
 func TestViewOutputScreen(t *testing.T) {
@@ -103,10 +87,7 @@ func TestViewOutputScreen(t *testing.T) {
 	}
 	m.ready = true
 
-	view := m.View()
-	if view.Content == "" {
-		t.Fatal("View() on output screen returned empty")
-	}
+	require.NotEmpty(t, m.View().Content)
 }
 
 func TestOutputView(t *testing.T) {
@@ -119,13 +100,8 @@ func TestOutputView(t *testing.T) {
 	m.ready = true
 
 	view := m.outputView()
-	if view == "" {
-		t.Fatal("outputView() returned empty")
-	}
-
-	if !strings.Contains(view, "Output") {
-		t.Errorf("outputView should contain 'Output', got %q", view)
-	}
+	require.NotEmpty(t, view)
+	assert.Contains(t, view, "Output")
 }
 
 func TestOutputViewExecuting(t *testing.T) {
@@ -144,52 +120,30 @@ func TestOutputViewExecuting(t *testing.T) {
 	m.ready = true
 
 	view := m.outputView()
-
-	if !strings.Contains(view, "[2/5]") {
-		t.Errorf("outputView should show progress [2/5], got %q", view)
-	}
-
-	if !strings.Contains(view, "Esc/q:close") {
-		t.Errorf("outputView should show Esc/q:close, got %q", view)
-	}
+	assert.Contains(t, view, "[2/5]")
+	assert.Contains(t, view, "Esc/q:close")
 }
 
 func TestRenderInputLine(t *testing.T) {
-	m := &model{
-		cmdPrefix: prefixGit,
-	}
+	m := &model{cmdPrefix: prefixNone}
 	m.initInput()
 
-	line := m.renderInputLine()
-	if !strings.Contains(line, "[git]") {
-		t.Errorf("expected [git] prompt, got %q", line)
-	}
+	assert.Contains(t, m.renderInputLine(), ":")
 }
 
 func TestRenderInputLineShell(t *testing.T) {
-	m := &model{
-		cmdPrefix: prefixShell,
-	}
+	m := &model{cmdPrefix: prefixShell}
 	m.initInput()
 
-	line := m.renderInputLine()
-	if !strings.Contains(line, "[sh]") {
-		t.Errorf("expected [sh] prompt, got %q", line)
-	}
+	assert.Contains(t, m.renderInputLine(), "[sh]")
 }
 
 func TestEmptyTableViewNoRepos(t *testing.T) {
 	m := testModel()
 
 	view := m.mainView()
-
-	if !strings.Contains(view, "No repos configured") {
-		t.Errorf("empty mainView() should contain 'No repos configured', got %q", view)
-	}
-
-	if !strings.Contains(view, "hrd repo add") {
-		t.Errorf("empty mainView() should mention 'hrd repo add', got %q", view)
-	}
+	assert.Contains(t, view, "No repos configured")
+	assert.Contains(t, view, "hrd repo add")
 }
 
 func TestEmptyTableViewNothingSelected(t *testing.T) {
@@ -199,18 +153,9 @@ func TestEmptyTableViewNothingSelected(t *testing.T) {
 	})
 
 	view := m.mainView()
-
-	if !strings.Contains(view, "No repos selected") {
-		t.Errorf("empty mainView() should contain empty state message, got %q", view)
-	}
-
-	if !strings.Contains(view, "@") {
-		t.Errorf("empty mainView() should mention @ key, got %q", view)
-	}
-
-	if !strings.Contains(view, "Space") {
-		t.Errorf("empty mainView() should mention Space key, got %q", view)
-	}
+	assert.Contains(t, view, "No repos selected")
+	assert.Contains(t, view, "@")
+	assert.Contains(t, view, "x")
 }
 
 func TestRenderHeaderSingleMode(t *testing.T) {
@@ -220,21 +165,61 @@ func TestRenderHeaderSingleMode(t *testing.T) {
 		m.selected = map[string]bool{"a": true}
 	})
 
-	view := m.mainView()
-	if !strings.Contains(view, "x:single") {
-		t.Errorf("mainView() should show 'x:single' indicator in single mode, got %q", view)
-	}
+	assert.Contains(t, m.mainView(), "s:single")
 }
 
 func TestHelpContent(t *testing.T) {
 	m := &model{}
 	content := m.helpContent()
 
-	if content == "" {
-		t.Fatal("helpContent() returned empty")
+	require.NotEmpty(t, content)
+	assert.Contains(t, content, "Navigation")
+}
+
+func TestAlertContent(t *testing.T) {
+	m := &model{}
+
+	content := m.alertContent()
+	assert.Contains(t, content, "No repos selected")
+
+	m.alertMsg = "Custom warning message"
+	content = m.alertContent()
+	assert.Contains(t, content, "Custom warning message")
+}
+
+func TestRepoCountLabel(t *testing.T) {
+	assert.Equal(t, "1 repo", repoCountLabel(1))
+	assert.Equal(t, "3 repos", repoCountLabel(3))
+}
+
+func TestSelHistoryView(t *testing.T) {
+	m := &model{
+		screen: screenSelHistory,
+		width:  80,
+		height: 30,
+		cfg: config.Config{
+			Groups: map[string]config.Group{},
+			Repos:  map[string]config.Repo{"a": {}, "b": {}, "c": {}, "d": {}},
+		},
+		persState: PersistentState{
+			SelectionHistory: []SelectionEntry{
+				{Repos: []string{"a", "b", "c"}},
+				{Repos: []string{"d"}},
+			},
+		},
+	}
+	m.initTable()
+	m.initHistoryList()
+
+	view := m.selHistoryView()
+	require.NotEmpty(t, view)
+	assert.Contains(t, view, "Selection History")
+}
+
+func TestSelHistoryViewEmpty(t *testing.T) {
+	m := &model{
+		persState: PersistentState{SelectionHistory: []SelectionEntry{}},
 	}
 
-	if !strings.Contains(content, "Navigation") {
-		t.Errorf("helpContent() missing Navigation, got %q", content)
-	}
+	assert.Empty(t, m.selHistoryView())
 }

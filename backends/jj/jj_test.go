@@ -14,6 +14,53 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func jjSampleCompletion() string {
+	return `
+_jj() {
+    local i cur prev opts cmd
+    COMPREPLY=()
+    case "${cmd},${i}" in
+        ",$1")
+            cmd="jj"
+            ;;
+        jj,abandon)
+            cmd="jj__subcmd__abandon"
+            ;;
+        jj,bookmark)
+            cmd="jj__subcmd__bookmark"
+            ;;
+        jj,commit)
+            cmd="jj__subcmd__commit"
+            ;;
+        jj,describe)
+            cmd="jj__subcmd__describe"
+            ;;
+        jj,diff)
+            cmd="jj__subcmd__diff"
+            ;;
+        jj,git)
+            cmd="jj__subcmd__git"
+            ;;
+        jj,log)
+            cmd="jj__subcmd__log"
+            ;;
+        jj,new)
+            cmd="jj__subcmd__new"
+            ;;
+        jj,rebase)
+            cmd="jj__subcmd__rebase"
+            ;;
+        jj,status)
+            cmd="jj__subcmd__status"
+            ;;
+        jj,b)
+            cmd="jj__subcmd__bookmark__b"
+            ;;
+    esac
+}
+`
+}
+
 // setupJJDir creates a temp directory with a minimal .jj structure.
 func setupJJDir(t *testing.T) string {
 	t.Helper()
@@ -425,19 +472,15 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 
 	// Make the working copy have no description so the ancestor walk runs,
 	// then cause runJJ to fail on ancestor revs.
-	origRunJJ := runJJ
-
-	runJJ = func(ctx context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(ctx context.Context, _ string, args []string) (string, error) {
 		// Let the working copy query (@) succeed, fail on ancestor queries (@- etc).
 		if slices.Contains(args, "@") {
-			return origRunJJ(ctx, dir, args)
+			return defaultRunJJ(ctx, dir, args)
 		}
 
 		return "", assert.AnError
 	}
-	defer func() { runJJ = origRunJJ }()
-
-	b := &Backend{}
 	st, err := b.Status(context.Background(), dir)
 	// The ancestor walk should not hard-error — it breaks on first failure
 	// and returns whatever the working copy gave us.
@@ -446,10 +489,8 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 }
 
 func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		switch {
 		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
 			return "main: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
@@ -465,7 +506,7 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Equal(t, "origin", bm.Remote)
 	assert.Equal(t, 0, bm.Ahead)
@@ -474,10 +515,8 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 }
 
 func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
 			return "main: sxoqvoon 2c688398\n  @git: sxoqvoon 2c688398\n", nil
 		}
@@ -486,17 +525,15 @@ func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
 }
 
 func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
 			return "main: sxoqvoon 2c688398\n" +
 				"  @git: sxoqvoon 2c688398\n" +
@@ -507,30 +544,25 @@ func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
 }
 
 func TestEnrichWithRemoteBookmark_FetchError(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
-	runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, _ []string) (string, error) {
 		return "", assert.AnError
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 }
 
 func TestCountRevs(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
 	tests := []struct {
 		name   string
 		output string
@@ -547,11 +579,12 @@ func TestCountRevs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runJJ = func(_ context.Context, _ string, _ []string) (string, error) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, _ []string) (string, error) {
 				return tt.output, tt.err
 			}
 
-			assert.Equal(t, tt.want, countRevs(context.Background(), "/tmp", "main..main@origin"))
+			assert.Equal(t, tt.want, b.countRevs(context.Background(), "/tmp", "main..main@origin"))
 		})
 	}
 }
@@ -597,7 +630,8 @@ func TestBackend_Run_NoExecutable(t *testing.T) {
 func TestRunJJ_Failure(t *testing.T) {
 	dir := setupJJDir(t)
 
-	_, err := runJJ(
+	b := &Backend{runJJFn: defaultRunJJ}
+	_, err := b.runJJ(
 		context.Background(),
 		dir,
 		[]string{"log", "-r", "@", "--template", "invalid_template"},
@@ -620,9 +654,6 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 
 //nolint:cyclop,funlen // table-driven test with 3 cases
 func TestBackend_Status_LocalAhead(t *testing.T) {
-	origRunJJ := runJJ
-	defer func() { runJJ = origRunJJ }()
-
 	tests := []struct {
 		name      string
 		wcOutput  string
@@ -651,7 +682,8 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			runJJ = func(_ context.Context, _ string, args []string) (string, error) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
 					return tt.wcOutput, nil
 				}
@@ -672,7 +704,6 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 				return "", nil
 			}
 
-			b := &Backend{}
 			st, err := b.Status(context.Background(), "/tmp")
 			require.NoError(t, err)
 
@@ -744,4 +775,98 @@ func TestRunSteps_InfraError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj test")
+}
+
+func TestBackend_Subcommands(t *testing.T) {
+	b := &Backend{}
+
+	cmds, err := b.Subcommands(context.Background())
+	if err != nil {
+		t.Skipf("jj not available: %v", err)
+	}
+
+	require.NotEmpty(t, cmds)
+
+	expect := []string{"status", "log", "diff", "new", "describe", "commit", "git"}
+
+	for _, want := range expect {
+		assert.Contains(t, cmds, want)
+	}
+}
+
+func TestBackend_Subcommands_Error(t *testing.T) {
+	b := &Backend{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := b.Subcommands(ctx)
+	assert.Error(t, err)
+}
+
+func TestParseJjCmdList(t *testing.T) {
+	got := parseJjCmdList(jjSampleCompletion())
+	want := []string{
+		"abandon", "b", "bookmark", "commit",
+		"describe", "diff", "git", "log",
+		"new", "rebase", "status",
+	}
+
+	require.Len(t, got, len(want))
+	assert.Equal(t, want, got)
+}
+
+func TestParseJjCmdListAliases(t *testing.T) {
+	sample := `
+        jj,status)
+                cmd="jj__subcmd__status"
+        jj,st)
+                cmd="jj__subcmd__status__st"
+        jj,diff)
+                cmd="jj__subcmd__diff"
+        jj,d)
+                cmd="jj__subcmd__diff__d"
+`
+
+	got := parseJjCmdList(sample)
+	assert.Len(t, got, 4)
+}
+
+func TestParseJjCmdListEmpty(t *testing.T) {
+	assert.Empty(t, parseJjCmdList(""))
+}
+
+func TestParseJjCmdListNoEntries(t *testing.T) {
+	assert.Empty(t, parseJjCmdList("some random bash code\nno jj entries here\n"))
+}
+
+func TestParseJjCmdListSkipsEmptySub(t *testing.T) {
+	got := parseJjCmdList("        jj,)\n        jj,status)\n")
+	assert.Equal(t, []string{"status"}, got)
+}
+
+func TestParseJjCmdListDeduplicates(t *testing.T) {
+	input := `        jj,status)
+                cmd="x"
+        jj,status)
+                cmd="y"
+        jj,log)
+                cmd="z"
+`
+
+	got := parseJjCmdList(input)
+	assert.Len(t, got, 2)
+}
+
+func TestRegister_DuplicatePanics(t *testing.T) {
+	assert.Panics(t, func() { Register() })
+}
+
+func TestParseJjCmdListSorted(t *testing.T) {
+	got := parseJjCmdList(`
+        jj,status)
+        jj,log)
+        jj,abandon)
+`)
+	assert.True(t, slices.IsSorted(got))
 }
