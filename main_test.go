@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/hugoh/hrd/cmd"
@@ -19,7 +18,7 @@ func TestMainRun(t *testing.T) {
 	app.Writer = &stdout
 	app.ErrWriter = &stderr
 
-	err := app.Run(context.Background(), []string{"hrd", "--version"})
+	err := app.Run(t.Context(), []string{"hrd", "--version"})
 	assert.NoError(t, err)
 }
 
@@ -28,7 +27,7 @@ func TestMainRunHelp(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd", "--help"})
+	err := app.Run(t.Context(), []string{"hrd", "--help"})
 	assert.NoError(t, err)
 }
 
@@ -37,7 +36,7 @@ func TestMainRunNoArgs(t *testing.T) {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 
-	err := app.Run(context.Background(), []string{"hrd"})
+	err := app.Run(t.Context(), []string{"hrd"})
 	// Without args, hrd launches the TUI, which requires a real TTY.
 	// In test environments the TTY is unavailable, so verify TUI was invoked.
 	require.ErrorContains(t, err, "TTY", "launched TUI but no TTY available")

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
@@ -368,7 +368,7 @@ func (m *model) savePersState() {
 		}
 	}
 
-	sort.Strings(repos)
+	slices.Sort(repos)
 	m.persState.LastRepos = repos
 	m.persState.LastGroup = m.groupFilter
 	_ = saveState(m.stateFile, m.persState)

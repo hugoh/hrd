@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +26,7 @@ path = "`+repoDir+`"
 backends = ["git"]`), 0o644)
 	require.NoError(t, err)
 
-	m, err := newModel(context.Background(), Options{
+	m, err := newModel(t.Context(), Options{
 		ConfigPath: cfgPath,
 		StatePath:  filepath.Join(tmp, "state.json"),
 	})
@@ -119,7 +118,7 @@ func TestTeaWindowSize(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	m, err := newModel(context.Background(), Options{})
+	m, err := newModel(t.Context(), Options{})
 	require.NoError(t, err)
 
 	tm := teatest.NewTestModel(t, m,

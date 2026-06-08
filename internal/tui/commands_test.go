@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"context"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -11,19 +10,19 @@ import (
 )
 
 func TestStartExecEmptyPrefix(t *testing.T) {
-	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "", "status", 1)
+	ch, err := startExec(t.Context(), map[string]config.Repo{}, nil, "", "status", 1)
 	require.NoError(t, err)
 	require.NotNil(t, ch)
 }
 
 func TestStartExecFetch(t *testing.T) {
-	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "", "fetch", 1)
+	ch, err := startExec(t.Context(), map[string]config.Repo{}, nil, "", "fetch", 1)
 	require.NoError(t, err)
 	require.NotNil(t, ch)
 }
 
 func TestStartExecShellPrefix(t *testing.T) {
-	ch, err := startExec(context.Background(), map[string]config.Repo{}, nil, "sh", "echo hello", 1)
+	ch, err := startExec(t.Context(), map[string]config.Repo{}, nil, "sh", "echo hello", 1)
 	require.NoError(t, err)
 	require.NotNil(t, ch)
 }
@@ -92,7 +91,7 @@ func TestLoadStatusesCmdEmptyRepos(t *testing.T) {
 
 func TestLoadStatusesCmdStreaming(t *testing.T) {
 	m := &model{
-		ctx:       context.Background(),
+		ctx:       t.Context(),
 		repoOrder: []string{"r1"},
 		selected:  map[string]bool{"r1": true},
 		cfg: config.Config{
@@ -167,7 +166,7 @@ func TestStartExecGitJjQuotedArgs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ch, err := startExec(
-				context.Background(),
+				t.Context(),
 				map[string]config.Repo{},
 				nil,
 				"git",
@@ -200,7 +199,7 @@ func TestStartExecGitJjUnclosedQuotes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := startExec(
-				context.Background(),
+				t.Context(),
 				map[string]config.Repo{},
 				nil,
 				"git",
