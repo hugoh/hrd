@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -170,7 +170,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 					names = append(names, name)
 				}
 
-				sort.Strings(names)
+				slices.Sort(names)
 			}
 
 			const nameWidth = 15

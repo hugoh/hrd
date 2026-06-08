@@ -63,7 +63,7 @@ func TestDispatch(t *testing.T) {
 		"r1": {Path: "/tmp/r1"},
 	}
 
-	ch, err := Dispatch(context.Background(), repos, []string{"r1"}, "git", []string{"status"}, 1)
+	ch, err := Dispatch(t.Context(), repos, []string{"r1"}, "git", []string{"status"}, 1)
 	require.NoError(t, err)
 
 	count := 0
@@ -80,7 +80,7 @@ func TestDispatch_UnknownBackend(t *testing.T) {
 	}
 
 	_, err := Dispatch(
-		context.Background(),
+		t.Context(),
 		repos,
 		[]string{"r1"},
 		"unknown",
@@ -95,7 +95,7 @@ func TestDispatch_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
 	ch, err := Dispatch(
-		context.Background(),
+		t.Context(),
 		repos,
 		[]string{"nonexistent"},
 		"git",
@@ -115,7 +115,7 @@ func TestVCSSubcmd(t *testing.T) {
 		"r1": {Path: "/tmp/r1"},
 	}
 
-	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "status", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "status", 1)
 
 	count := 0
 	for range ch {
@@ -128,7 +128,7 @@ func TestVCSSubcmd(t *testing.T) {
 func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := VCSSubcmd(context.Background(), repos, []string{"nonexistent"}, "status", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "status", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -149,7 +149,7 @@ func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 	}
 
 	ch := VCSSubcmd(
-		context.Background(),
+		t.Context(),
 		repos,
 		[]string{"r1"},
 		"status",
@@ -177,7 +177,7 @@ func TestVCSSubcmd_Ops(t *testing.T) {
 
 	for _, op := range []string{"diff", "fetch"} {
 		t.Run(op, func(t *testing.T) {
-			ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, op, 1)
+			ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, op, 1)
 
 			count := 0
 			for range ch {
@@ -192,7 +192,7 @@ func TestVCSSubcmd_Ops(t *testing.T) {
 func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := VCSSubcmd(context.Background(), repos, []string{"nonexistent"}, "fetch", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "fetch", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -209,7 +209,7 @@ func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
 		"r1": {Path: dir},
 	}
 
-	ch := VCSSubcmd(context.Background(), repos, []string{"r1"}, "fetch", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "fetch", 1)
 	results := collectResults(ch)
 	require.Len(t, results, 1)
 	require.NoError(t, results[0].Err)
@@ -222,7 +222,7 @@ func TestVCSSubcmd_MultipleRepos(t *testing.T) {
 		"r2": {Path: "/tmp/r2"},
 	}
 
-	ch := VCSSubcmd(context.Background(), repos, []string{"r1", "r2"}, "status", 2)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1", "r2"}, "status", 2)
 
 	count := 0
 	for range ch {
@@ -237,7 +237,7 @@ func TestShell(t *testing.T) {
 		"r1": {Path: t.TempDir()},
 	}
 
-	ch := Shell(context.Background(), repos, []string{"r1"}, "echo hello", 1)
+	ch := Shell(t.Context(), repos, []string{"r1"}, "echo hello", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "r1", results[0].RepoName)
@@ -247,7 +247,7 @@ func TestShell(t *testing.T) {
 func TestShell_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := Shell(context.Background(), repos, []string{"nonexistent"}, "echo hello", 1)
+	ch := Shell(t.Context(), repos, []string{"nonexistent"}, "echo hello", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -259,7 +259,7 @@ func TestShell_WithExitCode(t *testing.T) {
 		"r1": {Path: "/tmp"},
 	}
 
-	ch := Shell(context.Background(), repos, []string{"r1"}, "exit 42", 1)
+	ch := Shell(t.Context(), repos, []string{"r1"}, "exit 42", 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, 42, results[0].ExitCode)
@@ -270,7 +270,7 @@ func TestGatherStatus(t *testing.T) {
 		"r1": {Path: "/tmp/r1"},
 	}
 
-	ch := GatherStatus(context.Background(), repos, []string{"r1"}, 1)
+	ch := GatherStatus(t.Context(), repos, []string{"r1"}, 1)
 
 	count := 0
 	for range ch {
@@ -283,7 +283,7 @@ func TestGatherStatus(t *testing.T) {
 func TestGatherStatus_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := GatherStatus(context.Background(), repos, []string{"nonexistent"}, 1)
+	ch := GatherStatus(t.Context(), repos, []string{"nonexistent"}, 1)
 	results := collectStatusResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -303,7 +303,7 @@ func TestDispatch_MultipleRepos(t *testing.T) {
 	}
 
 	ch, err := Dispatch(
-		context.Background(),
+		t.Context(),
 		repos,
 		[]string{"r1", "r2"},
 		"git",
@@ -326,7 +326,7 @@ func TestShell_MultipleRepos(t *testing.T) {
 		"r2": {Path: "/tmp"},
 	}
 
-	ch := Shell(context.Background(), repos, []string{"r1", "r2"}, "echo test", 2)
+	ch := Shell(t.Context(), repos, []string{"r1", "r2"}, "echo test", 2)
 	results := collectResults(ch)
 	assert.Len(t, results, 2)
 }

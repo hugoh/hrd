@@ -3,7 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/urfave/cli/v3"
@@ -16,7 +16,7 @@ func completeRepos(cfg *config.Config) []string {
 		names = append(names, name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }
@@ -28,7 +28,7 @@ func completeGroups(cfg *config.Config) []string {
 		names = append(names, displayGroup(name))
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }

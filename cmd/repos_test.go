@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -87,7 +86,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 
 			stdout := capturer.CaptureStdout(func() {
 				fullArgs := append([]string{"hrd", "--config", cfgPath}, tt.args...)
-				err = app.Run(context.Background(), fullArgs)
+				err = app.Run(t.Context(), fullArgs)
 			})
 
 			if tt.wantErr != nil {

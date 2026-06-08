@@ -388,18 +388,16 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 }
 
 func extractCommitMsg(out string) string {
-	//nolint:mnd // message + time split limit
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2)
+	msg, _, _ := strings.Cut(strings.TrimRight(out, "\n"), separator)
 
-	return strings.TrimSpace(parts[0])
+	return strings.TrimSpace(msg)
 }
 
 func extractCommitTime(out string) string {
-	//nolint:mnd // message + time split limit
-	parts := strings.SplitN(strings.TrimRight(out, "\n"), separator, 2)
+	_, timePart, found := strings.Cut(strings.TrimRight(out, "\n"), separator)
 
-	if len(parts) >= 2 { //nolint:mnd // time present
-		return strings.TrimSpace(parts[1])
+	if found {
+		return strings.TrimSpace(timePart)
 	}
 
 	return ""

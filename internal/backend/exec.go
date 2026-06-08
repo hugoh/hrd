@@ -17,8 +17,7 @@ func ExtractExitCode(err error) (int, bool) {
 		return 0, false
 	}
 
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return ee.ExitCode(), true
 	}
 

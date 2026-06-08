@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,7 +23,7 @@ func TestExtractExitCode_GenericError(t *testing.T) {
 }
 
 func TestExtractExitCode_ExitError(t *testing.T) {
-	err := exec.CommandContext(context.Background(), "sh", "-c", "exit 42").Run()
+	err := exec.CommandContext(t.Context(), "sh", "-c", "exit 42").Run()
 
 	var exitErr *exec.ExitError
 	require.ErrorAs(t, err, &exitErr)
@@ -35,25 +34,25 @@ func TestExtractExitCode_ExitError(t *testing.T) {
 }
 
 func TestRunCommand_Success(t *testing.T) {
-	res, err := RunCommand(context.Background(), "echo", "", []string{"hello"}, false)
+	res, err := RunCommand(t.Context(), "echo", "", []string{"hello"}, false)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode)
 	assert.Contains(t, res.Output, "hello")
 }
 
 func TestRunCommand_ExitError(t *testing.T) {
-	res, err := RunCommand(context.Background(), "sh", "", []string{"-c", "exit 7"}, false)
+	res, err := RunCommand(t.Context(), "sh", "", []string{"-c", "exit 7"}, false)
 	require.NoError(t, err) // ExitError is unwrapped, non-zero exit is not an error
 	assert.Equal(t, 7, res.ExitCode)
 }
 
 func TestRunCommand_BinaryNotFound(t *testing.T) {
-	_, err := RunCommand(context.Background(), "nonexistent-binary-12345", "", nil, false)
+	_, err := RunCommand(t.Context(), "nonexistent-binary-12345", "", nil, false)
 	require.Error(t, err)
 }
 
 func TestRunCommand_Interactive(t *testing.T) {
-	res, err := RunCommand(context.Background(), "echo", "", []string{"ignored"}, true)
+	res, err := RunCommand(t.Context(), "echo", "", []string{"ignored"}, true)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode)
 	// In interactive mode, output is not captured.

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -32,7 +31,7 @@ func runApp(t *testing.T, cfgPath string, args []string) error {
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	return app.Run(context.Background(), fullArgs) //nolint:wrapcheck
+	return app.Run(t.Context(), fullArgs) //nolint:wrapcheck
 }
 
 // runAppCapture runs the app and returns stdout output.
@@ -44,7 +43,7 @@ func runAppCapture(t *testing.T, cfgPath string, args []string) string {
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
 	return capturer.CaptureStdout(func() {
-		err := app.Run(context.Background(), fullArgs)
+		err := app.Run(t.Context(), fullArgs)
 		require.NoError(t, err)
 	})
 }

@@ -28,7 +28,7 @@ type HistoryEntry struct {
 
 // SelectionEntry records a set of selected repos at a point in time.
 type SelectionEntry struct {
-	Timestamp time.Time `json:"t"`
+	Timestamp time.Time `json:"t,omitzero"`
 	Repos     []string  `json:"r"`
 }
 

@@ -3,7 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -830,7 +830,7 @@ func sortedSelected(selected map[string]bool) []string {
 		}
 	}
 
-	sort.Strings(out)
+	slices.Sort(out)
 
 	return out
 }

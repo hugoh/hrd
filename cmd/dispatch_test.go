@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"testing"
 	"time"
 
@@ -225,7 +224,7 @@ func TestNoReposMatched(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := newTestApp()
 
-			err := app.Run(context.Background(), tt.args)
+			err := app.Run(t.Context(), tt.args)
 			assert.ErrorIs(t, err, errNoReposMatched)
 		})
 	}

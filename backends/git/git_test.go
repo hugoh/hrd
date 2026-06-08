@@ -254,7 +254,7 @@ func TestBackend_Run_Interactive(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"rev-parse", "HEAD"}, true)
+	res, err := b.Run(t.Context(), dir, []string{"rev-parse", "HEAD"}, true)
 	require.NoError(t, err)
 	assert.Equal(t, 0, res.ExitCode)
 }
@@ -262,7 +262,7 @@ func TestBackend_Run_Interactive(t *testing.T) {
 func TestBackend_Subcommands(t *testing.T) {
 	b := &Backend{}
 
-	cmds, err := b.Subcommands(context.Background())
+	cmds, err := b.Subcommands(t.Context())
 	require.NoError(t, err)
 	require.NotEmpty(t, cmds)
 
@@ -276,7 +276,7 @@ func TestBackend_Subcommands(t *testing.T) {
 func TestBackend_Subcommands_Error(t *testing.T) {
 	b := &Backend{}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	_, err := b.Subcommands(ctx)
@@ -346,7 +346,7 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 	runGitCmd(t, dir, []string{"init"})
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"log"}, true)
+	res, err := b.Run(t.Context(), dir, []string{"log"}, true)
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, res.ExitCode)
 }
@@ -361,7 +361,7 @@ func TestBackend_Status(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
-	st, err := b.Status(context.Background(), dir)
+	st, err := b.Status(t.Context(), dir)
 	require.NoError(t, err)
 	assert.NotEmpty(t, st.Ref)
 }
@@ -372,7 +372,7 @@ func TestBackend_Status_Dirty(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("modified"), 0o644))
 
 	b := &Backend{}
-	st, err := b.Status(context.Background(), dir)
+	st, err := b.Status(t.Context(), dir)
 	require.NoError(t, err)
 	assert.True(t, st.Dirty)
 }
@@ -380,7 +380,7 @@ func TestBackend_Status_Dirty(t *testing.T) {
 func TestBackend_Status_NoRepo(t *testing.T) {
 	dir := t.TempDir()
 	b := &Backend{}
-	_, err := b.Status(context.Background(), dir)
+	_, err := b.Status(t.Context(), dir)
 	assert.Error(t, err)
 }
 
@@ -388,7 +388,7 @@ func TestBackend_Run(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"rev-parse", "HEAD"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"rev-parse", "HEAD"}, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, res.Output)
 }
@@ -398,7 +398,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 	runGitCmd(t, dir, []string{"init"})
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"log", "--nonexistent-flag"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"log", "--nonexistent-flag"}, false)
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, res.ExitCode)
 }
@@ -407,14 +407,14 @@ func TestBackend_Run_OutputCapture(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"log", "--oneline", "-1"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"log", "--oneline", "-1"}, false)
 	require.NoError(t, err)
 	assert.Contains(t, res.Output, "initial")
 }
 
 func TestKnownRemotes_NotAGitRepo(t *testing.T) {
 	dir := t.TempDir()
-	remotes := knownRemotes(context.Background(), dir)
+	remotes := knownRemotes(t.Context(), dir)
 	assert.Nil(t, remotes, "knownRemotes in non-git dir should return nil")
 }
 
@@ -425,7 +425,7 @@ func TestBackend_Run_NonExecutablePath(t *testing.T) {
 	t.Setenv("PATH", "")
 
 	b := &Backend{}
-	_, err := b.Run(context.Background(), dir, []string{"status"}, false)
+	_, err := b.Run(t.Context(), dir, []string{"status"}, false)
 	assert.Error(t, err)
 }
 
@@ -436,6 +436,6 @@ func TestRegister_DuplicatePanics(t *testing.T) {
 func runGitCmd(t *testing.T, dir string, args []string) {
 	t.Helper()
 
-	_, err := runGit(context.Background(), dir, args)
+	_, err := runGit(t.Context(), dir, args)
 	require.NoError(t, err)
 }

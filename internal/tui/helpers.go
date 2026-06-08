@@ -3,7 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -47,7 +47,7 @@ func matchingGroups(
 		}
 	}
 
-	sort.Strings(labels)
+	slices.Sort(labels)
 
 	if len(labels) == 0 {
 		return nil, repos
@@ -125,7 +125,7 @@ func (m *model) activeRepoOrder() []string {
 		names = m.allReposFallback()
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }
@@ -211,7 +211,7 @@ func sortedRepoKeys(repos map[string]config.Repo) []string {
 		keys = append(keys, name)
 	}
 
-	sort.Strings(keys)
+	slices.Sort(keys)
 
 	return keys
 }
@@ -262,7 +262,7 @@ func sortedGroupNames(groups map[string]config.Group) []string {
 		names = append(names, name)
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 
 	return names
 }

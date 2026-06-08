@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,7 +61,7 @@ backends = ["git"]
 `), 0o644)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	m, err := newModel(ctx, Options{
 		ConfigPath: cfgPath,
 		StatePath:  filepath.Join(tmp, "state.json"),
@@ -156,7 +156,7 @@ func TestHandleStatusDone(t *testing.T) {
 
 func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
-	m, err := newModel(context.Background(), Options{StatePath: statePath})
+	m, err := newModel(t.Context(), Options{StatePath: statePath})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -185,7 +185,7 @@ func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 }
 
 func TestRowAlignmentNoSelectMode(t *testing.T) {
-	m, err := newModel(context.Background(), Options{})
+	m, err := newModel(t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -265,7 +265,7 @@ func TestNameNotTruncatedWhenSelected(t *testing.T) {
 	// A name that fits within maxNameWidth (24) must not be passed
 	// with embedded ANSI codes, because runewidth.Truncate treats ANSI
 	// escapes as printable chars, causing premature truncation → mangled output.
-	m, err := newModel(context.Background(), Options{})
+	m, err := newModel(t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -288,7 +288,7 @@ func TestCheckboxPlainText(t *testing.T) {
 	// Checkbox values must be plain characters, not ANSI-styled strings,
 	// because the table passes cell values through runewidth.Truncate
 	// which counts ANSI escape bytes as printable characters.
-	m, err := newModel(context.Background(), Options{})
+	m, err := newModel(t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -342,7 +342,7 @@ func TestColoredSummaryAllSuccess(t *testing.T) {
 }
 
 func TestColoredSummaryWithFailures(t *testing.T) {
-	errFoo := fmt.Errorf("foo failed") //nolint:perfsprint // test readability
+	errFoo := errors.New("foo failed")
 	m := &model{
 		execTotal: 3,
 		execResults: []execResult{
@@ -368,7 +368,7 @@ func TestFormatDispatchResultLineSuccess(t *testing.T) {
 
 func TestFormatDispatchResultLineError(t *testing.T) {
 	res := runner.Result{
-		Err:    fmt.Errorf("something broke"), //nolint:perfsprint // test readability
+		Err:    errors.New("something broke"),
 		Output: "details",
 	}
 	line := formatDispatchResultLine("myrepo", res, 40)
@@ -418,7 +418,7 @@ func TestFormatStatusLineError(t *testing.T) {
 	m := &model{
 		statuses: map[string]runner.StatusResult{
 			"repo1": {
-				Err: fmt.Errorf("something went wrong"), //nolint:perfsprint // test readability
+				Err: errors.New("something went wrong"),
 			},
 		},
 	}
@@ -821,7 +821,7 @@ func TestHandleModalKeyAlertAt(t *testing.T) {
 
 func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 	m := &model{
-		ctx: context.Background(),
+		ctx: t.Context(),
 		cfg: config.Config{
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
@@ -1117,7 +1117,7 @@ func TestHandleSelHistoryKeyEmpty(t *testing.T) {
 
 func TestHandleSelHistoryRestore(t *testing.T) {
 	m := &model{
-		ctx:       context.Background(),
+		ctx:       t.Context(),
 		repoOrder: []string{"a", "b", "c"},
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
@@ -1145,7 +1145,7 @@ func TestHandleSelHistoryRestore(t *testing.T) {
 
 func TestHandleSelHistoryRestoreMissingRepo(t *testing.T) {
 	m := &model{
-		ctx:       context.Background(),
+		ctx:       t.Context(),
 		repoOrder: []string{"a"},
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
@@ -1196,7 +1196,7 @@ func TestHandleExecResultError(t *testing.T) {
 	}
 
 	_, cmd := m.handleExecResult(execResultMsg{
-		err:  fmt.Errorf("command failed"), //nolint:perfsprint // test readability
+		err:  errors.New("command failed"),
 		done: true,
 	})
 
@@ -1327,7 +1327,7 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 
 func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 	m := &model{
-		ctx: context.Background(),
+		ctx: t.Context(),
 		cfg: config.Config{
 			Repos:  map[string]config.Repo{"r1": {Groups: []string{"work"}}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
@@ -1352,7 +1352,7 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 
 	m := &model{
-		ctx: context.Background(),
+		ctx: t.Context(),
 		cfg: config.Config{
 			Repos: map[string]config.Repo{
 				"repo1": {Groups: []string{"work"}},
@@ -1480,7 +1480,7 @@ func TestHandleGroupKeyNavigation(t *testing.T) {
 
 func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
 	m := &model{
-		ctx: context.Background(),
+		ctx: t.Context(),
 		cfg: config.Config{
 			Repos:  map[string]config.Repo{"r1": {}},
 			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},

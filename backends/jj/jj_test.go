@@ -419,7 +419,7 @@ func TestBackend_Run_Interactive(t *testing.T) {
 	dir := setupJJDir(t)
 
 	b := &Backend{}
-	_, err := b.Run(context.Background(), dir, []string{"log", "-r:", "-n1"}, true)
+	_, err := b.Run(t.Context(), dir, []string{"log", "-r:", "-n1"}, true)
 	assert.NoError(t, err)
 }
 
@@ -427,7 +427,7 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 	dir := setupJJDir(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"nonexistent-command"}, true)
+	res, err := b.Run(t.Context(), dir, []string{"nonexistent-command"}, true)
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, res.ExitCode)
 }
@@ -442,7 +442,7 @@ func TestBackend_Status(t *testing.T) {
 	dir := initJJRepo(t)
 
 	b := &Backend{}
-	st, err := b.Status(context.Background(), dir)
+	st, err := b.Status(t.Context(), dir)
 	require.NoError(t, err)
 	assert.NotEmpty(t, st.Ref)
 }
@@ -460,7 +460,7 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 	setup("new")
 
 	b := &Backend{}
-	st, err := b.Status(context.Background(), dir)
+	st, err := b.Status(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, "feat: initial", st.CommitMsg)
 	assert.Len(t, st.Bookmarks, 1)
@@ -481,7 +481,7 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 
 		return "", assert.AnError
 	}
-	st, err := b.Status(context.Background(), dir)
+	st, err := b.Status(t.Context(), dir)
 	// The ancestor walk should not hard-error — it breaks on first failure
 	// and returns whatever the working copy gave us.
 	require.NoError(t, err)
@@ -506,7 +506,7 @@ func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
 
 	assert.Equal(t, "origin", bm.Remote)
 	assert.Equal(t, 0, bm.Ahead)
@@ -525,7 +525,7 @@ func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
@@ -544,7 +544,7 @@ func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 	assert.Equal(t, backend.RefStateNoRemote, bm.State)
@@ -557,7 +557,7 @@ func TestEnrichWithRemoteBookmark_FetchError(t *testing.T) {
 	}
 
 	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(context.Background(), "/tmp", "main", bm)
+	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
 
 	assert.Empty(t, bm.Remote)
 }
@@ -584,7 +584,7 @@ func TestCountRevs(t *testing.T) {
 				return tt.output, tt.err
 			}
 
-			assert.Equal(t, tt.want, b.countRevs(context.Background(), "/tmp", "main..main@origin"))
+			assert.Equal(t, tt.want, b.countRevs(t.Context(), "/tmp", "main..main@origin"))
 		})
 	}
 }
@@ -593,7 +593,7 @@ func TestBackend_Status_NotAJJRepo(t *testing.T) {
 	dir := t.TempDir()
 	b := &Backend{}
 	// When jj is not available or dir is not a jj repo, it may return empty output
-	st, _ := b.Status(context.Background(), dir)
+	st, _ := b.Status(t.Context(), dir)
 	// Should get empty or error status
 	_ = st
 }
@@ -602,7 +602,7 @@ func TestBackend_Run(t *testing.T) {
 	dir := setupJJDir(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"log", "-r:", "-n1"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"log", "-r:", "-n1"}, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, res.Output)
 }
@@ -611,7 +611,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := setupJJDir(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"nonexistent"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"nonexistent"}, false)
 	require.NoError(t, err)
 	assert.NotEqual(t, 0, res.ExitCode)
 }
@@ -623,7 +623,7 @@ func TestBackend_Run_NoExecutable(t *testing.T) {
 
 	t.Setenv("PATH", "")
 
-	_, err := b.Run(context.Background(), dir, []string{"log"}, false)
+	_, err := b.Run(t.Context(), dir, []string{"log"}, false)
 	assert.Error(t, err)
 }
 
@@ -632,7 +632,7 @@ func TestRunJJ_Failure(t *testing.T) {
 
 	b := &Backend{runJJFn: defaultRunJJ}
 	_, err := b.runJJ(
-		context.Background(),
+		t.Context(),
 		dir,
 		[]string{"log", "-r", "@", "--template", "invalid_template"},
 	)
@@ -647,7 +647,7 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 
 	t.Setenv("PATH", "")
 
-	_, err := b.Status(context.Background(), dir)
+	_, err := b.Status(t.Context(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
 }
@@ -704,7 +704,7 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 				return "", nil
 			}
 
-			st, err := b.Status(context.Background(), "/tmp")
+			st, err := b.Status(t.Context(), "/tmp")
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantAhead, st.LocalAhead)
@@ -731,7 +731,7 @@ func TestBackend_Run_Pull(t *testing.T) {
 	dir := initJJRepo(t)
 
 	b := &Backend{}
-	res, err := b.Run(context.Background(), dir, []string{"pull"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"pull"}, false)
 	require.NoError(t, err)
 
 	// In a fresh repo there's no remote, so fetch fails with exit 1.
@@ -749,7 +749,7 @@ func TestBackend_Run_Pull_FirstStepFails(t *testing.T) {
 
 	t.Cleanup(func() { multiStepOps["pull"] = orig })
 
-	res, err := b.Run(context.Background(), dir, []string{"pull"}, false)
+	res, err := b.Run(t.Context(), dir, []string{"pull"}, false)
 	require.NoError(t, err)
 	assert.NotZero(t, res.ExitCode, "should fail on first step and not attempt step 2")
 	assert.Contains(t, res.Output, "error", "output should contain error from nonexistent command")
@@ -758,7 +758,7 @@ func TestBackend_Run_Pull_FirstStepFails(t *testing.T) {
 func TestRunSteps_AllSucceed(t *testing.T) {
 	dir := initJJRepo(t)
 
-	res, err := runSteps(context.Background(), dir, "test",
+	res, err := runSteps(t.Context(), dir, "test",
 		[][]string{{"log", "-r", "@", "-n1", "--no-graph", "--color=never"}}, false)
 
 	require.NoError(t, err)
@@ -770,7 +770,7 @@ func TestRunSteps_InfraError(t *testing.T) {
 
 	t.Setenv("PATH", "")
 
-	_, err := runSteps(context.Background(), dir, "test",
+	_, err := runSteps(t.Context(), dir, "test",
 		[][]string{{"log"}}, false)
 
 	require.Error(t, err)
@@ -780,7 +780,7 @@ func TestRunSteps_InfraError(t *testing.T) {
 func TestBackend_Subcommands(t *testing.T) {
 	b := &Backend{}
 
-	cmds, err := b.Subcommands(context.Background())
+	cmds, err := b.Subcommands(t.Context())
 	if err != nil {
 		t.Skipf("jj not available: %v", err)
 	}
@@ -797,7 +797,7 @@ func TestBackend_Subcommands(t *testing.T) {
 func TestBackend_Subcommands_Error(t *testing.T) {
 	b := &Backend{}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	_, err := b.Subcommands(ctx)

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -67,7 +66,7 @@ func TestRepoGroupCompleterWritesReposAndGroups(t *testing.T) {
 	buf := &bytes.Buffer{}
 	app := &cli.Command{Writer: buf}
 	completer := repoGroupCompleter(&cfgPath)
-	completer(context.Background(), app)
+	completer(t.Context(), app)
 
 	output := buf.String()
 	assert.Contains(t, output, "repo-a")
@@ -82,7 +81,7 @@ func TestRepoGroupCompleterEmptyConfig(t *testing.T) {
 	buf := &bytes.Buffer{}
 	app := &cli.Command{Writer: buf}
 	completer := repoGroupCompleter(&cfgPath)
-	completer(context.Background(), app)
+	completer(t.Context(), app)
 
 	assert.Empty(t, buf.String())
 }
@@ -92,9 +91,9 @@ func TestRepoGroupCompleterBadPath(t *testing.T) {
 	badPath := dir + "/" // path to a directory, not a file
 
 	app := &cli.Command{Writer: &bytes.Buffer{}}
-	reposOnlyCompleter(&badPath)(context.Background(), app)
-	groupsOnlyCompleter(&badPath)(context.Background(), app)
-	repoGroupCompleter(&badPath)(context.Background(), app)
+	reposOnlyCompleter(&badPath)(t.Context(), app)
+	groupsOnlyCompleter(&badPath)(t.Context(), app)
+	repoGroupCompleter(&badPath)(t.Context(), app)
 }
 
 func TestReposOnlyCompleter(t *testing.T) {
@@ -107,7 +106,7 @@ func TestReposOnlyCompleter(t *testing.T) {
 	buf := &bytes.Buffer{}
 	app := &cli.Command{Writer: buf}
 	completer := reposOnlyCompleter(&cfgPath)
-	completer(context.Background(), app)
+	completer(t.Context(), app)
 
 	assert.Contains(t, buf.String(), "myrepo")
 }
@@ -122,7 +121,7 @@ func TestGroupsOnlyCompleter(t *testing.T) {
 	buf := &bytes.Buffer{}
 	app := &cli.Command{Writer: buf}
 	completer := groupsOnlyCompleter(&cfgPath)
-	completer(context.Background(), app)
+	completer(t.Context(), app)
 
 	assert.Contains(t, buf.String(), "@mygroup")
 }
