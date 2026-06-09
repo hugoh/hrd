@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -132,6 +133,11 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	}
 
 	if m.mode != modeNormal {
+		if m.mode == modeSelect && m.selectSaved != nil {
+			m.selected = m.selectSaved
+			m.selectSaved = nil
+		}
+
 		m.mode = modeNormal
 		m.repoTable.SetStyles(tableStyles(false))
 		m.updateTableRows()
@@ -539,6 +545,9 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 	if m.mode == modeSelect {
 		m.mode = modeNormal
 	} else {
+		m.selectSaved = make(map[string]bool, len(m.selected))
+		maps.Copy(m.selectSaved, m.selected)
+
 		m.mode = modeSelect
 	}
 
@@ -659,9 +668,6 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// The main view layout is: header (1) + separator (1) + table content.
-	// Table content starts at Y=2; the table header is at Y=2.
-	// Data rows begin at Y=3.
 	const tableContentStart = 2
 
 	if msg.Y <= tableContentStart {

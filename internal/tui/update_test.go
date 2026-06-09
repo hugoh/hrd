@@ -759,6 +759,52 @@ func TestEscExitsSelectMode(t *testing.T) {
 	assert.Nil(t, cmd, "expected nil cmd")
 }
 
+func TestEscDiscardsSelectModeChanges(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.mode = modeSelect
+	m.selectSaved = map[string]bool{"a": true, "b": false}
+
+	m.handleSelectOne()
+	m.handleSelectOne()
+	assert.True(t, m.selected["b"], "b should be toggled on during select mode")
+	assert.False(t, m.selected["a"], "a should be toggled off during select mode")
+
+	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+	assert.Equal(t, modeNormal, m.mode, "mode should be modeNormal after esc")
+	assert.True(t, m.selected["a"], "a should be restored to original state")
+	assert.False(t, m.selected["b"], "b should be restored to original state")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
+func TestEnterInSelectModePersistsChanges(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.mode = modeSelect
+	m.selectSaved = map[string]bool{"a": true, "b": false}
+
+	m.handleSelectOne()
+	assert.False(t, m.selected["a"], "a should be toggled off")
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+	assert.Equal(t, modeNormal, m.mode, "mode should be modeNormal after enter")
+	assert.False(t, m.selected["a"], "a should stay toggled off after enter")
+	assert.False(t, m.selected["b"], "b should stay unchanged")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
 func TestEscExitsSingleMode(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a"},
@@ -825,7 +871,6 @@ func TestHandleMouseClickPositionsCursor(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	// Y=5 is the third data row (header=0, sep=1, table header=2, data row 0 at Y=3).
 	_, cmd := m.Update(tea.MouseClickMsg{
 		X:      0,
 		Y:      5,
@@ -846,7 +891,6 @@ func TestHandleMouseClickSelectModeTogglesSelection(t *testing.T) {
 	m.cursor = 0
 	m.initTable()
 
-	// Y=3 is the first data row (app header=0, sep=1, table header=2).
 	m.Update(tea.MouseClickMsg{
 		X:      0,
 		Y:      3,
@@ -860,7 +904,6 @@ func TestHandleMouseClickSelectModeTogglesSelection(t *testing.T) {
 	)
 	assert.Equal(t, 0, m.cursor, "cursor should be on repo a (row 0)")
 
-	// Y=4 is the second data row.
 	m.Update(tea.MouseClickMsg{
 		X:      0,
 		Y:      4,

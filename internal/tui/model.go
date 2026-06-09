@@ -148,6 +148,8 @@ type model struct {
 	mode        mode
 	groupFilter string
 
+	selectSaved map[string]bool
+
 	repoOrder []string
 
 	loading  bool
