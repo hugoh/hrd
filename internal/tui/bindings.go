@@ -47,6 +47,13 @@ var mainBindings = []binding{
 		}, label: "select", desc: "Toggle selection mode / toggle repo", hrd: true,
 		section: secSelection, order: 10,
 	},
+	{key: "space", handler: func(m *model) (tea.Model, tea.Cmd) {
+		if m.mode == modeSelect {
+			return m.handleSelectOne()
+		}
+
+		return m, nil
+	}, label: "toggle", desc: "Toggle repo selection", section: secSelection, order: 12},
 	{key: "enter", handler: func(m *model) (tea.Model, tea.Cmd) {
 		if m.mode == modeSelect {
 			return m.handleSelectToggle()

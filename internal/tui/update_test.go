@@ -680,6 +680,27 @@ func TestMainKeyXSelectsOne(t *testing.T) {
 	assert.Nil(t, cmd, "expected nil cmd")
 }
 
+func TestMainKeySpaceSelectsOne(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		mode:      modeSelect,
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	assert.False(t, m.selected["a"], "repo 'a' should be deselected after space in select mode")
+	assert.Equal(t, 1, m.cursor, "cursor should advance after space")
+	assert.Nil(t, cmd, "expected nil cmd")
+
+	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
+	assert.True(t, m.selected["b"], "repo 'b' should be selected after second space")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
 func TestMainKeySSingleToggle(t *testing.T) {
 	m := &model{
 		repoOrder: []string{"a", "b"},
