@@ -307,7 +307,7 @@ func buildHelp(bindings []binding) string {
 		desc string
 	}
 
-	grouped := make(map[string][]secEntry)
+	grouped := make(map[string][]secEntry, len(bindings))
 
 	var sections []string
 

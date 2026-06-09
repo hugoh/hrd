@@ -186,7 +186,7 @@ func (m *model) handleSelHistoryKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
-	selected := make(map[string]bool)
+	selected := make(map[string]bool, len(repos))
 
 	var missing []string
 

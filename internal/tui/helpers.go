@@ -27,7 +27,7 @@ func matchingGroups(
 	}
 
 	repoSet := buildSet(repos)
-	covered := make(map[string]struct{})
+	covered := make(map[string]struct{}, len(repos))
 
 	var labels []string
 
@@ -217,7 +217,7 @@ func sortedRepoKeys(repos map[string]config.Repo) []string {
 }
 
 func restoreSelected(lastRepos []string, repos map[string]config.Repo) map[string]bool {
-	selected := make(map[string]bool)
+	selected := make(map[string]bool, len(lastRepos))
 
 	for _, name := range lastRepos {
 		if _, ok := repos[name]; ok {
