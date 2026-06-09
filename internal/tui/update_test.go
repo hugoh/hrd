@@ -560,13 +560,7 @@ func TestHandleCmdBarOpen(t *testing.T) {
 }
 
 func TestHandleSelectToggle(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a"}, map[string]bool{"a": true})
 
 	_, _ = m.handleSelectToggle()
 	assert.Equal(t, modeSelect, m.mode, "mode should be modeSelect after first toggle")
@@ -576,13 +570,7 @@ func TestHandleSelectToggle(t *testing.T) {
 }
 
 func TestHandleSelectOne(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true})
 
 	_, _ = m.handleSelectOne()
 
@@ -590,12 +578,7 @@ func TestHandleSelectOne(t *testing.T) {
 }
 
 func TestHandleSelectAll(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-	}
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true})
 
 	_, _ = m.handleSelectAll()
 	assert.True(
@@ -613,14 +596,8 @@ func TestHandleSelectAll(t *testing.T) {
 }
 
 func TestMainKeyXTogglesSelectMode(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a"}, map[string]bool{"a": true})
+	m.ready = true
 
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	assert.Equal(
@@ -658,15 +635,9 @@ func TestMainKeyXTogglesSelectMode(t *testing.T) {
 }
 
 func TestMainKeyXSelectsOne(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		mode:      modeSelect,
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": false})
+	m.mode = modeSelect
+	m.ready = true
 
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	assert.False(t, m.selected["a"], "repo 'a' should be deselected after x in select mode")
@@ -679,15 +650,9 @@ func TestMainKeyXSelectsOne(t *testing.T) {
 }
 
 func TestMainKeySpaceSelectsOne(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		mode:      modeSelect,
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": false})
+	m.mode = modeSelect
+	m.ready = true
 
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
 	assert.False(t, m.selected["a"], "repo 'a' should be deselected after space in select mode")
@@ -700,14 +665,8 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 }
 
 func TestMainKeySSingleToggle(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true})
+	m.ready = true
 
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 's'})
 	assert.Equal(t, modeSingle, m.mode, "mode should be modeSingle after pressing s")
@@ -725,14 +684,8 @@ func TestMainKeySSingleToggle(t *testing.T) {
 }
 
 func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": false})
+	m.ready = true
 	m.mode = modeSingle
 
 	names := m.selectedNames()
@@ -741,14 +694,8 @@ func TestMainKeyXSingleModeSelectsOne(t *testing.T) {
 }
 
 func TestEscExitsSelectMode(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true})
+	m.ready = true
 	m.mode = modeSelect
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
@@ -758,16 +705,7 @@ func TestEscExitsSelectMode(t *testing.T) {
 }
 
 func TestEscDiscardsSelectModeChanges(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
-	m.mode = modeSelect
-	m.selectSaved = map[string]bool{"a": true, "b": false}
+	m := selectSavedModel()
 
 	m.handleSelectOne()
 	m.handleSelectOne()
@@ -782,16 +720,7 @@ func TestEscDiscardsSelectModeChanges(t *testing.T) {
 }
 
 func TestEnterInSelectModePersistsChanges(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
-	m.mode = modeSelect
-	m.selectSaved = map[string]bool{"a": true, "b": false}
+	m := selectSavedModel()
 
 	m.handleSelectOne()
 	assert.False(t, m.selected["a"], "a should be toggled off")
@@ -804,14 +733,8 @@ func TestEnterInSelectModePersistsChanges(t *testing.T) {
 }
 
 func TestEscExitsSingleMode(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a"}, map[string]bool{"a": true})
+	m.ready = true
 	m.mode = modeSingle
 
 	_, cmd := m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
@@ -821,13 +744,7 @@ func TestEscExitsSingleMode(t *testing.T) {
 }
 
 func TestHandleSingleToggle(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true})
 
 	_, _ = m.handleSingleToggle()
 	assert.Equal(t, modeSingle, m.mode, "mode should be modeSingle after first toggle")
@@ -859,15 +776,12 @@ func TestHandleCursorUpDown(t *testing.T) {
 }
 
 func TestHandleMouseClickPositionsCursor(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b", "c", "d"},
-		selected:  map[string]bool{"a": true, "b": true, "c": true, "d": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-		mode:      modeNormal,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel(
+		[]string{"a", "b", "c", "d"},
+		map[string]bool{"a": true, "b": true, "c": true, "d": true},
+	)
+	m.ready = true
+	m.mode = modeNormal
 
 	_, cmd := m.Update(tea.MouseClickMsg{
 		X:      0,
@@ -879,15 +793,9 @@ func TestHandleMouseClickPositionsCursor(t *testing.T) {
 }
 
 func TestHandleMouseClickSelectModeTogglesSelection(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": false},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-		mode:      modeSelect,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": false})
+	m.ready = true
+	m.mode = modeSelect
 
 	m.Update(tea.MouseClickMsg{
 		X:      0,
@@ -913,14 +821,8 @@ func TestHandleMouseClickSelectModeTogglesSelection(t *testing.T) {
 }
 
 func TestHandleMouseClickAboveTableReturnsEarly(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a"},
-		selected:  map[string]bool{"a": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a"}, map[string]bool{"a": true})
+	m.ready = true
 
 	t.Run("app header", func(t *testing.T) {
 		_, cmd := m.Update(tea.MouseClickMsg{
@@ -1004,14 +906,8 @@ func TestHandleMouseWheelScrolls(t *testing.T) {
 }
 
 func TestHandleMouseWheelStaysAtBounds(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": true})
+	m.ready = true
 
 	m.Update(tea.MouseWheelMsg{
 		Y:      0,
@@ -1021,15 +917,9 @@ func TestHandleMouseWheelStaysAtBounds(t *testing.T) {
 }
 
 func TestHandleMouseWheelOutputScreenScrollsOutput(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"a", "b"},
-		selected:  map[string]bool{"a": true, "b": true},
-		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
-		ready:     true,
-		screen:    screenOutput,
-	}
-	m.cursor = 0
-	m.initTable()
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": true})
+	m.ready = true
+	m.screen = screenOutput
 	m.initOutput()
 	m.output.SetContent(
 		"line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14",
