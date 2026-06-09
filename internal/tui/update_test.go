@@ -814,6 +814,215 @@ func TestHandleCursorUpDown(t *testing.T) {
 	assert.Equal(t, 1, m.cursor, "cursor after down")
 }
 
+func TestHandleMouseClickPositionsCursor(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b", "c", "d"},
+		selected:  map[string]bool{"a": true, "b": true, "c": true, "d": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+		mode:      modeNormal,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	// Y=5 is the third data row (header=0, sep=1, table header=2, data row 0 at Y=3).
+	_, cmd := m.Update(tea.MouseClickMsg{
+		X:      0,
+		Y:      5,
+		Button: tea.MouseLeft,
+	})
+	assert.Equal(t, 2, m.cursor, "cursor should move to row 2 (Y=5 minus 3)")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
+func TestHandleMouseClickSelectModeTogglesSelection(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": false},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+		mode:      modeSelect,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	// Y=3 is the first data row (app header=0, sep=1, table header=2).
+	m.Update(tea.MouseClickMsg{
+		X:      0,
+		Y:      3,
+		Button: tea.MouseLeft,
+	})
+	assert.False(t, m.selected["a"], "repo 'a' should be deselected after click on first data row")
+	assert.False(
+		t,
+		m.selected["b"],
+		"repo 'b' should remain deselected (cursor moved to a, b not toggled)",
+	)
+	assert.Equal(t, 0, m.cursor, "cursor should be on repo a (row 0)")
+
+	// Y=4 is the second data row.
+	m.Update(tea.MouseClickMsg{
+		X:      0,
+		Y:      4,
+		Button: tea.MouseLeft,
+	})
+	assert.False(t, m.selected["a"], "repo 'a' should remain deselected")
+	assert.True(t, m.selected["b"], "repo 'b' should be toggled on after click")
+	assert.Equal(t, 1, m.cursor, "cursor should be on repo b (row 1)")
+}
+
+func TestHandleMouseClickAboveTableReturnsEarly(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	t.Run("app header", func(t *testing.T) {
+		_, cmd := m.Update(tea.MouseClickMsg{
+			X:      0,
+			Y:      0,
+			Button: tea.MouseLeft,
+		})
+		assert.Equal(t, 0, m.cursor, "cursor should stay at 0")
+		assert.Nil(t, cmd, "expected nil cmd")
+	})
+
+	t.Run("separator", func(t *testing.T) {
+		_, cmd := m.Update(tea.MouseClickMsg{
+			X:      0,
+			Y:      1,
+			Button: tea.MouseLeft,
+		})
+		assert.Equal(t, 0, m.cursor, "cursor should stay at 0")
+		assert.Nil(t, cmd, "expected nil cmd")
+	})
+
+	t.Run("table header", func(t *testing.T) {
+		_, cmd := m.Update(tea.MouseClickMsg{
+			X:      0,
+			Y:      2,
+			Button: tea.MouseLeft,
+		})
+		assert.Equal(t, 0, m.cursor, "cursor should stay at 0")
+		assert.Nil(t, cmd, "expected nil cmd")
+	})
+}
+
+func TestHandleMouseClickNonMainScreenDoesNothing(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a"},
+		selected:  map[string]bool{"a": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+		screen:    screenHelp,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	m.Update(tea.MouseClickMsg{
+		X:      0,
+		Y:      1,
+		Button: tea.MouseLeft,
+	})
+	assert.Equal(t, 0, m.cursor, "cursor should stay at 0 on non-main screen")
+}
+
+func TestHandleMouseWheelScrolls(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b", "c", "d", "e", "f", "g"},
+		selected: map[string]bool{
+			"a": true,
+			"b": true,
+			"c": true,
+			"d": true,
+			"e": true,
+			"f": true,
+			"g": true,
+		},
+		cfg:   config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready: true,
+	}
+	m.cursor = 3
+	m.initTable()
+
+	m.Update(tea.MouseWheelMsg{
+		Y:      0,
+		Button: tea.MouseWheelUp,
+	})
+	assert.Equal(t, 0, m.cursor, "cursor should scroll up by delta")
+
+	m.Update(tea.MouseWheelMsg{
+		Y:      0,
+		Button: tea.MouseWheelDown,
+	})
+	assert.Equal(t, 3, m.cursor, "cursor should scroll back down")
+}
+
+func TestHandleMouseWheelStaysAtBounds(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+	}
+	m.cursor = 0
+	m.initTable()
+
+	m.Update(tea.MouseWheelMsg{
+		Y:      0,
+		Button: tea.MouseWheelUp,
+	})
+	assert.Equal(t, 0, m.cursor, "cursor should stay at 0 when at top")
+}
+
+func TestHandleMouseWheelOutputScreenScrollsOutput(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b"},
+		selected:  map[string]bool{"a": true, "b": true},
+		cfg:       config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:     true,
+		screen:    screenOutput,
+	}
+	m.cursor = 0
+	m.initTable()
+	m.initOutput()
+	m.output.SetContent(
+		"line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14",
+	)
+
+	prevOffset := m.output.YOffset()
+	m.Update(tea.MouseWheelMsg{
+		Y:      0,
+		Button: tea.MouseWheelDown,
+	})
+	assert.Equal(t, 0, m.cursor, "main table cursor should not move on output screen")
+	assert.Greater(t, m.output.YOffset(), prevOffset, "output viewport should scroll down")
+}
+
+func TestHandleMouseWheelHelpScreenScrollsHelp(t *testing.T) {
+	m := &model{
+		cfg:    config.Config{Settings: config.Settings{Concurrency: 1}},
+		ready:  true,
+		screen: screenHelp,
+	}
+	m.initTable()
+	m.initHelpViewport()
+	m.helpViewport.SetContent(
+		"line0\nline1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\nline13\nline14",
+	)
+
+	prevOffset := m.helpViewport.YOffset()
+	m.Update(tea.MouseWheelMsg{
+		Y:      0,
+		Button: tea.MouseWheelDown,
+	})
+	assert.Greater(t, m.helpViewport.YOffset(), prevOffset, "help viewport should scroll down")
+}
+
 func TestHandleModalKeyAlert(t *testing.T) {
 	m := &model{
 		modal: modalAlert,

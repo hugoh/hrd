@@ -24,6 +24,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleWindowSize(msg)
 	case tea.KeyPressMsg:
 		return m.handleKeyMsg(msg)
+	case tea.MouseMsg:
+		return m.handleMouseMsg(msg)
 	case statusUpdateMsg:
 		return m.handleStatusUpdate(msg)
 
@@ -636,6 +638,92 @@ func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
 	if m.cursor < len(m.tableRepos())-1 {
 		m.cursor++
 		m.repoTable.SetCursor(m.cursor)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.MouseClickMsg:
+		return m.handleMouseClick(msg)
+	case tea.MouseWheelMsg:
+		return m.handleMouseWheel(msg)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if m.screen != screenMain || msg.Button != tea.MouseLeft {
+		return m, nil
+	}
+
+	// The main view layout is: header (1) + separator (1) + table content.
+	// Table content starts at Y=2; the table header is at Y=2.
+	// Data rows begin at Y=3.
+	const tableContentStart = 2
+
+	if msg.Y <= tableContentStart {
+		return m, nil
+	}
+
+	names := m.tableRepos()
+	if len(names) == 0 {
+		return m, nil
+	}
+
+	visibleHeight := m.repoTable.Height()
+	firstVisible := max(0, m.cursor-visibleHeight)
+
+	row := firstVisible + (msg.Y - tableContentStart - 1)
+	if row >= len(names) {
+		return m, nil
+	}
+
+	m.cursor = row
+	m.repoTable.SetCursor(m.cursor)
+
+	if m.mode == modeSelect {
+		name := names[m.cursor]
+		m.selected[name] = !m.selected[name]
+		m.updateTableRows()
+		m.savePersState()
+	}
+
+	return m, nil
+}
+
+func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	switch m.screen {
+	case screenOutput:
+		var cmd tea.Cmd
+
+		m.output, cmd = m.output.Update(msg)
+
+		return m, cmd
+	case screenHelp:
+		var cmd tea.Cmd
+
+		m.helpViewport, cmd = m.helpViewport.Update(msg)
+
+		return m, cmd
+	case screenMain:
+		delta := 3
+		names := m.tableRepos()
+
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			m.cursor = max(0, m.cursor-delta)
+			m.repoTable.SetCursor(m.cursor)
+		case tea.MouseWheelDown:
+			m.cursor = min(len(names)-1, m.cursor+delta)
+			m.repoTable.SetCursor(m.cursor)
+		}
+
+		return m, nil
+	case screenGroup, screenSelHistory:
+		return m, nil
 	}
 
 	return m, nil
