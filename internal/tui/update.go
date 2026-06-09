@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
@@ -664,13 +665,49 @@ func (m *model) handleMouseMsg(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
-	if m.screen != screenMain || msg.Button != tea.MouseLeft {
+	if msg.Button != tea.MouseLeft {
 		return m, nil
 	}
 
+	switch m.screen {
+	case screenMain:
+		return m.handleMainScreenClick(msg)
+	case screenGroup:
+		if !m.groupNewInput {
+			selectListRow(&m.groupList, msg.Y)
+		}
+
+		return m, nil
+	case screenSelHistory:
+		selectListRow(&m.historyList, msg.Y)
+
+		return m, nil
+	case screenOutput, screenHelp:
+	}
+
+	return m, nil
+}
+
+func (m *model) handleMainScreenClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	const tableContentStart = 2
 
 	if msg.Y <= tableContentStart {
+		return m, nil
+	}
+
+	inputLineY := m.height - layoutFooterH - layoutSepH - inputLineH
+
+	if msg.Y == inputLineY && m.commandOpen {
+		m.handleInputLineClick(msg)
+
+		return m, nil
+	}
+
+	if m.height > layoutFooterH+layoutSepH && msg.Y >= m.height-layoutFooterH-layoutSepH {
+		if !m.commandOpen {
+			return m.handleCmdBarOpen()
+		}
+
 		return m, nil
 	}
 
@@ -698,6 +735,38 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m *model) handleInputLineClick(msg tea.MouseClickMsg) {
+	promptWidth := lipgloss.Width(ui.WarnStyle().Render(":")) + lipgloss.Width(m.input.Prompt)
+	cursorPos := max(msg.X-promptWidth, 0)
+
+	cursorPos = min(cursorPos, len(m.input.Value()))
+
+	m.input.SetCursor(cursorPos)
+}
+
+func selectListRow(l *list.Model, y int) {
+	const listTopY = 2
+
+	listY := y - listTopY
+	if listY < 0 {
+		return
+	}
+
+	if listY >= l.Height() {
+		return
+	}
+
+	row := listY / itemH
+	if row >= l.Paginator.PerPage {
+		return
+	}
+
+	idx := l.Paginator.Page*l.Paginator.PerPage + row
+	if idx < len(l.Items()) {
+		l.Select(idx)
+	}
 }
 
 func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {

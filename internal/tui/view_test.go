@@ -125,17 +125,10 @@ func TestOutputViewExecuting(t *testing.T) {
 }
 
 func TestRenderInputLine(t *testing.T) {
-	m := &model{cmdPrefix: prefixNone}
+	m := &model{}
 	m.initInput()
 
 	assert.Contains(t, m.renderInputLine(), ":")
-}
-
-func TestRenderInputLineShell(t *testing.T) {
-	m := &model{cmdPrefix: prefixShell}
-	m.initInput()
-
-	assert.Contains(t, m.renderInputLine(), "[sh]")
 }
 
 func TestEmptyTableViewNoRepos(t *testing.T) {

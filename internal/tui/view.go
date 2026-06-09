@@ -170,15 +170,7 @@ func (m *model) renderHeaderRight() string {
 }
 
 func (m *model) renderInputLine() string {
-	var prompt string
-
-	if m.cmdPrefix == prefixNone {
-		prompt = ":"
-	} else {
-		prompt = fmt.Sprintf("[%s] $ ", prefixLabels[m.cmdPrefix])
-	}
-
-	return ui.WarnStyle().Render(prompt) + m.input.View()
+	return ui.WarnStyle().Render(":") + m.input.View()
 }
 
 func (*model) renderFooter() string {
