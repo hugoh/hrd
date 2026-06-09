@@ -62,9 +62,8 @@ backends = ["git"]
 	require.NoError(t, err)
 
 	ctx := t.Context()
-	m, err := newModel(ctx, Options{
+	m, err := newTestModel(t, ctx, Options{
 		ConfigPath: cfgPath,
-		StatePath:  filepath.Join(tmp, "state.json"),
 	})
 	require.NoError(t, err)
 
@@ -155,8 +154,7 @@ func TestHandleStatusDone(t *testing.T) {
 }
 
 func TestRefColumnWidthAfterWindowSize(t *testing.T) {
-	statePath := filepath.Join(t.TempDir(), "state.json")
-	m, err := newModel(t.Context(), Options{StatePath: statePath})
+	m, err := newTestModel(t, t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -185,7 +183,7 @@ func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 }
 
 func TestRowAlignmentNoSelectMode(t *testing.T) {
-	m, err := newModel(t.Context(), Options{})
+	m, err := newTestModel(t, t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -265,7 +263,7 @@ func TestNameNotTruncatedWhenSelected(t *testing.T) {
 	// A name that fits within maxNameWidth (24) must not be passed
 	// with embedded ANSI codes, because runewidth.Truncate treats ANSI
 	// escapes as printable chars, causing premature truncation → mangled output.
-	m, err := newModel(t.Context(), Options{})
+	m, err := newTestModel(t, t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
@@ -288,7 +286,7 @@ func TestCheckboxPlainText(t *testing.T) {
 	// Checkbox values must be plain characters, not ANSI-styled strings,
 	// because the table passes cell values through runewidth.Truncate
 	// which counts ANSI escape bytes as printable characters.
-	m, err := newModel(t.Context(), Options{})
+	m, err := newTestModel(t, t.Context(), Options{})
 	require.NoError(t, err)
 
 	m.cfg = config.Config{
