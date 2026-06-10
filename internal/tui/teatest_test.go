@@ -26,9 +26,8 @@ path = "`+repoDir+`"
 backends = ["git"]`), 0o644)
 	require.NoError(t, err)
 
-	m, err := newModel(t.Context(), Options{
+	m, err := newTestModel(t.Context(), t, Options{
 		ConfigPath: cfgPath,
-		StatePath:  filepath.Join(tmp, "state.json"),
 	})
 	require.NoError(t, err)
 
@@ -118,7 +117,7 @@ func TestTeaWindowSize(t *testing.T) {
 		t.Skip("skipping integration test in short mode")
 	}
 
-	m, err := newModel(t.Context(), Options{})
+	m, err := newTestModel(t.Context(), t, Options{})
 	require.NoError(t, err)
 
 	tm := teatest.NewTestModel(t, m,

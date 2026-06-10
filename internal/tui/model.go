@@ -148,6 +148,8 @@ type model struct {
 	mode        mode
 	groupFilter string
 
+	selectSaved map[string]bool
+
 	repoOrder []string
 
 	loading  bool
@@ -236,7 +238,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithSpinner(spinner.Dot),
 			spinner.WithStyle(ui.MutedStyle()),
 		),
-		statuses:    make(map[string]runner.StatusResult),
+		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
 		repoOrder:   repoOrder,
 		selected:    selected,
 		groupFilter: groupFilter,

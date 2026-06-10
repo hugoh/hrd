@@ -18,25 +18,20 @@ import (
 
 //nolint:gochecknoglobals // lazily initialized logger, effectively package-level singleton
 var (
-	loggerInit sync.Once
-	loggerVal  *log.Logger
-	loggerMu   sync.Mutex
+	loggerVal *log.Logger
+	loggerMu  sync.Mutex
 )
 
 func logLogger() *log.Logger {
 	loggerMu.Lock()
 	defer loggerMu.Unlock()
 
-	if loggerVal != nil {
-		return loggerVal
-	}
-
-	loggerInit.Do(func() {
+	if loggerVal == nil {
 		loggerVal = log.NewWithOptions(os.Stderr, log.Options{
 			ReportTimestamp: false,
 			ReportCaller:    false,
 		})
-	})
+	}
 
 	return loggerVal
 }
@@ -48,7 +43,6 @@ func SetLogger(l *log.Logger) {
 	defer loggerMu.Unlock()
 
 	loggerVal = l
-	loggerInit = sync.Once{}
 }
 
 func lipglossColor(colorName string) color.Color {
