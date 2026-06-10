@@ -10,7 +10,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 )
 
-func newTestModel(tb testing.TB, ctx context.Context, opts Options) (*model, error) {
+func newTestModel(ctx context.Context, tb testing.TB, opts Options) (*model, error) {
 	tb.Helper()
 
 	if opts.StatePath == "" {
