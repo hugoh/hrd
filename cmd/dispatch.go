@@ -37,7 +37,7 @@ var (
 var ErrReposFailed = errors.New("repos failed")
 
 //nolint:gochecknoglobals // CLI flag definitions are package-level by nature
-var dispatchFlags = []cli.Flag{
+var dispatchFlags = append([]cli.Flag{
 	&cli.StringSliceFlag{
 		Name:    cmdReposFlag,
 		Aliases: []string{"r"},
@@ -48,7 +48,7 @@ var dispatchFlags = []cli.Flag{
 		Aliases: []string{"i"},
 		Usage:   "run with a real terminal (sequential, one repo at a time)",
 	},
-}
+}, statusFilterFlags...)
 
 // loadAndResolve loads the config and resolves the CLI scope (-r flag plus
 // positional args, all of which must be known repos or groups). Args after
@@ -271,7 +271,7 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 		Name:      subcmd,
 		Usage:     usage,
 		ArgsUsage: "[repo|group...]",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    cmdReposFlag,
 				Aliases: []string{"r"},
@@ -282,12 +282,17 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 				Aliases: []string{"i"},
 				Usage:   "run with a real terminal (sequential, one repo at a time)",
 			},
-		},
+		}, statusFilterFlags...),
 		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			cfg, names, err := loadAndResolve(cfgPath, cmd, dashTail)
 			if err != nil {
 				return err
+			}
+
+			names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+			if len(names) == 0 {
+				return nil
 			}
 
 			if cmd.Bool("interactive") {
@@ -338,6 +343,11 @@ func shellCmdAction(
 		return errNoShellCommand
 	}
 
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	if len(names) == 0 {
+		return nil
+	}
+
 	shellCmdStr := shellJoin(shellArgs)
 
 	if cmd.Bool("interactive") {
@@ -385,7 +395,7 @@ func lsCmd(cfgPath *string, dashTail []string) *cli.Command {
 		Name:      "ls",
 		Usage:     "show status of repos",
 		ArgsUsage: "[repo|group...]",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "repos",
 				Aliases: []string{"r"},
@@ -406,7 +416,7 @@ func lsCmd(cfgPath *string, dashTail []string) *cli.Command {
 				Aliases: []string{"d"},
 				Usage:   "show repo dirs only, one per line",
 			},
-		},
+		}, statusFilterFlags...),
 		ShellComplete: repoGroupCompleter(cfgPath),
 		Action:        lsAction(cfgPath, dashTail, false),
 	}
@@ -476,6 +486,11 @@ func lsAction(
 			return err
 		}
 
+		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names)
+		if len(names) == 0 {
+			return nil
+		}
+
 		switch {
 		case cmd.Bool("names"):
 			lsNamesOnly(names)
@@ -494,12 +509,25 @@ func lsAction(
 
 		message := forceMessage || cmd.Bool("message")
 
-		return gatherStatus(
-			names,
-			vcsByName,
-			message,
-			lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency),
-		)
+		gather := lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
+		if statuses != nil {
+			gather = replayGather(names, statuses)
+		}
+
+		return gatherStatus(names, vcsByName, message, gather)
+	}
+}
+
+// replayGather feeds pre-gathered statuses (from the status filter) into
+// the rendering pipeline instead of hitting the repos a second time.
+func replayGather(
+	names []string,
+	statuses map[string]runner.StatusResult,
+) func(chan<- runner.StatusResult) {
+	return func(resultCh chan<- runner.StatusResult) {
+		for _, n := range names {
+			resultCh <- statuses[n]
+		}
 	}
 }
 
@@ -537,6 +565,11 @@ func runDispatch(
 
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
+	}
+
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	if len(names) == 0 {
+		return nil
 	}
 
 	if cmd.Bool("interactive") {

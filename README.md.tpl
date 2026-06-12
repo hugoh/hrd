@@ -132,6 +132,25 @@ Without `--`, the leading args that match repo or group names form the
 scope and the first non-matching arg starts the command (`hrd git myrepo
 log` works, but flags like `--oneline` need the `--` form).
 
+### Status filters
+
+`ls`, `ll`, the VCS subcommands (`status`, `diff`, `log`, `fetch`, `pull`,
+`push`), `shell`, `git`, and `jj` accept status filters that narrow the
+scope to repos in a given state (multiple flags are a union):
+
+```sh
+hrd push --ahead          # push only repos with unpushed commits
+hrd pull --behind @work   # pull only the work repos that are behind
+hrd ls --dirty --names    # script-friendly list of dirty repos
+hrd shell --dirty -- git stash list
+```
+
+| Flag       | Matches repos that…                              |
+| ---------- | ------------------------------------------------ |
+| `--dirty`  | have uncommitted changes in the working copy     |
+| `--ahead`  | are ahead of their remote, or have local-only work |
+| `--behind` | are behind their remote                          |
+
 ### Exit codes
 
 | Code | Meaning                                          |
