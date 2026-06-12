@@ -113,24 +113,18 @@ func (m *model) groupLabel() string {
 	return labelAll
 }
 
+// activeRepoOrder returns the repos in scope: the filtered group's repos
+// when a group filter is active, otherwise all repos. Both repoOrder and
+// group repo lists are kept sorted at construction, so no sorting happens
+// here — this runs several times per render. An unknown filter (stale
+// persisted state) falls back to all repos.
 func (m *model) activeRepoOrder() []string {
-	var names []string
-
-	if m.groupFilter == "" {
-		names = m.allReposFallback()
-	} else if g, ok := m.cfg.Groups[m.groupFilter]; ok {
-		names = g.Repos
-	} else {
-		m.groupFilter = ""
-		names = m.allReposFallback()
+	if m.groupFilter != "" {
+		if g, ok := m.cfg.Groups[m.groupFilter]; ok {
+			return g.Repos
+		}
 	}
 
-	slices.Sort(names)
-
-	return names
-}
-
-func (m *model) allReposFallback() []string {
 	return m.repoOrder
 }
 

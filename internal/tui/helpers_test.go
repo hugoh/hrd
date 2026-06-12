@@ -51,10 +51,12 @@ func TestGroupLabel(t *testing.T) {
 }
 
 func TestActiveRepoOrder(t *testing.T) {
+	// repoOrder and group repo lists are sorted at construction;
+	// activeRepoOrder preserves that order without re-sorting.
 	m := &model{
-		repoOrder: []string{"c", "a", "b"},
+		repoOrder: []string{"a", "b", "c"},
 		cfg: config.Config{
-			Groups: map[string]config.Group{"work": {Repos: []string{"b", "a"}}},
+			Groups: map[string]config.Group{"work": {Repos: []string{"a", "b"}}},
 		},
 	}
 
@@ -68,10 +70,9 @@ func TestActiveRepoOrder(t *testing.T) {
 		assert.Equal(t, []string{"a", "b"}, m.activeRepoOrder())
 	})
 
-	t.Run("unknown group filter cleared", func(t *testing.T) {
+	t.Run("unknown group filter falls back to all repos", func(t *testing.T) {
 		m.groupFilter = "nonexistent"
 		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
-		assert.Empty(t, m.groupFilter)
 	})
 
 	t.Run("empty group filter uses repoOrder", func(t *testing.T) {
@@ -79,14 +80,6 @@ func TestActiveRepoOrder(t *testing.T) {
 		m.cfg.Groups = map[string]config.Group{}
 		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
 	})
-}
-
-func TestAllReposFallback(t *testing.T) {
-	m := &model{
-		repoOrder: []string{"x", "y"},
-	}
-
-	assert.Equal(t, []string{"x", "y"}, m.allReposFallback())
 }
 
 func TestSelectedNames(t *testing.T) {
