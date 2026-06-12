@@ -301,26 +301,31 @@ func (b *Backend) fillCommitMsgFromAncestors(
 	}
 }
 
-// runSteps executes each step sequentially, returning on the first non-zero
-// exit or infrastructure error.
+// runSteps executes each step sequentially, stopping on the first non-zero
+// exit or infrastructure error. Output from all executed steps is
+// accumulated so the caller sees the full transcript, not just the last step.
 func runSteps(
 	ctx context.Context,
 	path, op string,
 	steps [][]string,
 	interactive bool,
 ) (backend.RunResult, error) {
+	var out strings.Builder
+
 	for _, step := range steps {
 		res, err := backend.RunCommand(ctx, "jj", path, step, interactive)
 		if err != nil {
 			return backend.RunResult{}, fmt.Errorf("jj %s: %w", op, err)
 		}
 
+		out.WriteString(res.Output)
+
 		if res.ExitCode != 0 {
-			return res, nil
+			return backend.RunResult{Output: out.String(), ExitCode: res.ExitCode}, nil
 		}
 	}
 
-	return backend.RunResult{}, nil
+	return backend.RunResult{Output: out.String()}, nil
 }
 
 func defaultRunJJ(ctx context.Context, path string, args []string) (string, error) {
