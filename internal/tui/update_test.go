@@ -584,8 +584,7 @@ func TestHandleExecResultError(t *testing.T) {
 	}
 
 	_, cmd := m.handleExecResult(execResultMsg{
-		err:  errors.New("command failed"),
-		done: true,
+		err: errors.New("command failed"),
 	})
 
 	assert.False(t, m.executing, "executing should be false after error")

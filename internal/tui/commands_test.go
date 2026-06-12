@@ -127,6 +127,10 @@ func TestStreamNextStatusCmdClosedChannel(t *testing.T) {
 	msg := cmd()
 	_, ok := msg.(statusDoneMsg)
 	require.True(t, ok)
+
+	// The cmd closure must not touch the model; handleStatusDone
+	// (running on the Update goroutine) clears the channel.
+	m.handleStatusDone()
 	assert.Nil(t, m.statusCh)
 }
 

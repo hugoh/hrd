@@ -11,6 +11,22 @@ import (
 	"github.com/hugoh/hrd/internal/runner"
 )
 
+// Cmd closures returned below must not touch the model: Bubble Tea runs
+// them on their own goroutines, concurrently with Update and View. They
+// only read from a captured channel and return messages; all model
+// mutation happens in Update handlers.
+
+func waitForStatus(ch <-chan runner.StatusResult) tea.Cmd {
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return statusDoneMsg{}
+		}
+
+		return statusUpdateMsg{result: res}
+	}
+}
+
 func loadStatusesCmd(m *model) tea.Cmd {
 	names := m.filteredRepos()
 	if len(names) == 0 {
@@ -24,16 +40,7 @@ func loadStatusesCmd(m *model) tea.Cmd {
 		int64(m.cfg.Settings.Concurrency),
 	)
 
-	return func() tea.Msg {
-		res, ok := <-m.statusCh
-		if !ok {
-			m.statusCh = nil
-
-			return statusDoneMsg{}
-		}
-
-		return statusUpdateMsg{result: res}
-	}
+	return waitForStatus(m.statusCh)
 }
 
 func streamNextStatusCmd(m *model) tea.Cmd {
@@ -41,16 +48,7 @@ func streamNextStatusCmd(m *model) tea.Cmd {
 		return nil
 	}
 
-	return func() tea.Msg {
-		res, ok := <-m.statusCh
-		if !ok {
-			m.statusCh = nil
-
-			return statusDoneMsg{}
-		}
-
-		return statusUpdateMsg{result: res}
-	}
+	return waitForStatus(m.statusCh)
 }
 
 func startExec(
@@ -81,6 +79,17 @@ func startExec(
 	return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 }
 
+func waitForResult(ch <-chan runner.Result) tea.Cmd {
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return execDoneMsg{}
+		}
+
+		return execResultMsg{result: execResult{name: res.RepoName, result: res}}
+	}
+}
+
 // execCmd starts execution with the given prefix and command string.
 // The prefix determines the runner: "git"/"jj" → runner.Dispatch with args,
 // "" → runner.VCSSubcmd (VCS subcommands), anything else → runner.Shell.
@@ -92,7 +101,6 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.execCancel = cancel
-	m.executing = true
 	m.execTotal = len(selected)
 	m.execResults = nil
 
@@ -101,29 +109,18 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 		concurrency = 8
 	}
 
-	return func() tea.Msg {
-		resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
-		if err != nil {
-			m.executing = false
+	resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
+	if err != nil {
+		m.executing = false
+		m.resultsCh = nil
 
-			return execResultMsg{err: err, done: true}
-		}
-
-		m.resultsCh = resultsCh
-
-		res, ok := <-resultsCh
-		if !ok {
-			m.executing = false
-			m.resultsCh = nil
-
-			return execDoneMsg{}
-		}
-
-		execRes := execResult{name: res.RepoName, result: res}
-		m.execResults = append(m.execResults, execRes)
-
-		return execResultMsg{result: execRes}
+		return func() tea.Msg { return execResultMsg{err: err} }
 	}
+
+	m.executing = true
+	m.resultsCh = resultsCh
+
+	return waitForResult(resultsCh)
 }
 
 func streamNextResult(m *model) tea.Cmd {
@@ -131,18 +128,5 @@ func streamNextResult(m *model) tea.Cmd {
 		return nil
 	}
 
-	return func() tea.Msg {
-		res, ok := <-m.resultsCh
-		if !ok {
-			m.resultsCh = nil
-			m.executing = false
-
-			return execDoneMsg{results: m.execResults}
-		}
-
-		execRes := execResult{name: res.RepoName, result: res}
-		m.execResults = append(m.execResults, execRes)
-
-		return execResultMsg{result: execRes}
-	}
+	return waitForResult(m.resultsCh)
 }

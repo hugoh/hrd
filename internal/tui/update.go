@@ -249,6 +249,7 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.execResults = append(m.execResults, msg.result)
 	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
 
 	return m, streamNextResult(m)

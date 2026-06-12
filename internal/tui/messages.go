@@ -17,14 +17,11 @@ type statusDoneMsg struct{}
 // execResultMsg carries a single dispatch result as it streams in.
 type execResultMsg struct {
 	result execResult
-	done   bool // true when this is the last result
 	err    error
 }
 
 // execDoneMsg signals that all dispatch results have been collected.
-type execDoneMsg struct {
-	results []execResult
-}
+type execDoneMsg struct{}
 
 // errMsg wraps an unrecoverable error.
 type errMsg struct{}
