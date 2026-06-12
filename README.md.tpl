@@ -66,6 +66,10 @@ go build -o hrd .
 hrd repo add ~/dev/myproject ~/dev/infra
 hrd repo add -n dotfiles ~/.local/share/chezmoi
 
+# Or discover everything under a directory at once
+hrd repo scan ~/dev
+hrd repo scan -g work ~/work     # ...and group what it finds
+
 # Start the TUI
 hrd
 
@@ -131,6 +135,16 @@ hrd shell -- grep -r TODO .
 Without `--`, the leading args that match repo or group names form the
 scope and the first non-matching arg starts the command (`hrd git myrepo
 log` works, but flags like `--oneline` need the `--` form).
+
+### Repo discovery
+
+`hrd repo scan <dir>...` walks each directory (default depth 5, tune with
+`--depth`) and tracks every git/jj repo it finds. Detected repos are not
+descended into, so vendored or nested checkouts stay untracked; hidden
+directories are skipped. `--dry-run` previews without saving, `--group`
+assigns everything found to a group. Name collisions fall back to
+`<parent>-<dir>`; already-tracked paths are left alone, so re-scanning is
+safe.
 
 ### Status filters
 
