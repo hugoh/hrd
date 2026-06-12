@@ -44,13 +44,20 @@ var dispatchFlags = []cli.Flag{
 
 // loadAndResolve loads the config, resolves the CLI scope, and returns
 // both. It returns errNoReposMatched when no repos match.
-func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string, error) {
+// When strict is true, any positional arg that is not a known repo or
+// group is an error; commands that accept trailing command args (git,
+// jj, shell) pass false so leftover args flow through to the subprocess.
+func loadAndResolve(
+	cfgPath *string,
+	cmd *cli.Command,
+	strict bool,
+) (config.Config, []string, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return config.Config{}, nil, fmt.Errorf("dispatch: %w", err)
 	}
 
-	names, err := resolveScope(cmd, &cfg)
+	names, err := resolveScope(cmd, &cfg, strict)
 	if err != nil {
 		return config.Config{}, nil, err
 	}
@@ -62,7 +69,7 @@ func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string,
 	return cfg, names, nil
 }
 
-func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
+func resolveScope(cmd *cli.Command, cfg *config.Config, strict bool) ([]string, error) {
 	var names []string
 
 	names = append(names, cmd.StringSlice("repos")...)
@@ -73,7 +80,7 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 			names = append(names, arg)
 		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
 			names = append(names, stripGroupPrefix(arg))
-		} else if strings.HasPrefix(arg, "@") {
+		} else if strict || strings.HasPrefix(arg, "@") {
 			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 	}
@@ -192,7 +199,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 		},
 		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, names, err := loadAndResolve(cfgPath, cmd)
+			cfg, names, err := loadAndResolve(cfgPath, cmd, true)
 			if err != nil {
 				return err
 			}
@@ -231,7 +238,7 @@ func shellCmd(cfgPath *string) *cli.Command {
 }
 
 func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) error {
-	cfg, names, err := loadAndResolve(cfgPath, cmd)
+	cfg, names, err := loadAndResolve(cfgPath, cmd, false)
 	if err != nil {
 		return err
 	}
@@ -351,7 +358,7 @@ func lsGatherCallback(
 
 func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
-		cfg, names, err := loadAndResolve(cfgPath, cmd)
+		cfg, names, err := loadAndResolve(cfgPath, cmd, true)
 		if errors.Is(err, errNoReposMatched) {
 			return nil
 		}
@@ -412,7 +419,7 @@ func filterMatching(names []string, repos map[string]config.Repo, backendName st
 }
 
 func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backendName string) error {
-	cfg, names, err := loadAndResolve(cfgPath, cmd)
+	cfg, names, err := loadAndResolve(cfgPath, cmd, false)
 	if err != nil {
 		return err
 	}

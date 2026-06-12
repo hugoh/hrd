@@ -462,6 +462,22 @@ func TestLsCmdUnknownScope(t *testing.T) {
 	require.ErrorIs(t, err, errUnknownScope)
 }
 
+// A typo'd repo name must error instead of silently running on all repos.
+func TestSubcmdUnknownRepoName(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+	}})
+
+	for _, args := range [][]string{
+		{"status", "rpeo1"},
+		{"fetch", "rpeo1"},
+		{"ls", "rpeo1"},
+	} {
+		err := runApp(t, cfgPath, args)
+		require.ErrorIs(t, err, errUnknownScope, "args: %v", args)
+	}
+}
+
 func assertContains(needle string) func(t *testing.T, stdout string) { //nolint:unparam
 	return func(t *testing.T, stdout string) {
 		t.Helper()
