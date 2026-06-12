@@ -607,6 +607,14 @@ func TestBackend_Run(t *testing.T) {
 	assert.NotEmpty(t, res.Output)
 }
 
+func TestBackend_Run_NoArgs(t *testing.T) {
+	dir := t.TempDir()
+
+	b := &Backend{}
+	_, err := b.Run(t.Context(), dir, nil, false)
+	assert.ErrorIs(t, err, backend.ErrNoArgs)
+}
+
 func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := setupJJDir(t)
 
