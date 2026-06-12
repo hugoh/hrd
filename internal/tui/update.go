@@ -372,14 +372,35 @@ func (m *model) updateTableRows() {
 			}
 		}
 
-		vcs := m.cfg.Repos[name].ActiveBackend()
 		statusStr := m.formatStatusLine(name)
-		rows = append(rows, table.Row{chk, name, vcs, statusStr})
+		rows = append(rows, table.Row{chk, name, m.repoVCS(name), statusStr})
 	}
 
 	m.cursor = max(0, min(m.cursor, len(rows)-1))
 	m.repoTable.SetRows(rows)
 	m.repoTable.SetCursor(m.cursor)
+}
+
+// repoVCS returns the backend name for a repo without re-running
+// filesystem detection on every table redraw. Fresh status results win;
+// otherwise the detection result is cached for the session.
+func (m *model) repoVCS(name string) string {
+	if sr, ok := m.statuses[name]; ok && sr.VCS != "" {
+		return sr.VCS
+	}
+
+	if v, ok := m.vcsCache[name]; ok {
+		return v
+	}
+
+	if m.vcsCache == nil {
+		m.vcsCache = make(map[string]string)
+	}
+
+	v := m.cfg.Repos[name].ActiveBackend()
+	m.vcsCache[name] = v
+
+	return v
 }
 
 func (m *model) formatStatusLine(name string) string {

@@ -155,6 +155,7 @@ type model struct {
 	loading  bool
 	spinner  spinner.Model
 	statuses map[string]runner.StatusResult
+	vcsCache map[string]string
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -239,6 +240,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithStyle(ui.MutedStyle()),
 		),
 		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
+		vcsCache:    make(map[string]string, len(cfg.Repos)),
 		repoOrder:   repoOrder,
 		selected:    selected,
 		groupFilter: groupFilter,
