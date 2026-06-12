@@ -768,8 +768,10 @@ func TestRunSteps_AllSucceed(t *testing.T) {
 func TestRunSteps_AccumulatesOutput(t *testing.T) {
 	dir := initJJRepo(t)
 
-	logStep := []string{"log", "-r", "@", "-n1", "--no-graph", "--color=never",
-		"--template", `"step-output\n"`}
+	logStep := []string{
+		"log", "-r", "@", "-n1", "--no-graph", "--color=never",
+		"--template", `"step-output\n"`,
+	}
 
 	res, err := runSteps(t.Context(), dir, "test",
 		[][]string{logStep, logStep}, false)

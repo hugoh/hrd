@@ -24,9 +24,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
+	default:
+		return m.handleAsyncMsg(msg)
+	}
+}
+
+// handleAsyncMsg dispatches messages produced by Cmd goroutines
+// (status/exec streaming, spinner ticks, completion loads).
+func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case statusUpdateMsg:
 		return m.handleStatusUpdate(msg)
-
 	case statusDoneMsg:
 		return m.handleStatusDone()
 	case spinner.TickMsg:
@@ -37,8 +45,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExecDone(msg)
 	case vcsCompletionsMsg:
 		return m.handleVCSCompletions(msg)
-	case errMsg:
-		return m, nil
 	}
 
 	return m, nil

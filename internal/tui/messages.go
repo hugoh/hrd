@@ -30,9 +30,6 @@ type vcsCompletionsMsg struct {
 	cmds []string
 }
 
-// errMsg wraps an unrecoverable error.
-type errMsg struct{}
-
 // execResult pairs a repo name with its outcome.
 type execResult struct {
 	name   string
