@@ -34,7 +34,7 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.input, cmd = m.input.Update(msg)
-	m.updateCompletions()
+	loadCmd := m.updateCompletions()
 
 	switch msg.String() {
 	case keyEnter:
@@ -45,7 +45,7 @@ func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m, cmd
+	return m, tea.Batch(cmd, loadCmd)
 }
 
 func (m *model) handleInputEnter() (tea.Model, tea.Cmd) {
@@ -88,91 +88,102 @@ func (m *model) suggestionsActive() bool {
 	return m.input.ShowSuggestions && len(m.input.MatchedSuggestions()) > 0
 }
 
-func (m *model) updateCompletions() {
+// updateCompletions refreshes the suggestion list for the current input.
+// The returned Cmd (possibly nil) asynchronously loads a backend's
+// subcommand list the first time it is needed.
+func (m *model) updateCompletions() tea.Cmd {
 	input := m.input.Value()
 	m.input.ShowSuggestions = false
 
 	if input == "" {
-		return
+		return nil
 	}
 
 	if strings.HasPrefix(input, "!") {
-		return
+		return nil
 	}
 
-	if m.updateVCSCompletions(input) {
-		return
+	if cmd, handled := m.updateVCSCompletions(input); handled {
+		return cmd
 	}
 
 	if m.cmdPrefix == prefixNone && len(vcsSubcommands) > 0 {
 		m.input.ShowSuggestions = true
 		m.input.SetSuggestions(vcsSubcommands)
 	}
+
+	return nil
 }
 
-func (m *model) updateVCSCompletions(input string) bool {
+func (m *model) updateVCSCompletions(input string) (tea.Cmd, bool) {
 	for _, name := range backend.Names() {
-		if m.matchVCSCompletions(input, name) {
-			return true
+		if cmd, ok := m.matchVCSCompletions(input, name); ok {
+			return cmd, true
 		}
 	}
 
-	return false
+	return nil, false
 }
 
-func (m *model) matchVCSCompletions(input, name string) bool {
+func (m *model) matchVCSCompletions(input, name string) (tea.Cmd, bool) {
 	prefix := name + " "
 
 	if !strings.HasPrefix(input, prefix) && !strings.HasPrefix(prefix, input) {
-		return false
+		return nil, false
 	}
 
 	if strings.HasPrefix(prefix, input) && prefix != input {
 		m.input.ShowSuggestions = true
 		m.input.SetSuggestions([]string{name})
 
-		return true
+		return nil, true
 	}
 
-	m.loadVCSCompletions(name)
+	cmd := m.ensureVCSCompletions(name)
 
 	if len(m.vcsCompletions[name]) > 0 {
 		m.input.ShowSuggestions = true
 		m.input.SetSuggestions(m.vcsCompletions[name])
 	}
 
-	return true
+	return cmd, true
 }
 
-func (m *model) loadVCSCompletions(name string) {
+// ensureVCSCompletions kicks off an async load of the backend's
+// subcommand list the first time it is needed. Shelling out (git help,
+// jj util completion) must not run on the Update goroutine — it would
+// freeze the UI on the first matching keystroke. Returns nil when the
+// list is already loaded or loading.
+func (m *model) ensureVCSCompletions(name string) tea.Cmd {
 	if m.vcsCompletions == nil {
 		m.vcsCompletions = make(map[string][]string)
 	}
 
 	if _, ok := m.vcsCompletions[name]; ok {
-		return
+		return nil
 	}
+
+	// Mark as loading so further keystrokes don't spawn more loads.
+	m.vcsCompletions[name] = []string{}
 
 	b, err := backend.ByName(name)
 	if err != nil {
-		m.vcsCompletions[name] = []string{}
-
-		return
+		return nil
 	}
 
-	cmds, err := b.Subcommands(context.Background())
-	if err != nil || cmds == nil {
-		m.vcsCompletions[name] = []string{}
+	return func() tea.Msg {
+		cmds, err := b.Subcommands(context.Background())
+		if err != nil {
+			cmds = nil
+		}
 
-		return
+		prefixed := make([]string, len(cmds))
+		for i, c := range cmds {
+			prefixed[i] = name + " " + c
+		}
+
+		return vcsCompletionsMsg{name: name, cmds: prefixed}
 	}
-
-	prefixed := make([]string, len(cmds))
-	for i, c := range cmds {
-		prefixed[i] = name + " " + c
-	}
-
-	m.vcsCompletions[name] = prefixed
 }
 
 func (m *model) handleCmdBarOpen() (tea.Model, tea.Cmd) {

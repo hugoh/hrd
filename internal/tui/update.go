@@ -35,6 +35,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExecResult(msg)
 	case execDoneMsg:
 		return m.handleExecDone(msg)
+	case vcsCompletionsMsg:
+		return m.handleVCSCompletions(msg)
 	case errMsg:
 		return m, nil
 	}
@@ -265,6 +267,21 @@ func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 
 		return m, loadStatusesCmd(m)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleVCSCompletions(msg vcsCompletionsMsg) (tea.Model, tea.Cmd) {
+	if m.vcsCompletions == nil {
+		m.vcsCompletions = make(map[string][]string)
+	}
+
+	m.vcsCompletions[msg.name] = msg.cmds
+
+	// Refresh suggestions if the user is still typing a matching command.
+	if m.commandOpen {
+		return m, m.updateCompletions()
 	}
 
 	return m, nil
