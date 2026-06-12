@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 )
 
+// ErrNoArgs is returned by Backend.Run when called with no arguments.
+var ErrNoArgs = errors.New("no arguments provided")
+
 // ExtractExitCode returns the exit code from an exec.ExitError.
 // Returns ok=false if err is nil or not an ExitError.
 func ExtractExitCode(err error) (int, bool) {

@@ -183,10 +183,12 @@ func (*Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	if len(args) > 0 {
-		if steps, ok := multiStepOps[args[0]]; ok {
-			return runSteps(ctx, path, args[0], steps, interactive)
-		}
+	if len(args) == 0 {
+		return backend.RunResult{}, backend.ErrNoArgs
+	}
+
+	if steps, ok := multiStepOps[args[0]]; ok {
+		return runSteps(ctx, path, args[0], steps, interactive)
 	}
 
 	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
