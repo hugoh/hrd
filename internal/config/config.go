@@ -138,18 +138,43 @@ func stripGroupPrefix(name string) string {
 }
 
 // ResolveScope resolves explicit CLI names/groups into repo names.
+// Each name may be a repo or a group (with or without the "@" prefix);
+// groups are expanded inline. Duplicates are removed, preserving the
+// order of first appearance. Unknown names are an error.
 func (c *Config) ResolveScope(names []string) ([]string, error) {
 	if len(names) == 0 {
-		return c.allRepos()
+		return c.allRepos(), nil
 	}
 
-	if len(names) == 1 {
-		if repos, ok := c.groupRepos(names[0]); ok {
-			return repos, nil
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+
+	add := func(repo string) {
+		if _, ok := seen[repo]; !ok {
+			seen[repo] = struct{}{}
+
+			out = append(out, repo)
 		}
 	}
 
-	return c.ValidatedRepos(names)
+	for _, name := range names {
+		if repos, ok := c.groupRepos(name); ok {
+			for _, r := range repos {
+				add(r)
+			}
+
+			continue
+		}
+
+		repo := stripGroupPrefix(name)
+		if _, ok := c.Repos[repo]; !ok {
+			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
+		}
+
+		add(repo)
+	}
+
+	return out, nil
 }
 
 // AddRepo derives the name from the directory base name unless it would
@@ -219,18 +244,6 @@ func (c *Config) RemoveRepoFromGroup(name, group string) {
 	}
 }
 
-// ValidatedRepos returns all names that exist in the config, or an error.
-func (c *Config) ValidatedRepos(names []string) ([]string, error) {
-	for _, name := range names {
-		lookupName := stripGroupPrefix(name)
-		if _, ok := c.Repos[lookupName]; !ok {
-			return nil, fmt.Errorf("%w %q", errUnknownRepo, name)
-		}
-	}
-
-	return names, nil
-}
-
 func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
@@ -248,7 +261,7 @@ func (c *Config) rebuildGroupsCache() {
 	}
 }
 
-func (c *Config) allRepos() ([]string, error) {
+func (c *Config) allRepos() []string {
 	out := make([]string, 0, len(c.Repos))
 	for name := range c.Repos {
 		out = append(out, name)
@@ -256,7 +269,7 @@ func (c *Config) allRepos() ([]string, error) {
 
 	slices.Sort(out)
 
-	return out, nil
+	return out
 }
 
 func (c *Config) groupRepos(name string) ([]string, bool) {

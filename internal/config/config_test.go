@@ -175,6 +175,46 @@ func TestResolveScope_ExplicitRepos(t *testing.T) {
 	assert.Equal(t, []string{"r1", "r3"}, names)
 }
 
+func TestResolveScope_MixedRepoAndGroup(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1", Groups: []string{"work"}},
+			"r2": {Path: "/2", Groups: []string{"work"}},
+			"r3": {Path: "/3"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	names, err := cfg.ResolveScope([]string{"r3", "@work"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"r3", "r1", "r2"}, names)
+}
+
+func TestResolveScope_DeduplicatesNames(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1", Groups: []string{"work"}},
+			"r2": {Path: "/2", Groups: []string{"work"}},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	names, err := cfg.ResolveScope([]string{"r1", "r1", "work"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"r1", "r2"}, names)
+}
+
+func TestResolveScope_AtPrefixedRepoNameIsStripped(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{"r1": {Path: "/1"}},
+	}
+	cfg.rebuildGroupsCache()
+
+	names, err := cfg.ResolveScope([]string{"@r1"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"r1"}, names)
+}
+
 func TestResolveScope_UnknownRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{"r1": {Path: "/1"}},
