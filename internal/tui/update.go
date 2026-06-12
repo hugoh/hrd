@@ -323,7 +323,9 @@ func (m *model) handleVCSCompletions(msg vcsCompletionsMsg) (tea.Model, tea.Cmd)
 
 	// Refresh suggestions if the user is still typing a matching command.
 	if m.commandOpen {
-		return m, m.updateCompletions()
+		cmd := m.updateCompletions()
+
+		return m, cmd
 	}
 
 	return m, nil

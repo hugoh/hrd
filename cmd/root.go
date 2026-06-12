@@ -92,7 +92,7 @@ func buildCommands(cfgPath *string, dashTail []string, aliases map[string]string
 // NewApp builds the root CLI application without a "--" tail or config
 // aliases. Callers that execute user argv should use NewAppForArgs.
 func NewApp() *cli.Command {
-	return newApp(nil, nil)
+	return buildRootCmd(nil, nil)
 }
 
 // NewAppForArgs prepares the app for raw argv: it splits off the verbatim
@@ -103,7 +103,7 @@ func NewApp() *cli.Command {
 func NewAppForArgs(args []string) (*cli.Command, []string) {
 	head, tail := SplitDashTail(args)
 
-	return newApp(tail, loadAliases(configPathFromArgs(head))), head
+	return buildRootCmd(tail, loadAliases(configPathFromArgs(head))), head
 }
 
 // configPathFromArgs pre-scans argv for -c/--config so aliases can be
@@ -134,7 +134,7 @@ func loadAliases(cfgPath string) map[string]string {
 	return cfg.Aliases
 }
 
-func newApp(dashTail []string, aliases map[string]string) *cli.Command {
+func buildRootCmd(dashTail []string, aliases map[string]string) *cli.Command {
 	cfgPath := config.DefaultPath()
 
 	return &cli.Command{
