@@ -103,7 +103,7 @@ func Load(path string) (Config, error) {
 		cfg.Groups = make(map[string]Group)
 	}
 
-	if cfg.Settings.Concurrency == 0 {
+	if cfg.Settings.Concurrency < 1 {
 		cfg.Settings.Concurrency = defaultConcurrency
 	}
 

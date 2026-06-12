@@ -105,9 +105,6 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execResults = nil
 
 	concurrency := int64(m.cfg.Settings.Concurrency)
-	if concurrency < 1 {
-		concurrency = 8
-	}
 
 	resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
 	if err != nil {
