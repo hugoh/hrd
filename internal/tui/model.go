@@ -117,6 +117,8 @@ const (
 )
 
 // binding describes a single key binding in the main screen.
+// Whether a command refreshes repo statuses afterwards is decided by its
+// handler (the sideEffect argument to shortcutCmd), not declared here.
 type binding struct {
 	key        string
 	displayKey string // human-readable for header/footer; empty = use key
@@ -124,7 +126,6 @@ type binding struct {
 	label      string
 	desc       string
 	hrd        bool // true → header (hrd-level), false → footer (repo-level)
-	sideEffect bool // true → auto-refresh repos after execution
 	section    string
 	order      int
 }

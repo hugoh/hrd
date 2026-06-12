@@ -130,7 +130,6 @@ var mainBindings = []binding{
 		label:      "fetch",
 		desc:       "Run fetch on selected",
 		section:    secCommands,
-		sideEffect: true,
 		order:      40,
 	},
 	{
@@ -139,7 +138,6 @@ var mainBindings = []binding{
 		label:      "pull",
 		desc:       "Run pull on selected",
 		section:    secCommands,
-		sideEffect: true,
 		order:      50,
 	},
 	{
@@ -148,7 +146,6 @@ var mainBindings = []binding{
 		label:      "push",
 		desc:       "Run push on selected",
 		section:    secCommands,
-		sideEffect: true,
 		order:      60,
 	},
 
@@ -179,7 +176,6 @@ var mainBindings = []binding{
 		desc:       "Open command bar",
 		hrd:        true,
 		section:    secCmdBar,
-		sideEffect: true,
 		order:      10,
 	},
 }
