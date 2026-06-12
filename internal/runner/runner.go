@@ -7,12 +7,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"golang.org/x/sync/errgroup"
 )
+
+// ShellCommand returns the system shell binary and its command flag:
+// `/bin/sh -c` on POSIX, `%COMSPEC% /c` on Windows.
+func ShellCommand() (string, string) {
+	if runtime.GOOS == "windows" {
+		if comspec := os.Getenv("COMSPEC"); comspec != "" {
+			return comspec, "/c"
+		}
+
+		return "cmd.exe", "/c"
+	}
+
+	return "/bin/sh", "-c"
+}
 
 var errRepoNotFound = errors.New("repo not found")
 
@@ -206,8 +222,10 @@ func Shell(
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
 			var buf bytes.Buffer
 
+			bin, flag := ShellCommand()
+
 			//nolint:gosec // intentional: user shell commands
-			cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
+			cmd := exec.CommandContext(ctx, bin, flag, shellCmd)
 			cmd.Dir = repo.Path
 			cmd.Stdout = &buf
 			cmd.Stderr = &buf

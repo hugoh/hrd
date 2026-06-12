@@ -116,6 +116,30 @@ The TUI mirrors the CLI: the same backends, the same parallel execution, the sam
 {{ .HelpOutput -}}
 ```
 
+### Scoping and `--`
+
+The `git`, `jj`, and `shell` commands take an optional repo/group scope
+followed by the command to run. Everything after `--` is passed to the
+subprocess verbatim — repo names in the command are never reinterpreted as
+scope:
+
+```sh
+hrd git myrepo @work -- log --oneline -5
+hrd shell -- grep -r TODO .
+```
+
+Without `--`, the leading args that match repo or group names form the
+scope and the first non-matching arg starts the command (`hrd git myrepo
+log` works, but flags like `--oneline` need the `--` form).
+
+### Exit codes
+
+| Code | Meaning                                          |
+| ---- | ------------------------------------------------ |
+| 0    | All repos succeeded                              |
+| 1    | The command ran but failed in at least one repo  |
+| 2    | Usage or config error (unknown repo, bad flags)  |
+
 ## Configuration
 
 Config lives at `~/.config/hrd/config.toml` (respects `$XDG_CONFIG_HOME`).

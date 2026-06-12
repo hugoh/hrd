@@ -160,6 +160,10 @@ func Errf(format string, args ...any) {
 	logLogger().Errorf(format, args...)
 }
 
+func Warnf(format string, args ...any) {
+	logLogger().Warnf(format, args...)
+}
+
 func Success(msg string, args ...any) {
 	logLogger().Infof(msg, args...)
 }

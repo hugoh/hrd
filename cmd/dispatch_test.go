@@ -68,7 +68,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 
 				return cfgPath
 			},
-			args: []string{"git", "--", "status"},
+			args:          []string{"git", "--", "status"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestGitCmdWithReposFlag",
@@ -82,7 +84,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 					"repo2": {Path: "/tmp/other"},
 				}})
 			},
-			args: []string{"git", "--repos", "repo1", "--", "status"},
+			args:          []string{"git", "--repos", "repo1", "--", "status"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestGitCmdInteractiveMultipleRepos",
@@ -96,7 +100,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 					"repo2": {Path: "/tmp/other"},
 				}})
 			},
-			args: []string{"git", "-i", "repo1", "repo2", "--", "log"},
+			args:          []string{"git", "-i", "repo1", "repo2", "--", "log"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestGitCmdNoArgsFmt",
@@ -146,7 +152,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 
 				return cfgPath
 			},
-			args: []string{"fetch"},
+			args:          []string{"fetch"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestFetchCmdWithReposFlag",
@@ -160,7 +168,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 					"repo2": {Path: "/tmp/other"},
 				}})
 			},
-			args: []string{"fetch", "--repos", "repo1"},
+			args:          []string{"fetch", "--repos", "repo1"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestFetchCmdInteractive",
@@ -171,7 +181,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 
 				return cfgPath
 			},
-			args: []string{"fetch", "-i"},
+			args:          []string{"fetch", "-i"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 		{
 			name: "TestFetchCmdInteractiveNoBackend",
@@ -184,7 +196,9 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 					"repo1": {Path: gitDir},
 				}})
 			},
-			args: []string{"fetch", "-i"},
+			args:          []string{"fetch", "-i"},
+			expectError:   true,
+			expectErrorIs: ErrReposFailed,
 		},
 	}
 
@@ -518,6 +532,7 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 		name        string
 		names       []string
 		results     []runner.Result
+		wantFailed  bool
 		checkStderr func(t *testing.T, stderr string)
 	}{
 		{
@@ -526,9 +541,10 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 			results: []runner.Result{makeDispatchResult("repo1", "", 0, nil)},
 		},
 		{
-			name:    "TestDispatchWithError",
-			names:   []string{"repo1"},
-			results: []runner.Result{makeDispatchResult("repo1", "", 0, assert.AnError)},
+			name:       "TestDispatchWithError",
+			names:      []string{"repo1"},
+			results:    []runner.Result{makeDispatchResult("repo1", "", 0, assert.AnError)},
+			wantFailed: true,
 		},
 		{
 			name:    "TestDispatchWithOutput",
@@ -551,11 +567,13 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 				makeDispatchResult("repo2", "", 0, assert.AnError),
 				makeDispatchResult("repo3", "ok", 0, nil),
 			},
+			wantFailed: true,
 		},
 		{
-			name:    "TestDispatchNonZeroExitCode",
-			names:   []string{"repo1"},
-			results: []runner.Result{makeDispatchResult("repo1", "", 1, nil)},
+			name:       "TestDispatchNonZeroExitCode",
+			names:      []string{"repo1"},
+			results:    []runner.Result{makeDispatchResult("repo1", "", 1, nil)},
+			wantFailed: true,
 		},
 		{
 			name:  "TestDispatchSummaryListsFailedRepos",
@@ -565,6 +583,7 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 				makeDispatchResult("repo2", "", 0, assert.AnError),
 				makeDispatchResult("repo3", "", 1, nil),
 			},
+			wantFailed: true,
 			checkStderr: func(t *testing.T, stderr string) {
 				t.Helper()
 				assert.Contains(t, stderr, "; failed: repo2, repo3")
@@ -574,25 +593,26 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+
 			if tt.checkStderr != nil {
-				var buf bytes.Buffer
 				ui.SetLogger(log.New(&buf))
 				t.Cleanup(func() { ui.SetLogger(nil) })
+			}
 
-				err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
-					for _, result := range tt.results {
-						resultCh <- result
-					}
-				})
-				require.NoError(t, err)
-				tt.checkStderr(t, buf.String())
+			err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
+				for _, result := range tt.results {
+					resultCh <- result
+				}
+			})
+			if tt.wantFailed {
+				require.ErrorIs(t, err, ErrReposFailed)
 			} else {
-				err := dispatch(tt.names, "test", func(resultCh chan<- runner.Result) {
-					for _, result := range tt.results {
-						resultCh <- result
-					}
-				})
 				require.NoError(t, err)
+			}
+
+			if tt.checkStderr != nil {
+				tt.checkStderr(t, buf.String())
 			}
 		})
 	}
@@ -623,101 +643,152 @@ func TestDispatchCommandsBadConfig(t *testing.T) {
 	}
 }
 
-func TestCmdArgsFilter(t *testing.T) { //nolint:funlen
-	repos := map[string]config.Repo{
-		"repo1": {Path: "/tmp/repo1"},
-		"repo2": {Path: "/tmp/repo2"},
+func TestSplitScopeArgs(t *testing.T) { //nolint:funlen // table-driven
+	cfg := &config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
+		},
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1"}},
+		},
 	}
-	groups := map[string]config.Group{
-		"work": {Repos: []string{"repo1"}},
+
+	for _, tt := range []struct {
+		name      string
+		args      []string
+		tail      []string
+		wantScope []string
+		wantArgs  []string
+		wantErr   bool
+	}{
+		{
+			name:      "scope before separator",
+			args:      []string{"repo1"},
+			tail:      []string{"status"},
+			wantScope: []string{"repo1"},
+			wantArgs:  []string{"status"},
+		},
+		{
+			name:     "separator only",
+			tail:     []string{"log", "--oneline"},
+			wantArgs: []string{"log", "--oneline"},
+		},
+		{
+			name:      "repo name in tail passes through",
+			tail:      []string{"echo", "repo1", "hello"},
+			wantArgs:  []string{"echo", "repo1", "hello"},
+			wantScope: nil,
+		},
+		{
+			name:      "group with @ prefix",
+			args:      []string{"@work"},
+			tail:      []string{"status"},
+			wantScope: []string{"work"},
+			wantArgs:  []string{"status"},
+		},
+		{
+			name:      "mixed repo and group scope",
+			args:      []string{"repo1", "@work"},
+			tail:      []string{"status"},
+			wantScope: []string{"repo1", "work"},
+			wantArgs:  []string{"status"},
+		},
+		{
+			name:    "unknown name before separator errors",
+			args:    []string{"nope"},
+			tail:    []string{"status"},
+			wantErr: true,
+		},
+		{
+			name:      "no separator: leading scope then args",
+			args:      []string{"repo1", "log", "--oneline"},
+			wantScope: []string{"repo1"},
+			wantArgs:  []string{"log", "--oneline"},
+		},
+		{
+			name:     "no separator: repo name after first non-scope arg is an arg",
+			args:     []string{"echo", "repo1"},
+			wantArgs: []string{"echo", "repo1"},
+		},
+		{
+			name:    "no separator: unknown @-name errors",
+			args:    []string{"@nope", "status"},
+			wantErr: true,
+		},
+		{
+			name:      "separator with nothing after",
+			args:      []string{"repo1"},
+			tail:      []string{},
+			wantScope: []string{"repo1"},
+			wantArgs:  []string{},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			scope, args, err := splitScopeArgs(tt.args, tt.tail, cfg)
+			if tt.wantErr {
+				require.Error(t, err)
+
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantScope, scope)
+			assert.Equal(t, tt.wantArgs, args)
+		})
 	}
+}
 
-	t.Run("filter", func(t *testing.T) {
-		for _, tt := range []struct {
-			name   string
-			args   []string
-			repos  map[string]config.Repo
-			groups map[string]config.Group
-			want   []string
-		}{
-			{
-				name:   "TestVcsArgs_FiltersRepoAndGroupNames",
-				args:   []string{"repo1", "--", "status"},
-				repos:  repos,
-				groups: groups,
-				want:   []string{"status"},
-			},
-			{
-				name: "TestVcsArgs_HandlesDoubleDash",
-				args: []string{"--", "log", "--oneline"},
-				want: []string{"log", "--oneline"},
-			},
-		} {
-			t.Run(tt.name, func(t *testing.T) {
-				args := cmdArgsFilter(tt.args, tt.repos, tt.groups)
-				assert.Equal(t, tt.want, args)
-			})
-		}
-	})
+func TestSplitDashTail(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		args     []string
+		wantHead []string
+		wantTail []string
+	}{
+		{
+			name:     "no separator",
+			args:     []string{"hrd", "fetch", "repo1"},
+			wantHead: []string{"hrd", "fetch", "repo1"},
+			wantTail: nil,
+		},
+		{
+			name:     "splits at first separator",
+			args:     []string{"hrd", "shell", "--", "echo", "--", "hi"},
+			wantHead: []string{"hrd", "shell"},
+			wantTail: []string{"echo", "--", "hi"},
+		},
+		{
+			name:     "completion invocation passes through",
+			args:     []string{"hrd", "git", "repo1", "--", completionFlag},
+			wantHead: []string{"hrd", "git", "repo1", "--", completionFlag},
+			wantTail: nil,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			head, tail := SplitDashTail(tt.args)
+			assert.Equal(t, tt.wantHead, head)
+			assert.Equal(t, tt.wantTail, tail)
+		})
+	}
+}
 
-	t.Run("@-prefix variants", func(t *testing.T) {
-		for _, tt := range []struct {
-			name string
-			run  func(t *testing.T)
-		}{
-			{
-				name: "TestVcsArgsFilterWithAtPrefix",
-				run: func(t *testing.T) {
-					t.Helper()
-
-					args := cmdArgsFilter([]string{"@work", "--", "status"}, repos, groups)
-					assert.Equal(t, []string{"status"}, args)
-				},
-			},
-			{
-				name: "TestVcsArgsFilterWithAtPrefixOnly",
-				run: func(t *testing.T) {
-					t.Helper()
-
-					args := cmdArgsFilter([]string{"@work", "--"}, nil, groups)
-					assert.Empty(t, args)
-				},
-			},
-			{
-				name: "TestResolveScopeWithAtPrefix",
-				run: func(t *testing.T) {
-					t.Helper()
-
-					cfg := config.Config{Repos: repos, Groups: groups}
-					names, err := cfg.ResolveScope([]string{"@work"})
-					require.NoError(t, err)
-					assert.Equal(t, []string{"repo1"}, names)
-				},
-			},
-			{
-				name: "TestResolveScopeWithAtPrefixNotGroupBecomesRepo",
-				run: func(t *testing.T) {
-					t.Helper()
-
-					cfg := config.Config{Repos: repos, Groups: groups}
-					names, err := cfg.ResolveScope([]string{"@work"})
-					require.NoError(t, err)
-					assert.Equal(t, []string{"repo1"}, names)
-				},
-			},
-			{
-				name: "TestVcsArgsFilterWithMixedAtAndPlain",
-				run: func(t *testing.T) {
-					t.Helper()
-
-					args := cmdArgsFilter([]string{"repo1", "@work", "--", "status"}, repos, groups)
-					assert.Equal(t, []string{"status"}, args)
-				},
-			},
-		} {
-			t.Run(tt.name, tt.run)
-		}
-	})
+func TestShellJoin(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "single arg passes verbatim", args: []string{"echo $(pwd) | wc -c"}, want: "echo $(pwd) | wc -c"},
+		{name: "plain tokens", args: []string{"git", "log"}, want: "git log"},
+		{name: "token with spaces is quoted", args: []string{"echo", "a  b"}, want: "echo 'a  b'"},
+		{name: "single quotes survive", args: []string{"echo", "it's"}, want: `echo 'it'\''s'`},
+		{name: "empty token is quoted", args: []string{"echo", ""}, want: "echo ''"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, shellJoin(tt.args))
+		})
+	}
 }
 
 func TestGatherStatus(t *testing.T) { //nolint:funlen

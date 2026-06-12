@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/hugoh/hrd/internal/backend"
 )
 
 //nolint:gochecknoglobals,goconst,mnd // binding definitions
@@ -151,6 +152,9 @@ var mainBindings = []binding{
 
 	// General
 	{key: "r", handler: func(m *model) (tea.Model, tea.Cmd) {
+		backend.ResetDetectCache()
+
+		m.vcsCache = make(map[string]string)
 		m.loading = true
 
 		return m, loadStatusesCmd(m)
