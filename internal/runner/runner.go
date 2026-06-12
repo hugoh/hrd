@@ -69,11 +69,11 @@ type Result struct {
 	Err      error
 }
 
-func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
+func resultFrom(name, path, vcs, output string, runErr error) Result {
 	if ec, ok := backend.ExtractExitCode(runErr); ok {
 		return Result{
 			RepoName: name, RepoPath: path, VCS: vcs,
-			Output: buf.String(), ExitCode: ec,
+			Output: output, ExitCode: ec,
 		}
 	}
 
@@ -83,7 +83,7 @@ func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
 
 	return Result{
 		RepoName: name, RepoPath: path, VCS: vcs,
-		Output: buf.String(), ExitCode: 0,
+		Output: output, ExitCode: 0,
 	}
 }
 
@@ -219,7 +219,8 @@ func Shell(
 			cmd.Stdout = &buf
 			cmd.Stderr = &buf
 
-			results <- resultFrom(name, repo.Path, repo.ActiveBackend(), buf, cmd.Run())
+			runErr := cmd.Run()
+			results <- resultFrom(name, repo.Path, repo.ActiveBackend(), buf.String(), runErr)
 
 			return nil
 		},
