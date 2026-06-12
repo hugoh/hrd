@@ -214,7 +214,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 					cfg.Repos,
 					names,
 					subcmd,
-					int64(cfg.Settings.Concurrency),
+					cfg.Settings.Concurrency,
 				)
 				for res := range ch {
 					resultCh <- res
@@ -265,7 +265,7 @@ func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) erro
 				cfg.Repos,
 				names,
 				shellCmdStr,
-				int64(cfg.Settings.Concurrency),
+				cfg.Settings.Concurrency,
 			)
 			for res := range dispatchCh {
 				resultCh <- res
@@ -341,7 +341,7 @@ func lsGatherCallback(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 ) func(chan<- runner.StatusResult) {
 	return func(resultCh chan<- runner.StatusResult) {
 		statusCh := runner.GatherStatus(
@@ -393,7 +393,7 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 			names,
 			vcsByName,
 			message,
-			lsGatherCallback(ctx, cfg.Repos, names, int64(cfg.Settings.Concurrency)),
+			lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency),
 		)
 	}
 }
@@ -551,7 +551,7 @@ func dispatchNonInteractive(
 			names,
 			backendName,
 			cmdArgs,
-			int64(cfg.Settings.Concurrency),
+			cfg.Settings.Concurrency,
 		)
 		if err != nil {
 			return

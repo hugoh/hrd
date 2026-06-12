@@ -37,7 +37,7 @@ func loadStatusesCmd(m *model) tea.Cmd {
 		m.ctx,
 		m.cfg.Repos,
 		names,
-		int64(m.cfg.Settings.Concurrency),
+		m.cfg.Settings.Concurrency,
 	)
 
 	return waitForStatus(m.statusCh)
@@ -56,7 +56,7 @@ func startExec(
 	repos map[string]config.Repo,
 	selected []string,
 	prefix, cmdStr string,
-	concurrency int64,
+	concurrency int,
 ) (<-chan runner.Result, error) {
 	if prefix == "" {
 		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
@@ -104,7 +104,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execTotal = len(selected)
 	m.execResults = nil
 
-	concurrency := int64(m.cfg.Settings.Concurrency)
+	concurrency := m.cfg.Settings.Concurrency
 
 	resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
 	if err != nil {

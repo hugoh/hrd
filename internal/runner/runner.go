@@ -12,23 +12,23 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
 
 var errRepoNotFound = errors.New("repo not found")
 
-// forEachRepo calls fn concurrently for each repo, limiting parallelism with a
-// semaphore. When a repo name isn't found in the map, fn is called synchronously
-// with an empty Repo (so it can report the not-found error via its own channel).
+// forEachRepo calls fn concurrently for each repo, limiting parallelism via
+// errgroup.SetLimit. When a repo name isn't found in the map, fn is called
+// synchronously with an empty Repo (so it can report the not-found error via
+// its own channel).
 func forEachRepo(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 	workFn func(ctx context.Context, repo config.Repo, name string) error,
 ) error {
-	sem := semaphore.NewWeighted(concurrency)
 	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(concurrency)
 
 	for _, name := range names {
 		repo, ok := repos[name]
@@ -42,12 +42,6 @@ func forEachRepo(
 		}
 
 		group.Go(func() error {
-			if err := sem.Acquire(ctx, 1); err != nil {
-				return fmt.Errorf("acquiring semaphore: %w", err)
-			}
-
-			defer sem.Release(1)
-
 			return workFn(ctx, repo, name)
 		})
 	}
@@ -101,7 +95,7 @@ func forEachRepoChan[T any](
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 	taskFn func(context.Context, config.Repo, string, chan<- T) error,
 	errResult func(string) T,
 ) <-chan T {
@@ -110,9 +104,8 @@ func forEachRepoChan[T any](
 	go func() {
 		defer close(results)
 
-		// forEachRepo returns an errgroup error (context cancellation from
-		// sem.Acquire). Individual repo results carry their own errors on
-		// the channel already, so there's no caller to notify here.
+		// Individual repo results carry their own errors on the
+		// channel already, so there's no caller to notify here.
 		_ = forEachRepo(ctx, repos, names, concurrency,
 			func(ctx context.Context, repo config.Repo, name string) error {
 				if repo.Path == "" {
@@ -139,7 +132,7 @@ func Dispatch(
 	names []string,
 	backendName string,
 	args []string,
-	concurrency int64,
+	concurrency int,
 ) (<-chan Result, error) {
 	bck, err := backend.ByName(backendName)
 	if err != nil {
@@ -172,7 +165,7 @@ func VCSSubcmd(
 	repos map[string]config.Repo,
 	names []string,
 	op string,
-	concurrency int64,
+	concurrency int,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
@@ -207,7 +200,7 @@ func Shell(
 	repos map[string]config.Repo,
 	names []string,
 	shellCmd string,
-	concurrency int64,
+	concurrency int,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
@@ -243,7 +236,7 @@ func GatherStatus(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 ) <-chan StatusResult {
 	return forEachRepoChan(
 		ctx,
