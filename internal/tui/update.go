@@ -66,6 +66,7 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.groupList.SetWidth(m.width)
 	m.groupList.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
+	m.filterInput.SetWidth(m.inputWidth())
 
 	const (
 		statusWPad = 6
@@ -102,6 +103,10 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputKey(msg)
 	}
 
+	if m.filterOpen {
+		return m.handleFilterKey(msg)
+	}
+
 	if m.groupNewInput {
 		return m.handleGroupNewInput(msg)
 	}
@@ -130,9 +135,40 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleFilterKey edits the "/" name filter: every keystroke re-filters
+// live, enter confirms (filter stays active), esc clears and closes.
+func (m *model) handleFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		m.filterOpen = false
+		m.filterInput.Blur()
+
+		return m, nil
+	case keyEsc:
+		m.clearNameFilter()
+
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	m.nameFilter = strings.TrimSpace(m.filterInput.Value())
+	m.updateTableRows()
+
+	return m, cmd
+}
+
 func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	if m.groupNewInput {
 		m.groupNewInput = false
+
+		return m, nil
+	}
+
+	// A confirmed name filter is cleared by esc on the main screen.
+	if m.screen == screenMain && m.nameFilter != "" && m.mode == modeNormal {
+		m.clearNameFilter()
 
 		return m, nil
 	}

@@ -71,8 +71,12 @@ func (m *model) mainView() string {
 	}
 
 	parts := []string{m.renderHeader(), sep, tableContent}
-	if m.commandOpen {
+
+	switch {
+	case m.commandOpen:
 		parts = append(parts, m.renderInputLine())
+	case m.filterOpen:
+		parts = append(parts, m.renderFilterLine())
 	}
 
 	parts = append(parts, sep, m.renderFooter())
@@ -107,6 +111,10 @@ func (m *model) renderHeader() string {
 
 	if gl := m.groupLabel(); gl != "" && gl != labelAll {
 		left += ui.WarnStyle().Render(" " + gl)
+	}
+
+	if m.nameFilter != "" {
+		left += ui.WarnStyle().Render(" /" + m.nameFilter)
 	}
 
 	switch m.mode {
@@ -171,6 +179,10 @@ func (m *model) renderHeaderRight() string {
 
 func (m *model) renderInputLine() string {
 	return ui.WarnStyle().Render(":") + m.input.View()
+}
+
+func (m *model) renderFilterLine() string {
+	return ui.WarnStyle().Render("/") + m.filterInput.View()
 }
 
 func (*model) renderFooter() string {

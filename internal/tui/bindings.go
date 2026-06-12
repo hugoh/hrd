@@ -159,6 +159,11 @@ var mainBindings = []binding{
 
 		return m, loadStatusesCmd(m)
 	}, label: "refresh", desc: "Refresh repo statuses", hrd: true, section: secGeneral, order: 10},
+	{key: "/", handler: func(m *model) (tea.Model, tea.Cmd) {
+		m.openNameFilter()
+
+		return m, nil
+	}, label: "find", desc: "Filter repos by name", hrd: true, section: secGeneral, order: 15},
 	{key: "?", handler: func(m *model) (tea.Model, tea.Cmd) {
 		m.helpViewport.SetContent(m.helpContent())
 		m.helpViewport.GotoTop()

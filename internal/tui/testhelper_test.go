@@ -30,6 +30,7 @@ func baseModel(repoOrder []string, selected map[string]bool) *model {
 	}
 	m.cursor = 0
 	m.initTable()
+	m.initFilterInput()
 
 	return m
 }

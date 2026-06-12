@@ -108,9 +108,10 @@ Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
 - Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`.
+- Type-to-filter with `/` — fuzzy-match repos by name as you type; `Enter` keeps the filter, `Esc` clears it.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.
-- Shortcuts: `S` (status), `l` (log), `d` (diff), `f` (fetch), `p` (pull), `P` (push), `@` (group picker), `q` or `Esc` (quit).
+- Shortcuts: `S` (status), `l` (log), `d` (diff), `f` (fetch), `p` (pull), `P` (push), `@` (group picker), `/` (name filter), `q` or `Esc` (quit).
 
 The TUI mirrors the CLI: the same backends, the same parallel execution, the same status parsing — just in an interactive, always-on view.
 
