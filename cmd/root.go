@@ -4,6 +4,7 @@ package cmd
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
@@ -14,6 +15,8 @@ import (
 const cmdNameHRD = "hrd"
 
 const staticCmdCount = 12
+
+const flagConfig = "config"
 
 // completionFlag is urfave/cli's hidden shell-completion trigger.
 const completionFlag = "--generate-shell-completion"
@@ -43,10 +46,10 @@ func SplitDashTail(args []string) ([]string, []string) {
 	return args, nil
 }
 
-func buildCommands(cfgPath *string, dashTail []string) []*cli.Command {
+func buildCommands(cfgPath *string, dashTail []string, aliases map[string]string) []*cli.Command {
 	n := len(backend.Names())
 
-	cmds := make([]*cli.Command, 0, staticCmdCount+n)
+	cmds := make([]*cli.Command, 0, staticCmdCount+n+len(aliases))
 
 	cmds = append(cmds,
 		repoCommands(cfgPath),
@@ -70,18 +73,68 @@ func buildCommands(cfgPath *string, dashTail []string) []*cli.Command {
 		cmds = append(cmds, vcsCmd(cfgPath, name, dashTail))
 	}
 
+	if len(aliases) > 0 {
+		taken := map[string]bool{"help": true, "h": true, "completion": true}
+		for _, c := range cmds {
+			taken[c.Name] = true
+
+			for _, a := range c.Aliases {
+				taken[a] = true
+			}
+		}
+
+		cmds = append(cmds, aliasCommands(cfgPath, aliases, taken, dashTail)...)
+	}
+
 	return cmds
 }
 
-// NewApp builds the root CLI application without a "--" tail. Callers
-// that execute user argv should use NewAppWithTail with SplitDashTail.
+// NewApp builds the root CLI application without a "--" tail or config
+// aliases. Callers that execute user argv should use NewAppForArgs.
 func NewApp() *cli.Command {
-	return NewAppWithTail(nil)
+	return newApp(nil, nil)
 }
 
-// NewAppWithTail builds the root CLI application. dashTail is the verbatim
-// argv tail after the first "--" (see SplitDashTail), nil when absent.
-func NewAppWithTail(dashTail []string) *cli.Command {
+// NewAppForArgs prepares the app for raw argv: it splits off the verbatim
+// "--" tail (see SplitDashTail) and registers config aliases as top-level
+// commands. The alias load honors -c/--config and is best-effort — config
+// errors are reported later by the command actions. Returns the app and
+// the argv head to pass to Run.
+func NewAppForArgs(args []string) (*cli.Command, []string) {
+	head, tail := SplitDashTail(args)
+
+	return newApp(tail, loadAliases(configPathFromArgs(head))), head
+}
+
+// configPathFromArgs pre-scans argv for -c/--config so aliases can be
+// registered before urfave/cli parses flags.
+func configPathFromArgs(args []string) string {
+	for i, arg := range args {
+		switch {
+		case arg == "--"+flagConfig || arg == "-c":
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		case strings.HasPrefix(arg, "--"+flagConfig+"="):
+			return strings.TrimPrefix(arg, "--"+flagConfig+"=")
+		case strings.HasPrefix(arg, "-c="):
+			return strings.TrimPrefix(arg, "-c=")
+		}
+	}
+
+	return config.DefaultPath()
+}
+
+func loadAliases(cfgPath string) map[string]string {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return nil
+	}
+
+	return cfg.Aliases
+}
+
+func newApp(dashTail []string, aliases map[string]string) *cli.Command {
 	cfgPath := config.DefaultPath()
 
 	return &cli.Command{
@@ -94,7 +147,7 @@ func NewAppWithTail(dashTail []string) *cli.Command {
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:        "config",
+				Name:        flagConfig,
 				Aliases:     []string{"c"},
 				Usage:       "path to config file",
 				Value:       cfgPath,
@@ -113,6 +166,6 @@ func NewAppWithTail(dashTail []string) *cli.Command {
 				Repos:      args,
 			})
 		},
-		Commands: buildCommands(&cfgPath, dashTail),
+		Commands: buildCommands(&cfgPath, dashTail, aliases),
 	}
 }

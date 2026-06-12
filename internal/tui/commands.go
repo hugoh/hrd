@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,6 +11,8 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
+
+var errEmptyCommand = errors.New("empty command")
 
 // Cmd closures returned below must not touch the model: Bubble Tea runs
 // them on their own goroutines, concurrently with Update and View. They
@@ -59,7 +62,12 @@ func startExec(
 	concurrency int,
 ) (<-chan runner.Result, error) {
 	if prefix == "" {
-		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
+		op, extra, err := splitSubcmd(cmdStr)
+		if err != nil {
+			return nil, err
+		}
+
+		return runner.VCSSubcmd(ctx, repos, selected, op, extra, concurrency), nil
 	}
 
 	if _, err := backend.ByName(prefix); err == nil {
@@ -77,6 +85,21 @@ func startExec(
 	}
 
 	return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
+}
+
+// splitSubcmd tokenizes a per-repo VCS command into the subcommand and its
+// extra args, so "pull --rebase" runs as the backend's pull plus flags.
+func splitSubcmd(cmdStr string) (string, []string, error) {
+	tokens, err := shlex.Split(cmdStr)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse command: %w", err)
+	}
+
+	if len(tokens) == 0 {
+		return "", nil, errEmptyCommand
+	}
+
+	return tokens[0], tokens[1:], nil
 }
 
 func waitForResult(ch <-chan runner.Result) tea.Cmd {

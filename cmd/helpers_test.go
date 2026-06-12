@@ -8,13 +8,10 @@ import (
 
 // newTestApp creates a CLI app with buffered writers for testing.
 func newTestApp() *cli.Command {
-	return newTestAppWithTail(nil)
+	return bufferWriters(NewApp())
 }
 
-// newTestAppWithTail creates a CLI app with buffered writers and the given
-// "--" tail (see SplitDashTail).
-func newTestAppWithTail(dashTail []string) *cli.Command {
-	app := NewAppWithTail(dashTail)
+func bufferWriters(app *cli.Command) *cli.Command {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 

@@ -296,7 +296,7 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 			}
 
 			if cmd.Bool("interactive") {
-				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd)
+				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd, nil)
 			}
 
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
@@ -305,6 +305,7 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 					cfg.Repos,
 					names,
 					subcmd,
+					nil,
 					cfg.Settings.Concurrency,
 				)
 				for res := range ch {
@@ -348,9 +349,19 @@ func shellCmdAction(
 		return nil
 	}
 
-	shellCmdStr := shellJoin(shellArgs)
+	return runShell(ctx, &cfg, names, shellJoin(shellArgs), cmd.Bool("interactive"))
+}
 
-	if cmd.Bool("interactive") {
+// runShell dispatches a shell command string across names, sequentially
+// with a TTY when interactive, in parallel otherwise.
+func runShell(
+	ctx context.Context,
+	cfg *config.Config,
+	names []string,
+	shellCmdStr string,
+	interactive bool,
+) error {
+	if interactive {
 		return runShellInteractive(ctx, cfg.Repos, names, shellCmdStr)
 	}
 
@@ -623,12 +634,14 @@ func dispatchSummary(total int, failed []string) error {
 
 // runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
 // Each repo uses its own active backend (git or jj), resolving arg prefixes
-// like "git fetch" for jj automatically.
+// like "git fetch" for jj automatically. extraArgs (may be nil) are appended
+// after the resolved subcommand args.
 func runSubcmdInteractive(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
 	subcmd string,
+	extraArgs []string,
 ) error {
 	return runInteractiveEach(
 		ctx,
@@ -640,7 +653,9 @@ func runSubcmdInteractive(
 				return fmt.Errorf("checking backend: %w", err)
 			}
 
-			res, err := bck.Run(ctx, repo.Path, bck.SubcommandArgs(subcmd), true)
+			args := append(bck.SubcommandArgs(subcmd), extraArgs...)
+
+			res, err := bck.Run(ctx, repo.Path, args, true)
 			if err != nil {
 				return fmt.Errorf("%s %s: %w", bck.Name(), subcmd, err)
 			}

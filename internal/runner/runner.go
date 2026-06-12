@@ -176,11 +176,13 @@ func Dispatch(
 // VCSSubcmd runs a VCS subcommand (status, diff, log, fetch, push, pull, etc.)
 // across repos, resolving backend-specific arg prefixes automatically.
 // For example, "fetch" becomes ["fetch"] for git but ["git", "fetch"] for jj.
+// extraArgs (may be nil) are appended after the resolved subcommand args.
 func VCSSubcmd(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
 	op string,
+	extraArgs []string,
 	concurrency int,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
@@ -192,7 +194,7 @@ func VCSSubcmd(
 				return nil
 			}
 
-			args := bck.SubcommandArgs(op)
+			args := append(bck.SubcommandArgs(op), extraArgs...)
 
 			res, runErr := bck.Run(ctx, repo.Path, args, false)
 			results <- Result{

@@ -10,7 +10,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/cmdspec"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
@@ -315,18 +315,7 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 }
 
 func parseUnifiedCmd(input string) (string, string) {
-	if strings.HasPrefix(input, "!") {
-		return "sh", strings.TrimSpace(input[1:])
-	}
-
-	for _, name := range backend.Names() {
-		prefix := name + " "
-		if strings.HasPrefix(input, prefix) {
-			return name, strings.TrimSpace(input[len(prefix):])
-		}
-	}
-
-	return "", input
+	return cmdspec.Parse(input)
 }
 
 func (m *model) pushSelectionHistory() {

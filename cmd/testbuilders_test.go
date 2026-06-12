@@ -24,14 +24,14 @@ func cfgSingleGitRepo(t *testing.T) string {
 }
 
 // runApp creates a new test app and runs it with the given args, applying
-// the same "--" pre-split as production (main.Run).
+// the same "--" pre-split and alias registration as production (main.Run).
 func runApp(t *testing.T, cfgPath string, args []string) error {
 	t.Helper()
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	head, tail := SplitDashTail(fullArgs)
-	app := newTestAppWithTail(tail)
+	app, head := NewAppForArgs(fullArgs)
+	bufferWriters(app)
 
 	return app.Run(t.Context(), head) //nolint:wrapcheck
 }
@@ -42,8 +42,8 @@ func runAppCapture(t *testing.T, cfgPath string, args []string) string {
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	head, tail := SplitDashTail(fullArgs)
-	app := newTestAppWithTail(tail)
+	app, head := NewAppForArgs(fullArgs)
+	bufferWriters(app)
 
 	return capturer.CaptureStdout(func() {
 		err := app.Run(t.Context(), head)

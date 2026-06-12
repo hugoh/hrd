@@ -51,9 +51,16 @@ type Settings struct {
 
 // Config is the top-level config structure that maps directly to the TOML file.
 type Config struct {
-	Repos    map[string]Repo  `toml:"repos"`
-	Groups   map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
-	Settings Settings         `toml:"settings"`
+	Repos  map[string]Repo  `toml:"repos"`
+	Groups map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
+
+	// Aliases maps user-defined command names to their expansion in the
+	// unified command grammar (see internal/cmdspec): "pull --rebase"
+	// routes per-repo, "git ..."/"jj ..." to that backend, "!..." or
+	// "sh ..." to the shell.
+	Aliases map[string]string `toml:"aliases,omitempty"`
+
+	Settings Settings `toml:"settings"`
 }
 
 // defaultConfig returns a Config with sensible defaults.

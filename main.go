@@ -32,8 +32,7 @@ func Run(args []string) int {
 	git.Register()
 	jj.Register()
 
-	head, tail := cmd.SplitDashTail(args)
-	app := cmd.NewAppWithTail(tail)
+	app, head := cmd.NewAppForArgs(args)
 
 	err := app.Run(context.Background(), head)
 	switch {

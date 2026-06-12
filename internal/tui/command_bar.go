@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/cmdspec"
 )
 
 func (m *model) handleInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -76,7 +78,7 @@ func (m *model) handleInputEnter() (tea.Model, tea.Cmd) {
 	cmd := cmdStr
 
 	if m.cmdPrefix == prefixNone {
-		prefix, cmd = parseUnifiedCmd(cmdStr)
+		prefix, cmd = parseUnifiedCmd(cmdspec.ExpandAlias(m.cfg.Aliases, cmdStr))
 	}
 
 	m.pushHistory(prefix, cmd)
@@ -109,10 +111,23 @@ func (m *model) updateCompletions() tea.Cmd {
 
 	if m.cmdPrefix == prefixNone && len(vcsSubcommands) > 0 {
 		m.input.ShowSuggestions = true
-		m.input.SetSuggestions(vcsSubcommands)
+		m.input.SetSuggestions(m.unifiedSuggestions())
 	}
 
 	return nil
+}
+
+// unifiedSuggestions returns the VCS subcommands plus the user's config
+// aliases for the unified command bar.
+func (m *model) unifiedSuggestions() []string {
+	suggestions := slices.Clone(vcsSubcommands)
+	for name := range m.cfg.Aliases {
+		suggestions = append(suggestions, name)
+	}
+
+	slices.Sort(suggestions[len(vcsSubcommands):])
+
+	return suggestions
 }
 
 func (m *model) updateVCSCompletions(input string) (tea.Cmd, bool) {

@@ -211,6 +211,30 @@ hrd shell --dirty -- git stash list
 | `--ahead`  | are ahead of their remote, or have local-only work |
 | `--behind` | are behind their remote                            |
 
+### Aliases
+
+Define your own commands in the config and they become first-class
+subcommands — with repo/group scoping, `-r`, `--interactive`, status
+filters, and shell completion, and listed under `hrd --help`:
+
+```toml
+[aliases]
+sync = "pull --rebase"
+mkclean = "!make clean"
+```
+
+```sh
+hrd sync @work          # git pull --rebase / jj git pull, per backend
+hrd mkclean --dirty     # make clean, only in dirty repos
+hrd sync -- --autostash # extra args append to the expansion
+```
+
+The first word decides the routing: `git`/`jj` pins a backend, `!` (or
+`sh`) runs a shell command, anything else routes through each repo's own
+backend like the built-in subcommands. The TUI command bar completes and
+expands the same aliases. Aliases that would shadow a built-in command are
+ignored with a warning.
+
 ### Exit codes
 
 | Code | Meaning                                         |
@@ -237,6 +261,11 @@ groups = ["work"]
 
 [settings]
 concurrency = 8
+
+[aliases]
+sync = "pull --rebase" # per-repo routing (git pull / jj git pull)
+gpf = "git push --force-with-lease" # always that backend
+mkclean = "!make clean" # "!" or "sh " prefix = shell command
 ```
 
 **Note**: Groups are derived from the `groups` field on each repo. Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.
