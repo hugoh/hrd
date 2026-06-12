@@ -365,14 +365,14 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 			}
 
 			for _, repo := range group.Repos {
-				ui.Outf(repo)
+				ui.Out(repo)
 			}
 
 			return nil
 		}
 
 		if len(cfg.Groups) == 0 {
-			ui.Outf("no groups defined")
+			ui.Out("no groups defined")
 
 			return nil
 		}
@@ -383,8 +383,8 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 
 func renderGroupTable(cfg config.Config) error {
 	for name, group := range cfg.Groups {
-		ui.Outf(displayGroup(name))
-		ui.Outf("  " + strings.Join(group.Repos, ", "))
+		ui.Out(displayGroup(name))
+		ui.Out("  " + strings.Join(group.Repos, ", "))
 	}
 
 	return nil

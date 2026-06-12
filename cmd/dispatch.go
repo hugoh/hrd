@@ -318,14 +318,14 @@ func lsCmd(cfgPath *string) *cli.Command {
 
 func lsNamesOnly(names []string) {
 	for _, n := range names {
-		ui.Outf(n)
+		ui.Out(n)
 	}
 }
 
 func lsDirsOnly(repos map[string]config.Repo, names []string) {
 	for _, n := range names {
 		if repo, ok := repos[n]; ok {
-			ui.Outf(repo.Path)
+			ui.Out(repo.Path)
 		}
 	}
 }
@@ -561,7 +561,7 @@ func dispatch(
 	cmdLabel string,
 	dispatch func(resultCh chan<- runner.Result),
 ) error {
-	ui.Outf(cmdLabel)
+	ui.Out(cmdLabel)
 
 	resultCh := make(chan runner.Result, len(names))
 	go func() {
@@ -597,17 +597,17 @@ func dispatch(
 }
 
 func printDispatchResult(res runner.Result) {
-	ui.Outf(ui.RenderDispatchResult(res))
+	ui.Out(ui.RenderDispatchResult(res))
 
 	if res.Err != nil {
 		ui.Errf("%s", res.Err)
 	} else if res.Output != "" {
 		for line := range strings.SplitSeq(strings.TrimRight(res.Output, "\n"), "\n") {
-			ui.Outf("  " + line)
+			ui.Out("  " + line)
 		}
 	}
 
-	ui.Outf("")
+	ui.Out("")
 }
 
 func gatherStatus(
@@ -645,7 +645,7 @@ func gatherStatus(
 		eff[colStatus] = widths[colStatus]
 	}
 
-	ui.Outf(ui.RenderHeader(header, eff))
+	ui.Out(ui.RenderHeader(header, eff))
 
 	results := make([]*runner.StatusResult, len(names))
 	next := 0
@@ -656,7 +656,7 @@ func gatherStatus(
 
 		for next < len(names) && results[next] != nil {
 			cells := statusRow(names[next], vcsByName[names[next]], results[next], details)
-			ui.Outf(ui.RenderRow(cells, eff))
+			ui.Out(ui.RenderRow(cells, eff))
 
 			next++
 		}
