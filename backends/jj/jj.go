@@ -533,6 +533,9 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 		return
 	}
 
+	// jj reports ahead/behind from the remote bookmark's perspective:
+	// "ahead by N" means the remote is N ahead, i.e. local is N behind.
+	// The apparent swap below is intentional.
 	current.Ahead = extractCount(trimmed, "behind by")
 	current.Behind = extractCount(trimmed, "ahead by")
 	backend.ComputeBookmarkState(current)

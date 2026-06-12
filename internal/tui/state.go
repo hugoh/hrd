@@ -1,6 +1,6 @@
-// Package tui provides the terminal UI for hrd, built on tview. It manages
-// repo list display, command input, output streaming, group filtering, and
-// persistent state (history, selections) across sessions.
+// Package tui provides the terminal UI for hrd, built on Bubble Tea. It
+// manages repo list display, command input, output streaming, group
+// filtering, and persistent state (history, selections) across sessions.
 package tui
 
 import (
