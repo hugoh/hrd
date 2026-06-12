@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 )
 
 // RefState describes the relationship between a local ref and its remote.
@@ -283,17 +284,54 @@ func ByName(name string) (Backend, error) {
 
 var errUnknownBackend = errors.New("unknown backend")
 
+// detectCache memoizes Detect results per absolute path: detection stats
+// the filesystem for every status row and dispatch target, and a path's
+// VCS does not change within a single invocation.
+//
+//nolint:gochecknoglobals // process-lifetime cache
+var detectCache sync.Map
+
+type detectResult struct {
+	backend Backend
+	err     error
+}
+
 // Detect returns the highest-priority backend that claims the directory.
 // Priority follows DetectAll semantics — jj wins over git for colocated repos.
+// Results (including failures) are memoized per absolute path; use
+// ResetDetectCache to invalidate.
 //
 //nolint:ireturn // returning interface is intentional for plugin architecture
 func Detect(path string) (Backend, error) {
-	matched, err := DetectAll(path)
-	if err != nil {
-		return nil, err
+	abs, err := filepath.Abs(path)
+	if err != nil { // coverage-ignore — only fails on nil, caller controls input
+		return nil, fmt.Errorf("resolving path %q: %w", path, err)
 	}
 
-	return matched[0], nil
+	if v, ok := detectCache.Load(abs); ok {
+		res, _ := v.(detectResult)
+
+		return res.backend, res.err
+	}
+
+	var res detectResult
+
+	matched, err := DetectAll(abs)
+	if err != nil {
+		res.err = err
+	} else {
+		res.backend = matched[0]
+	}
+
+	detectCache.Store(abs, res)
+
+	return res.backend, res.err
+}
+
+// ResetDetectCache clears the memoized Detect results. Used by tests and
+// by long-lived callers (TUI refresh) that want fresh detection.
+func ResetDetectCache() {
+	detectCache.Clear()
 }
 
 var errNoKnownVCS = errors.New("no known VCS detected")

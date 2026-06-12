@@ -124,7 +124,7 @@ run = "go run ."
 
 [tasks.gen]
 description = "Regenerate README.md from template"
-sources = ["README.md.tmpl", "cmd/**/*.go"]
+sources = ["README.md.tpl", "cmd/**/*.go"]
 outputs = ["README.md"]
 run = ["go generate ./...", "dprint fmt README.md"]
 

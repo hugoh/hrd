@@ -23,28 +23,35 @@ func cfgSingleGitRepo(t *testing.T) string {
 	})
 }
 
-// runApp creates a new test app and runs it with the given args.
+// runApp creates a new test app and runs it with the given args, applying
+// the same "--" pre-split and alias registration as production (main.Run).
 func runApp(t *testing.T, cfgPath string, args []string) error {
 	t.Helper()
 
-	app := newTestApp()
-
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	return app.Run(t.Context(), fullArgs) //nolint:wrapcheck
+	app, head := NewAppForArgs(fullArgs)
+	bufferWriters(app)
+
+	return app.Run(t.Context(), head) //nolint:wrapcheck
 }
 
 // runAppCapture runs the app and returns stdout output.
 func runAppCapture(t *testing.T, cfgPath string, args []string) string {
 	t.Helper()
 
-	app := newTestApp()
-
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
+	app, head := NewAppForArgs(fullArgs)
+	bufferWriters(app)
+
 	return capturer.CaptureStdout(func() {
-		err := app.Run(t.Context(), fullArgs)
-		require.NoError(t, err)
+		err := app.Run(t.Context(), head)
+		// Fake test repos make the underlying VCS command fail; only
+		// repo-level failures are tolerated here, not usage errors.
+		if err != nil {
+			require.ErrorIs(t, err, ErrReposFailed)
+		}
 	})
 }
 

@@ -115,7 +115,7 @@ func TestVCSSubcmd(t *testing.T) {
 		"r1": {Path: "/tmp/r1"},
 	}
 
-	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "status", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "status", nil, 1)
 
 	count := 0
 	for range ch {
@@ -128,7 +128,7 @@ func TestVCSSubcmd(t *testing.T) {
 func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "status", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "status", nil, 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -153,6 +153,7 @@ func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 		repos,
 		[]string{"r1"},
 		"status",
+		nil,
 		1,
 	)
 	results := collectResults(ch)
@@ -177,7 +178,7 @@ func TestVCSSubcmd_Ops(t *testing.T) {
 
 	for _, op := range []string{"diff", "fetch"} {
 		t.Run(op, func(t *testing.T) {
-			ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, op, 1)
+			ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, op, nil, 1)
 
 			count := 0
 			for range ch {
@@ -192,7 +193,7 @@ func TestVCSSubcmd_Ops(t *testing.T) {
 func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
 	repos := map[string]config.Repo{}
 
-	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "fetch", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"nonexistent"}, "fetch", nil, 1)
 	results := collectResults(ch)
 	assert.Len(t, results, 1)
 	assert.Equal(t, "nonexistent", results[0].RepoName)
@@ -209,7 +210,7 @@ func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
 		"r1": {Path: dir},
 	}
 
-	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "fetch", 1)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1"}, "fetch", nil, 1)
 	results := collectResults(ch)
 	require.Len(t, results, 1)
 	require.NoError(t, results[0].Err)
@@ -222,7 +223,7 @@ func TestVCSSubcmd_MultipleRepos(t *testing.T) {
 		"r2": {Path: "/tmp/r2"},
 	}
 
-	ch := VCSSubcmd(t.Context(), repos, []string{"r1", "r2"}, "status", 2)
+	ch := VCSSubcmd(t.Context(), repos, []string{"r1", "r2"}, "status", nil, 2)
 
 	count := 0
 	for range ch {

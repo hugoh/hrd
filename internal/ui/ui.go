@@ -150,8 +150,18 @@ func Outf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stdout, format+"\n", args...)
 }
 
+// Out prints s followed by a newline. Unlike Outf it does not interpret
+// format verbs, so it is safe for dynamic strings (paths, command output).
+func Out(s string) {
+	_, _ = fmt.Fprintln(os.Stdout, s)
+}
+
 func Errf(format string, args ...any) {
 	logLogger().Errorf(format, args...)
+}
+
+func Warnf(format string, args ...any) {
+	logLogger().Warnf(format, args...)
 }
 
 func Success(msg string, args ...any) {

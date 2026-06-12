@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/hugoh/hrd/internal/backend"
 )
 
 //nolint:gochecknoglobals,goconst,mnd // binding definitions
@@ -125,39 +126,44 @@ var mainBindings = []binding{
 		order:   30,
 	},
 	{
-		key:        "f",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "fetch", true) },
-		label:      "fetch",
-		desc:       "Run fetch on selected",
-		section:    secCommands,
-		sideEffect: true,
-		order:      40,
+		key:     "f",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "fetch", true) },
+		label:   "fetch",
+		desc:    "Run fetch on selected",
+		section: secCommands,
+		order:   40,
 	},
 	{
-		key:        "p",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "pull", true) },
-		label:      "pull",
-		desc:       "Run pull on selected",
-		section:    secCommands,
-		sideEffect: true,
-		order:      50,
+		key:     "p",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "pull", true) },
+		label:   "pull",
+		desc:    "Run pull on selected",
+		section: secCommands,
+		order:   50,
 	},
 	{
-		key:        "P",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "push", true) },
-		label:      "push",
-		desc:       "Run push on selected",
-		section:    secCommands,
-		sideEffect: true,
-		order:      60,
+		key:     "P",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m, shortcutCmd(m, "push", true) },
+		label:   "push",
+		desc:    "Run push on selected",
+		section: secCommands,
+		order:   60,
 	},
 
 	// General
 	{key: "r", handler: func(m *model) (tea.Model, tea.Cmd) {
+		backend.ResetDetectCache()
+
+		m.vcsCache = make(map[string]string)
 		m.loading = true
 
 		return m, loadStatusesCmd(m)
 	}, label: "refresh", desc: "Refresh repo statuses", hrd: true, section: secGeneral, order: 10},
+	{key: "/", handler: func(m *model) (tea.Model, tea.Cmd) {
+		m.openNameFilter()
+
+		return m, nil
+	}, label: "find", desc: "Filter repos by name", hrd: true, section: secGeneral, order: 15},
 	{key: "?", handler: func(m *model) (tea.Model, tea.Cmd) {
 		m.helpViewport.SetContent(m.helpContent())
 		m.helpViewport.GotoTop()
@@ -173,14 +179,13 @@ var mainBindings = []binding{
 
 	// Cmd bar
 	{
-		key:        ":",
-		handler:    func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen() },
-		label:      "cmd",
-		desc:       "Open command bar",
-		hrd:        true,
-		section:    secCmdBar,
-		sideEffect: true,
-		order:      10,
+		key:     ":",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleCmdBarOpen() },
+		label:   "cmd",
+		desc:    "Open command bar",
+		hrd:     true,
+		section: secCmdBar,
+		order:   10,
 	},
 }
 

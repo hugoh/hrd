@@ -607,6 +607,14 @@ func TestBackend_Run(t *testing.T) {
 	assert.NotEmpty(t, res.Output)
 }
 
+func TestBackend_Run_NoArgs(t *testing.T) {
+	dir := t.TempDir()
+
+	b := &Backend{}
+	_, err := b.Run(t.Context(), dir, nil, false)
+	assert.ErrorIs(t, err, backend.ErrNoArgs)
+}
+
 func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := setupJJDir(t)
 
@@ -763,6 +771,23 @@ func TestRunSteps_AllSucceed(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Zero(t, res.ExitCode)
+}
+
+func TestRunSteps_AccumulatesOutput(t *testing.T) {
+	dir := initJJRepo(t)
+
+	logStep := []string{
+		"log", "-r", "@", "-n1", "--no-graph", "--color=never",
+		"--template", `"step-output\n"`,
+	}
+
+	res, err := runSteps(t.Context(), dir, "test",
+		[][]string{logStep, logStep}, false)
+
+	require.NoError(t, err)
+	assert.Zero(t, res.ExitCode)
+	assert.Equal(t, "step-output\nstep-output\n", res.Output,
+		"output from every step should be returned, not dropped")
 }
 
 func TestRunSteps_InfraError(t *testing.T) {

@@ -35,6 +35,7 @@ func repoCommands(cfgPath *string) *cli.Command {
 		Usage: "manage tracked repositories",
 		Commands: []*cli.Command{
 			repoAddCmd(cfgPath),
+			repoScanCmd(cfgPath),
 			repoRemoveCmd(cfgPath),
 			repoListCmd(cfgPath),
 			repoRenameCmd(cfgPath),
@@ -54,6 +55,11 @@ func repoAddCmd(cfgPath *string) *cli.Command {
 				Name:    "name",
 				Aliases: []string{"n"},
 				Usage:   "explicit name (only valid when adding a single repo)",
+			},
+			&cli.StringFlag{
+				Name:    cmdNameGroup,
+				Aliases: []string{"g"},
+				Usage:   "add the repo(s) to this group",
 			},
 		},
 		Action: repoAddAction(cfgPath),
@@ -75,36 +81,53 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 			return fmt.Errorf("repo add: %w", err)
 		}
 
+		group := stripGroupPrefix(cmd.String(cmdNameGroup))
+
 		for _, arg := range cmd.Args().Slice() {
-			abs, err := filepath.Abs(arg)
-			if err != nil {
-				return fmt.Errorf("resolving %q: %w", arg, err)
+			if err := addRepo(&cfg, arg, cmd.String("name"), group); err != nil {
+				return err
 			}
-
-			if _, err := backend.Detect(abs); err != nil {
-				return fmt.Errorf("%s: %w", abs, errRepoNoVCS)
-			}
-
-			name := cmd.String("name")
-			if name == "" {
-				name = filepath.Base(abs)
-			}
-
-			if _, exists := cfg.Repos[name]; exists {
-				return fmt.Errorf(
-					"%w %q (path: %s). use --name/-n to specify a unique name",
-					errRepoExists,
-					name,
-					cfg.Repos[name].Path,
-				)
-			}
-
-			cfg.AddRepo(name, config.Repo{Path: abs})
-			ui.Success("added %s as %q", abs, name)
 		}
 
 		return config.Save(*cfgPath, cfg)
 	}
+}
+
+// addRepo validates and registers a single repo path in cfg. An empty
+// explicitName derives the name from the directory base name.
+func addRepo(cfg *config.Config, path, explicitName, group string) error {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("resolving %q: %w", path, err)
+	}
+
+	if _, err := backend.Detect(abs); err != nil {
+		return fmt.Errorf("%s: %w", abs, errRepoNoVCS)
+	}
+
+	name := explicitName
+	if name == "" {
+		name = filepath.Base(abs)
+	}
+
+	if _, exists := cfg.Repos[name]; exists {
+		return fmt.Errorf(
+			"%w %q (path: %s). use --name/-n to specify a unique name",
+			errRepoExists,
+			name,
+			cfg.Repos[name].Path,
+		)
+	}
+
+	cfg.AddRepo(name, config.Repo{Path: abs})
+
+	if group != "" {
+		cfg.AddRepoToGroup(name, group)
+	}
+
+	ui.Success("added %s as %q", abs, name)
+
+	return nil
 }
 
 func repoRemoveCmd(cfgPath *string) *cli.Command {
@@ -365,14 +388,14 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 			}
 
 			for _, repo := range group.Repos {
-				ui.Outf(repo)
+				ui.Out(repo)
 			}
 
 			return nil
 		}
 
 		if len(cfg.Groups) == 0 {
-			ui.Outf("no groups defined")
+			ui.Out("no groups defined")
 
 			return nil
 		}
@@ -383,8 +406,8 @@ func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command)
 
 func renderGroupTable(cfg config.Config) error {
 	for name, group := range cfg.Groups {
-		ui.Outf(displayGroup(name))
-		ui.Outf("  " + strings.Join(group.Repos, ", "))
+		ui.Out(displayGroup(name))
+		ui.Out("  " + strings.Join(group.Repos, ", "))
 	}
 
 	return nil

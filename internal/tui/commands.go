@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,6 +11,24 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 )
+
+var errEmptyCommand = errors.New("empty command")
+
+// Cmd closures returned below must not touch the model: Bubble Tea runs
+// them on their own goroutines, concurrently with Update and View. They
+// only read from a captured channel and return messages; all model
+// mutation happens in Update handlers.
+
+func waitForStatus(ch <-chan runner.StatusResult) tea.Cmd {
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return statusDoneMsg{}
+		}
+
+		return statusUpdateMsg{result: res}
+	}
+}
 
 func loadStatusesCmd(m *model) tea.Cmd {
 	names := m.filteredRepos()
@@ -21,19 +40,10 @@ func loadStatusesCmd(m *model) tea.Cmd {
 		m.ctx,
 		m.cfg.Repos,
 		names,
-		int64(m.cfg.Settings.Concurrency),
+		m.cfg.Settings.Concurrency,
 	)
 
-	return func() tea.Msg {
-		res, ok := <-m.statusCh
-		if !ok {
-			m.statusCh = nil
-
-			return statusDoneMsg{}
-		}
-
-		return statusUpdateMsg{result: res}
-	}
+	return waitForStatus(m.statusCh)
 }
 
 func streamNextStatusCmd(m *model) tea.Cmd {
@@ -41,16 +51,7 @@ func streamNextStatusCmd(m *model) tea.Cmd {
 		return nil
 	}
 
-	return func() tea.Msg {
-		res, ok := <-m.statusCh
-		if !ok {
-			m.statusCh = nil
-
-			return statusDoneMsg{}
-		}
-
-		return statusUpdateMsg{result: res}
-	}
+	return waitForStatus(m.statusCh)
 }
 
 func startExec(
@@ -58,10 +59,15 @@ func startExec(
 	repos map[string]config.Repo,
 	selected []string,
 	prefix, cmdStr string,
-	concurrency int64,
+	concurrency int,
 ) (<-chan runner.Result, error) {
 	if prefix == "" {
-		return runner.VCSSubcmd(ctx, repos, selected, cmdStr, concurrency), nil
+		op, extra, err := splitSubcmd(cmdStr)
+		if err != nil {
+			return nil, err
+		}
+
+		return runner.VCSSubcmd(ctx, repos, selected, op, extra, concurrency), nil
 	}
 
 	if _, err := backend.ByName(prefix); err == nil {
@@ -81,6 +87,32 @@ func startExec(
 	return runner.Shell(ctx, repos, selected, cmdStr, concurrency), nil
 }
 
+// splitSubcmd tokenizes a per-repo VCS command into the subcommand and its
+// extra args, so "pull --rebase" runs as the backend's pull plus flags.
+func splitSubcmd(cmdStr string) (string, []string, error) {
+	tokens, err := shlex.Split(cmdStr)
+	if err != nil {
+		return "", nil, fmt.Errorf("parse command: %w", err)
+	}
+
+	if len(tokens) == 0 {
+		return "", nil, errEmptyCommand
+	}
+
+	return tokens[0], tokens[1:], nil
+}
+
+func waitForResult(ch <-chan runner.Result) tea.Cmd {
+	return func() tea.Msg {
+		res, ok := <-ch
+		if !ok {
+			return execDoneMsg{}
+		}
+
+		return execResultMsg{result: execResult{name: res.RepoName, result: res}}
+	}
+}
+
 // execCmd starts execution with the given prefix and command string.
 // The prefix determines the runner: "git"/"jj" → runner.Dispatch with args,
 // "" → runner.VCSSubcmd (VCS subcommands), anything else → runner.Shell.
@@ -92,38 +124,23 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.execCancel = cancel
-	m.executing = true
 	m.execTotal = len(selected)
 	m.execResults = nil
 
-	concurrency := int64(m.cfg.Settings.Concurrency)
-	if concurrency < 1 {
-		concurrency = 8
+	concurrency := m.cfg.Settings.Concurrency
+
+	resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
+	if err != nil {
+		m.executing = false
+		m.resultsCh = nil
+
+		return func() tea.Msg { return execResultMsg{err: err} }
 	}
 
-	return func() tea.Msg {
-		resultsCh, err := startExec(ctx, m.cfg.Repos, selected, prefix, cmdStr, concurrency)
-		if err != nil {
-			m.executing = false
+	m.executing = true
+	m.resultsCh = resultsCh
 
-			return execResultMsg{err: err, done: true}
-		}
-
-		m.resultsCh = resultsCh
-
-		res, ok := <-resultsCh
-		if !ok {
-			m.executing = false
-			m.resultsCh = nil
-
-			return execDoneMsg{}
-		}
-
-		execRes := execResult{name: res.RepoName, result: res}
-		m.execResults = append(m.execResults, execRes)
-
-		return execResultMsg{result: execRes}
-	}
+	return waitForResult(resultsCh)
 }
 
 func streamNextResult(m *model) tea.Cmd {
@@ -131,18 +148,5 @@ func streamNextResult(m *model) tea.Cmd {
 		return nil
 	}
 
-	return func() tea.Msg {
-		res, ok := <-m.resultsCh
-		if !ok {
-			m.resultsCh = nil
-			m.executing = false
-
-			return execDoneMsg{results: m.execResults}
-		}
-
-		execRes := execResult{name: res.RepoName, result: res}
-		m.execResults = append(m.execResults, execRes)
-
-		return execResultMsg{result: execRes}
-	}
+	return waitForResult(m.resultsCh)
 }

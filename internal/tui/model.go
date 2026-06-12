@@ -117,6 +117,8 @@ const (
 )
 
 // binding describes a single key binding in the main screen.
+// Whether a command refreshes repo statuses afterwards is decided by its
+// handler (the sideEffect argument to shortcutCmd), not declared here.
 type binding struct {
 	key        string
 	displayKey string // human-readable for header/footer; empty = use key
@@ -124,7 +126,6 @@ type binding struct {
 	label      string
 	desc       string
 	hrd        bool // true → header (hrd-level), false → footer (repo-level)
-	sideEffect bool // true → auto-refresh repos after execution
 	section    string
 	order      int
 }
@@ -148,6 +149,13 @@ type model struct {
 	mode        mode
 	groupFilter string
 
+	// nameFilter narrows the visible repos by fuzzy name match; session
+	// only, not persisted. filterOpen is true while the "/" input is
+	// focused.
+	nameFilter  string
+	filterOpen  bool
+	filterInput textinput.Model
+
 	selectSaved map[string]bool
 
 	repoOrder []string
@@ -155,6 +163,7 @@ type model struct {
 	loading  bool
 	spinner  spinner.Model
 	statuses map[string]runner.StatusResult
+	vcsCache map[string]string
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -239,6 +248,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithStyle(ui.MutedStyle()),
 		),
 		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
+		vcsCache:    make(map[string]string, len(cfg.Repos)),
 		repoOrder:   repoOrder,
 		selected:    selected,
 		groupFilter: groupFilter,
@@ -251,6 +261,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	m.initTable()
 	m.updateTableRows()
 	m.initInput()
+	m.initFilterInput()
 	m.initOutput()
 	m.initHelpViewport()
 	m.initHistoryList()
@@ -309,6 +320,32 @@ func (m *model) initInput() {
 	ti.CharLimit = 512
 	ti.SetWidth(initInputW) // adjusted on resize
 	m.input = ti
+}
+
+func (m *model) initFilterInput() {
+	ti := textinput.New()
+	ti.Placeholder = "filter repos by name..."
+	ti.CharLimit = 128
+	ti.SetWidth(initInputW) // adjusted on resize
+	m.filterInput = ti
+}
+
+// openNameFilter focuses the "/" name-filter input, pre-filled with the
+// current filter so it can be refined.
+func (m *model) openNameFilter() {
+	m.filterOpen = true
+	m.filterInput.SetValue(m.nameFilter)
+	m.filterInput.Focus()
+	m.filterInput.SetWidth(m.inputWidth())
+}
+
+// clearNameFilter drops the name filter and closes its input.
+func (m *model) clearNameFilter() {
+	m.filterOpen = false
+	m.nameFilter = ""
+	m.filterInput.SetValue("")
+	m.filterInput.Blur()
+	m.updateTableRows()
 }
 
 func (m *model) initOutput() {
@@ -393,7 +430,7 @@ func (m *model) contentHeight() int {
 	h -= layoutFooterH // footer
 
 	h -= layoutSepH // separator before footer
-	if m.commandOpen {
+	if m.commandOpen || m.filterOpen {
 		h -= inputLineH
 	}
 

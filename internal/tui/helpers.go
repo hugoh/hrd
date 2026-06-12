@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/sahilm/fuzzy"
 )
 
 var errUnknownGroup = errors.New("unknown group")
@@ -113,25 +114,46 @@ func (m *model) groupLabel() string {
 	return labelAll
 }
 
+// activeRepoOrder returns the repos in scope: the filtered group's repos
+// when a group filter is active, otherwise all repos, further narrowed by
+// the "/" name filter. Both repoOrder and group repo lists are kept sorted
+// at construction, so no sorting happens here — this runs several times
+// per render. An unknown filter (stale persisted state) falls back to all
+// repos.
 func (m *model) activeRepoOrder() []string {
-	var names []string
+	base := m.repoOrder
 
-	if m.groupFilter == "" {
-		names = m.allReposFallback()
-	} else if g, ok := m.cfg.Groups[m.groupFilter]; ok {
-		names = g.Repos
-	} else {
-		m.groupFilter = ""
-		names = m.allReposFallback()
+	if m.groupFilter != "" {
+		if g, ok := m.cfg.Groups[m.groupFilter]; ok {
+			base = g.Repos
+		}
 	}
 
-	slices.Sort(names)
+	if m.nameFilter == "" {
+		return base
+	}
 
-	return names
+	return fuzzyFilter(base, m.nameFilter)
 }
 
-func (m *model) allReposFallback() []string {
-	return m.repoOrder
+// fuzzyFilter returns the names fuzzy-matching pattern, preserving the
+// input order rather than match-score order so the table stays stable
+// while typing.
+func fuzzyFilter(names []string, pattern string) []string {
+	matched := make(map[int]struct{})
+	for _, match := range fuzzy.Find(pattern, names) {
+		matched[match.Index] = struct{}{}
+	}
+
+	out := make([]string, 0, len(matched))
+
+	for i, name := range names {
+		if _, ok := matched[i]; ok {
+			out = append(out, name)
+		}
+	}
+
+	return out
 }
 
 func (m *model) filteredRepos() []string {

@@ -66,6 +66,10 @@ go build -o hrd .
 hrd repo add ~/dev/myproject ~/dev/infra
 hrd repo add -n dotfiles ~/.local/share/chezmoi
 
+# Or discover everything under a directory at once
+hrd repo scan ~/dev
+hrd repo scan -g work ~/work     # ...and group what it finds
+
 # Start the TUI
 hrd
 
@@ -120,9 +124,10 @@ Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
 - Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`.
+- Type-to-filter with `/` — fuzzy-match repos by name as you type; `Enter` keeps the filter, `Esc` clears it.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.
-- Shortcuts: `S` (status), `l` (log), `d` (diff), `f` (fetch), `p` (pull), `P` (push), `@` (group picker), `q` or `Esc` (quit).
+- Shortcuts: `S` (status), `l` (log), `d` (diff), `f` (fetch), `p` (pull), `P` (push), `@` (group picker), `/` (name filter), `q` or `Esc` (quit).
 
 The TUI mirrors the CLI: the same backends, the same parallel execution, the same status parsing — just in an interactive, always-on view.
 
@@ -141,7 +146,8 @@ VERSION:
 COMMANDS:
    repo        manage tracked repositories
    group       list repo groups
-   ls, ll      show status of repos
+   ls          show status of repos
+   ll          show status of repos with commit message and time
    status, st  show detailed status for repos (git status or jj status)
    diff        show diff for repos (git diff or jj diff)
    log         show log for repos (git log or jj log)
@@ -161,6 +167,83 @@ GLOBAL OPTIONS:
    --version, -v               print the version
 ```
 
+### Scoping and `--`
+
+The `git`, `jj`, and `shell` commands take an optional repo/group scope
+followed by the command to run. Everything after `--` is passed to the
+subprocess verbatim — repo names in the command are never reinterpreted as
+scope:
+
+```sh
+hrd git myrepo @work -- log --oneline -5
+hrd shell -- grep -r TODO .
+```
+
+Without `--`, the leading args that match repo or group names form the
+scope and the first non-matching arg starts the command (`hrd git myrepo
+log` works, but flags like `--oneline` need the `--` form).
+
+### Repo discovery
+
+`hrd repo scan <dir>...` walks each directory (default depth 5, tune with
+`--depth`) and tracks every git/jj repo it finds. Detected repos are not
+descended into, so vendored or nested checkouts stay untracked; hidden
+directories are skipped. `--dry-run` previews without saving, `--group`
+assigns everything found to a group. Name collisions fall back to
+`<parent>-<dir>`; already-tracked paths are left alone, so re-scanning is
+safe.
+
+### Status filters
+
+`ls`, `ll`, the VCS subcommands (`status`, `diff`, `log`, `fetch`, `pull`,
+`push`), `shell`, `git`, and `jj` accept status filters that narrow the
+scope to repos in a given state (multiple flags are a union):
+
+```sh
+hrd push --ahead          # push only repos with unpushed commits
+hrd pull --behind @work   # pull only the work repos that are behind
+hrd ls --dirty --names    # script-friendly list of dirty repos
+hrd shell --dirty -- git stash list
+```
+
+| Flag       | Matches repos that…                                |
+| ---------- | -------------------------------------------------- |
+| `--dirty`  | have uncommitted changes in the working copy       |
+| `--ahead`  | are ahead of their remote, or have local-only work |
+| `--behind` | are behind their remote                            |
+
+### Aliases
+
+Define your own commands in the config and they become first-class
+subcommands — with repo/group scoping, `-r`, `--interactive`, status
+filters, and shell completion, and listed under `hrd --help`:
+
+```toml
+[aliases]
+sync = "pull --rebase"
+mkclean = "!make clean"
+```
+
+```sh
+hrd sync @work          # git pull --rebase / jj git pull, per backend
+hrd mkclean --dirty     # make clean, only in dirty repos
+hrd sync -- --autostash # extra args append to the expansion
+```
+
+The first word decides the routing: `git`/`jj` pins a backend, `!` (or
+`sh`) runs a shell command, anything else routes through each repo's own
+backend like the built-in subcommands. The TUI command bar completes and
+expands the same aliases. Aliases that would shadow a built-in command are
+ignored with a warning.
+
+### Exit codes
+
+| Code | Meaning                                         |
+| ---- | ----------------------------------------------- |
+| 0    | All repos succeeded                             |
+| 1    | The command ran but failed in at least one repo |
+| 2    | Usage or config error (unknown repo, bad flags) |
+
 ## Configuration
 
 Config lives at `~/.config/hrd/config.toml` (respects `$XDG_CONFIG_HOME`).
@@ -179,6 +262,11 @@ groups = ["work"]
 
 [settings]
 concurrency = 8
+
+[aliases]
+sync = "pull --rebase" # per-repo routing (git pull / jj git pull)
+gpf = "git push --force-with-lease" # always that backend
+mkclean = "!make clean" # "!" or "sh " prefix = shell command
 ```
 
 **Note**: Groups are derived from the `groups` field on each repo. Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.

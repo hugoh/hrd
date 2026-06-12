@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -391,6 +392,14 @@ func TestBackend_Run(t *testing.T) {
 	res, err := b.Run(t.Context(), dir, []string{"rev-parse", "HEAD"}, false)
 	require.NoError(t, err)
 	assert.NotEmpty(t, res.Output)
+}
+
+func TestBackend_Run_NoArgs(t *testing.T) {
+	dir := t.TempDir()
+
+	b := &Backend{}
+	_, err := b.Run(t.Context(), dir, nil, false)
+	assert.ErrorIs(t, err, backend.ErrNoArgs)
 }
 
 func TestBackend_Run_NonZeroExit(t *testing.T) {

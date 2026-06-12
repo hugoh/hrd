@@ -7,28 +7,44 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"runtime"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 )
+
+// ShellCommand returns the system shell binary and its command flag:
+// `/bin/sh -c` on POSIX, `%COMSPEC% /c` on Windows.
+func ShellCommand() (string, string) {
+	if runtime.GOOS == "windows" {
+		if comspec := os.Getenv("COMSPEC"); comspec != "" {
+			return comspec, "/c"
+		}
+
+		return "cmd.exe", "/c"
+	}
+
+	return "/bin/sh", "-c"
+}
 
 var errRepoNotFound = errors.New("repo not found")
 
-// forEachRepo calls fn concurrently for each repo, limiting parallelism with a
-// semaphore. When a repo name isn't found in the map, fn is called synchronously
-// with an empty Repo (so it can report the not-found error via its own channel).
+// forEachRepo calls fn concurrently for each repo, limiting parallelism via
+// errgroup.SetLimit. When a repo name isn't found in the map, fn is called
+// synchronously with an empty Repo (so it can report the not-found error via
+// its own channel).
 func forEachRepo(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 	workFn func(ctx context.Context, repo config.Repo, name string) error,
 ) error {
-	sem := semaphore.NewWeighted(concurrency)
 	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(concurrency)
 
 	for _, name := range names {
 		repo, ok := repos[name]
@@ -42,12 +58,6 @@ func forEachRepo(
 		}
 
 		group.Go(func() error {
-			if err := sem.Acquire(ctx, 1); err != nil {
-				return fmt.Errorf("acquiring semaphore: %w", err)
-			}
-
-			defer sem.Release(1)
-
 			return workFn(ctx, repo, name)
 		})
 	}
@@ -69,11 +79,11 @@ type Result struct {
 	Err      error
 }
 
-func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
+func resultFrom(name, path, vcs, output string, runErr error) Result {
 	if ec, ok := backend.ExtractExitCode(runErr); ok {
 		return Result{
 			RepoName: name, RepoPath: path, VCS: vcs,
-			Output: buf.String(), ExitCode: ec,
+			Output: output, ExitCode: ec,
 		}
 	}
 
@@ -83,7 +93,7 @@ func resultFrom(name, path, vcs string, buf bytes.Buffer, runErr error) Result {
 
 	return Result{
 		RepoName: name, RepoPath: path, VCS: vcs,
-		Output: buf.String(), ExitCode: 0,
+		Output: output, ExitCode: 0,
 	}
 }
 
@@ -101,7 +111,7 @@ func forEachRepoChan[T any](
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 	taskFn func(context.Context, config.Repo, string, chan<- T) error,
 	errResult func(string) T,
 ) <-chan T {
@@ -110,9 +120,8 @@ func forEachRepoChan[T any](
 	go func() {
 		defer close(results)
 
-		// forEachRepo returns an errgroup error (context cancellation from
-		// sem.Acquire). Individual repo results carry their own errors on
-		// the channel already, so there's no caller to notify here.
+		// Individual repo results carry their own errors on the
+		// channel already, so there's no caller to notify here.
 		_ = forEachRepo(ctx, repos, names, concurrency,
 			func(ctx context.Context, repo config.Repo, name string) error {
 				if repo.Path == "" {
@@ -139,7 +148,7 @@ func Dispatch(
 	names []string,
 	backendName string,
 	args []string,
-	concurrency int64,
+	concurrency int,
 ) (<-chan Result, error) {
 	bck, err := backend.ByName(backendName)
 	if err != nil {
@@ -167,12 +176,14 @@ func Dispatch(
 // VCSSubcmd runs a VCS subcommand (status, diff, log, fetch, push, pull, etc.)
 // across repos, resolving backend-specific arg prefixes automatically.
 // For example, "fetch" becomes ["fetch"] for git but ["git", "fetch"] for jj.
+// extraArgs (may be nil) are appended after the resolved subcommand args.
 func VCSSubcmd(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
 	op string,
-	concurrency int64,
+	extraArgs []string,
+	concurrency int,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
@@ -183,7 +194,7 @@ func VCSSubcmd(
 				return nil
 			}
 
-			args := bck.SubcommandArgs(op)
+			args := append(bck.SubcommandArgs(op), extraArgs...)
 
 			res, runErr := bck.Run(ctx, repo.Path, args, false)
 			results <- Result{
@@ -207,19 +218,22 @@ func Shell(
 	repos map[string]config.Repo,
 	names []string,
 	shellCmd string,
-	concurrency int64,
+	concurrency int,
 ) <-chan Result {
 	return forEachRepoChan(ctx, repos, names, concurrency,
 		func(ctx context.Context, repo config.Repo, name string, results chan<- Result) error {
 			var buf bytes.Buffer
 
+			bin, flag := ShellCommand()
+
 			//nolint:gosec // intentional: user shell commands
-			cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
+			cmd := exec.CommandContext(ctx, bin, flag, shellCmd)
 			cmd.Dir = repo.Path
 			cmd.Stdout = &buf
 			cmd.Stderr = &buf
 
-			results <- resultFrom(name, repo.Path, repo.ActiveBackend(), buf, cmd.Run())
+			runErr := cmd.Run()
+			results <- resultFrom(name, repo.Path, repo.ActiveBackend(), buf.String(), runErr)
 
 			return nil
 		},
@@ -242,7 +256,7 @@ func GatherStatus(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 ) <-chan StatusResult {
 	return forEachRepoChan(
 		ctx,

@@ -10,7 +10,7 @@ import (
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/cmdspec"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
@@ -24,9 +24,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
+	default:
+		return m.handleAsyncMsg(msg)
+	}
+}
+
+// handleAsyncMsg dispatches messages produced by Cmd goroutines
+// (status/exec streaming, spinner ticks, completion loads).
+func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
 	case statusUpdateMsg:
 		return m.handleStatusUpdate(msg)
-
 	case statusDoneMsg:
 		return m.handleStatusDone()
 	case spinner.TickMsg:
@@ -35,8 +43,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExecResult(msg)
 	case execDoneMsg:
 		return m.handleExecDone(msg)
-	case errMsg:
-		return m, nil
+	case vcsCompletionsMsg:
+		return m.handleVCSCompletions(msg)
 	}
 
 	return m, nil
@@ -58,6 +66,7 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.groupList.SetWidth(m.width)
 	m.groupList.SetHeight(m.contentHeight())
 	m.input.SetWidth(m.inputWidth())
+	m.filterInput.SetWidth(m.inputWidth())
 
 	const (
 		statusWPad = 6
@@ -94,6 +103,10 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleInputKey(msg)
 	}
 
+	if m.filterOpen {
+		return m.handleFilterKey(msg)
+	}
+
 	if m.groupNewInput {
 		return m.handleGroupNewInput(msg)
 	}
@@ -122,9 +135,40 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleFilterKey edits the "/" name filter: every keystroke re-filters
+// live, enter confirms (filter stays active), esc clears and closes.
+func (m *model) handleFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case keyEnter:
+		m.filterOpen = false
+		m.filterInput.Blur()
+
+		return m, nil
+	case keyEsc:
+		m.clearNameFilter()
+
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	m.nameFilter = strings.TrimSpace(m.filterInput.Value())
+	m.updateTableRows()
+
+	return m, cmd
+}
+
 func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	if m.groupNewInput {
 		m.groupNewInput = false
+
+		return m, nil
+	}
+
+	// A confirmed name filter is cleared by esc on the main screen.
+	if m.screen == screenMain && m.nameFilter != "" && m.mode == modeNormal {
+		m.clearNameFilter()
 
 		return m, nil
 	}
@@ -249,6 +293,7 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	m.execResults = append(m.execResults, msg.result)
 	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
 
 	return m, streamNextResult(m)
@@ -264,6 +309,23 @@ func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 		m.loading = true
 
 		return m, loadStatusesCmd(m)
+	}
+
+	return m, nil
+}
+
+func (m *model) handleVCSCompletions(msg vcsCompletionsMsg) (tea.Model, tea.Cmd) {
+	if m.vcsCompletions == nil {
+		m.vcsCompletions = make(map[string][]string)
+	}
+
+	m.vcsCompletions[msg.name] = msg.cmds
+
+	// Refresh suggestions if the user is still typing a matching command.
+	if m.commandOpen {
+		cmd := m.updateCompletions()
+
+		return m, cmd
 	}
 
 	return m, nil
@@ -291,18 +353,7 @@ func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
 }
 
 func parseUnifiedCmd(input string) (string, string) {
-	if strings.HasPrefix(input, "!") {
-		return "sh", strings.TrimSpace(input[1:])
-	}
-
-	for _, name := range backend.Names() {
-		prefix := name + " "
-		if strings.HasPrefix(input, prefix) {
-			return name, strings.TrimSpace(input[len(prefix):])
-		}
-	}
-
-	return "", input
+	return cmdspec.Parse(input)
 }
 
 func (m *model) pushSelectionHistory() {
@@ -371,14 +422,35 @@ func (m *model) updateTableRows() {
 			}
 		}
 
-		vcs := m.cfg.Repos[name].ActiveBackend()
 		statusStr := m.formatStatusLine(name)
-		rows = append(rows, table.Row{chk, name, vcs, statusStr})
+		rows = append(rows, table.Row{chk, name, m.repoVCS(name), statusStr})
 	}
 
 	m.cursor = max(0, min(m.cursor, len(rows)-1))
 	m.repoTable.SetRows(rows)
 	m.repoTable.SetCursor(m.cursor)
+}
+
+// repoVCS returns the backend name for a repo without re-running
+// filesystem detection on every table redraw. Fresh status results win;
+// otherwise the detection result is cached for the session.
+func (m *model) repoVCS(name string) string {
+	if sr, ok := m.statuses[name]; ok && sr.VCS != "" {
+		return sr.VCS
+	}
+
+	if v, ok := m.vcsCache[name]; ok {
+		return v
+	}
+
+	if m.vcsCache == nil {
+		m.vcsCache = make(map[string]string)
+	}
+
+	v := m.cfg.Repos[name].ActiveBackend()
+	m.vcsCache[name] = v
+
+	return v
 }
 
 func (m *model) formatStatusLine(name string) string {

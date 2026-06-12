@@ -183,10 +183,12 @@ func (*Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	if len(args) > 0 {
-		if steps, ok := multiStepOps[args[0]]; ok {
-			return runSteps(ctx, path, args[0], steps, interactive)
-		}
+	if len(args) == 0 {
+		return backend.RunResult{}, backend.ErrNoArgs
+	}
+
+	if steps, ok := multiStepOps[args[0]]; ok {
+		return runSteps(ctx, path, args[0], steps, interactive)
 	}
 
 	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
@@ -301,26 +303,31 @@ func (b *Backend) fillCommitMsgFromAncestors(
 	}
 }
 
-// runSteps executes each step sequentially, returning on the first non-zero
-// exit or infrastructure error.
+// runSteps executes each step sequentially, stopping on the first non-zero
+// exit or infrastructure error. Output from all executed steps is
+// accumulated so the caller sees the full transcript, not just the last step.
 func runSteps(
 	ctx context.Context,
 	path, op string,
 	steps [][]string,
 	interactive bool,
 ) (backend.RunResult, error) {
+	var out strings.Builder
+
 	for _, step := range steps {
 		res, err := backend.RunCommand(ctx, "jj", path, step, interactive)
 		if err != nil {
 			return backend.RunResult{}, fmt.Errorf("jj %s: %w", op, err)
 		}
 
+		out.WriteString(res.Output)
+
 		if res.ExitCode != 0 {
-			return res, nil
+			return backend.RunResult{Output: out.String(), ExitCode: res.ExitCode}, nil
 		}
 	}
 
-	return backend.RunResult{}, nil
+	return backend.RunResult{Output: out.String()}, nil
 }
 
 func defaultRunJJ(ctx context.Context, path string, args []string) (string, error) {
@@ -526,6 +533,9 @@ func handleRemoteLine(current *backend.BookmarkStatus, line string) {
 		return
 	}
 
+	// jj reports ahead/behind from the remote bookmark's perspective:
+	// "ahead by N" means the remote is N ahead, i.e. local is N behind.
+	// The apparent swap below is intentional.
 	current.Ahead = extractCount(trimmed, "behind by")
 	current.Behind = extractCount(trimmed, "ahead by")
 	backend.ComputeBookmarkState(current)

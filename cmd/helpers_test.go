@@ -8,7 +8,10 @@ import (
 
 // newTestApp creates a CLI app with buffered writers for testing.
 func newTestApp() *cli.Command {
-	app := NewApp()
+	return bufferWriters(NewApp())
+}
+
+func bufferWriters(app *cli.Command) *cli.Command {
 	app.Writer = &bytes.Buffer{}
 	app.ErrWriter = &bytes.Buffer{}
 

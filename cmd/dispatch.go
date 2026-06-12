@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -28,8 +30,14 @@ var (
 	errUnknownScope       = errors.New("unknown repo or group")
 )
 
+// ErrReposFailed marks a run where the command executed but failed in at
+// least one repo. main maps it to exit code 1 (vs 2 for usage/config
+// errors) and must not re-print it: dispatchSummary already reported the
+// failures on stderr.
+var ErrReposFailed = errors.New("repos failed")
+
 //nolint:gochecknoglobals // CLI flag definitions are package-level by nature
-var dispatchFlags = []cli.Flag{
+var dispatchFlags = append([]cli.Flag{
 	&cli.StringSliceFlag{
 		Name:    cmdReposFlag,
 		Aliases: []string{"r"},
@@ -40,42 +48,46 @@ var dispatchFlags = []cli.Flag{
 		Aliases: []string{"i"},
 		Usage:   "run with a real terminal (sequential, one repo at a time)",
 	},
-}
+}, statusFilterFlags...)
 
-// loadAndResolve loads the config, resolves the CLI scope, and returns
-// both. It returns errNoReposMatched when no repos match.
-func loadAndResolve(cfgPath *string, cmd *cli.Command) (config.Config, []string, error) {
+// loadAndResolve loads the config and resolves the CLI scope (-r flag plus
+// positional args, all of which must be known repos or groups). Args after
+// a "--" separator are scope too for these commands — they take no
+// subprocess args. The loaded config is returned alongside
+// errNoReposMatched so callers can inspect it (e.g. for the ls onboarding
+// hint).
+func loadAndResolve(
+	cfgPath *string,
+	cmd *cli.Command,
+	dashTail []string,
+) (config.Config, []string, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return config.Config{}, nil, fmt.Errorf("dispatch: %w", err)
 	}
 
-	names, err := resolveScope(cmd, &cfg)
+	names, err := resolveScope(cmd, dashTail, &cfg)
 	if err != nil {
 		return config.Config{}, nil, err
 	}
 
 	if len(names) == 0 {
-		return config.Config{}, nil, errNoReposMatched
+		return cfg, nil, errNoReposMatched
 	}
 
 	return cfg, names, nil
 }
 
-func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
-	var names []string
+func resolveScope(cmd *cli.Command, dashTail []string, cfg *config.Config) ([]string, error) {
+	names := slices.Clone(cmd.StringSlice(cmdReposFlag))
 
-	names = append(names, cmd.StringSlice("repos")...)
-	for _, arg := range cmd.Args().Slice() {
-		if _, ok := cfg.Repos[arg]; ok {
-			names = append(names, arg)
-		} else if _, ok := cfg.Groups[arg]; ok {
-			names = append(names, arg)
-		} else if _, ok := cfg.Groups[stripGroupPrefix(arg)]; ok {
-			names = append(names, stripGroupPrefix(arg))
-		} else if strings.HasPrefix(arg, "@") {
+	for _, arg := range slices.Concat(cmd.Args().Slice(), dashTail) {
+		name, ok := scopeName(arg, cfg)
+		if !ok {
 			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
+
+		names = append(names, name)
 	}
 
 	names, err := cfg.ResolveScope(names)
@@ -86,37 +98,114 @@ func resolveScope(cmd *cli.Command, cfg *config.Config) ([]string, error) {
 	return names, nil
 }
 
-// cmdArgsFilter returns the subset of args that are not repo/group names.
-// It skips "--" separator.
-func cmdArgsFilter(
-	args []string,
-	repos map[string]config.Repo,
-	groups map[string]config.Group,
-) []string {
-	var filtered []string
+// scopeName reports whether arg names a known repo or group, returning the
+// canonical name (group "@" prefix stripped).
+func scopeName(arg string, cfg *config.Config) (string, bool) {
+	if _, ok := cfg.Repos[arg]; ok {
+		return arg, true
+	}
 
-	for _, arg := range args {
-		if arg == "--" {
-			continue
-		}
+	if _, ok := cfg.Groups[arg]; ok {
+		return arg, true
+	}
 
-		if _, ok := repos[arg]; !ok {
-			if _, ok := groups[arg]; !ok {
-				if _, ok := groups[stripGroupPrefix(arg)]; !ok {
-					filtered = append(filtered, arg)
-				}
-			}
+	if g := stripGroupPrefix(arg); g != arg {
+		if _, ok := cfg.Groups[g]; ok {
+			return g, true
 		}
 	}
 
-	return filtered
+	return "", false
 }
 
-func cmdArgs(cmd *cli.Command, cfg *config.Config) []string {
-	return cmdArgsFilter(cmd.Args().Slice(), cfg.Repos, cfg.Groups)
+// loadAndSplit loads the config and splits positional args into scope and
+// subprocess args for the commands that take trailing command args (git,
+// jj, shell). See splitScopeArgs for the split rules.
+func loadAndSplit(
+	cfgPath *string,
+	cmd *cli.Command,
+	dashTail []string,
+) (config.Config, []string, []string, error) {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, nil, nil, fmt.Errorf("dispatch: %w", err)
+	}
+
+	scope, cmdArgs, err := splitScopeArgs(cmd.Args().Slice(), dashTail, &cfg)
+	if err != nil {
+		return config.Config{}, nil, nil, err
+	}
+
+	names := slices.Concat(cmd.StringSlice(cmdReposFlag), scope)
+
+	resolved, err := cfg.ResolveScope(names)
+	if err != nil {
+		return config.Config{}, nil, nil, fmt.Errorf("resolving scope: %w", err)
+	}
+
+	if len(resolved) == 0 {
+		return cfg, nil, nil, errNoReposMatched
+	}
+
+	return cfg, resolved, cmdArgs, nil
 }
 
-func vcsCmd(cfgPath *string, name string) *cli.Command {
+// splitScopeArgs splits positional args into repo/group scope and
+// subprocess args. dashTail is the verbatim argv after "--" (nil when no
+// separator was given; see SplitDashTail). With a separator, every
+// positional must be a known repo or group and the tail passes through
+// untouched — repo names are never filtered out of the command. Without
+// one, the leading args that match repos/groups form the scope and the
+// first non-matching arg starts the subprocess args.
+func splitScopeArgs(args, dashTail []string, cfg *config.Config) ([]string, []string, error) {
+	var scope []string
+
+	for i, arg := range args {
+		if name, ok := scopeName(arg, cfg); ok {
+			scope = append(scope, name)
+
+			continue
+		}
+
+		if dashTail != nil || strings.HasPrefix(arg, "@") {
+			return nil, nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
+		}
+
+		return scope, args[i:], nil
+	}
+
+	return scope, dashTail, nil
+}
+
+var shSafeToken = regexp.MustCompile(`^[\w@%+=:,./~^-]+$`)
+
+// shQuote single-quotes a token for POSIX sh unless it is already safe.
+func shQuote(s string) string {
+	if shSafeToken.MatchString(s) {
+		return s
+	}
+
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// shellJoin reassembles tokenized args into a single `sh -c` command
+// string, quoting tokens so arg boundaries survive. A single arg (the
+// `hrd shell -- 'cmd ...'` form) passes through verbatim so shell syntax
+// like pipes and expansions keeps working.
+func shellJoin(args []string) string {
+	if len(args) == 1 {
+		return args[0]
+	}
+
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shQuote(a)
+	}
+
+	return strings.Join(quoted, " ")
+}
+
+func vcsCmd(cfgPath *string, name string, dashTail []string) *cli.Command {
 	return &cli.Command{
 		Name:            name,
 		Usage:           fmt.Sprintf("run a %s command across repos", name),
@@ -125,14 +214,15 @@ func vcsCmd(cfgPath *string, name string) *cli.Command {
 		Flags:           dispatchFlags,
 		ShellComplete:   repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runDispatch(ctx, cmd, cfgPath, name)
+			return runDispatch(ctx, cmd, cfgPath, name, dashTail)
 		},
 	}
 }
 
-func statusCmd(cfgPath *string) *cli.Command {
+func statusCmd(cfgPath *string, dashTail []string) *cli.Command {
 	cmd := vcsSubcmdCmd(
 		cfgPath,
+		dashTail,
 		"status",
 		"show detailed status for repos (git status or jj status)",
 	)
@@ -141,44 +231,47 @@ func statusCmd(cfgPath *string) *cli.Command {
 	return cmd
 }
 
-func diffCmd(cfgPath *string) *cli.Command {
-	return vcsSubcmdCmd(cfgPath, "diff", "show diff for repos (git diff or jj diff)")
+func diffCmd(cfgPath *string, dashTail []string) *cli.Command {
+	return vcsSubcmdCmd(cfgPath, dashTail, "diff", "show diff for repos (git diff or jj diff)")
 }
 
-func logCmd(cfgPath *string) *cli.Command {
-	return vcsSubcmdCmd(cfgPath, "log", "show log for repos (git log or jj log)")
+func logCmd(cfgPath *string, dashTail []string) *cli.Command {
+	return vcsSubcmdCmd(cfgPath, dashTail, "log", "show log for repos (git log or jj log)")
 }
 
-func fetchCmd(cfgPath *string) *cli.Command {
+func fetchCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
+		dashTail,
 		"fetch",
 		"fetch from remotes (git fetch or jj git fetch)",
 	)
 }
 
-func pushCmd(cfgPath *string) *cli.Command {
+func pushCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
+		dashTail,
 		"push",
 		"push to remotes (git push or jj git push)",
 	)
 }
 
-func pullCmd(cfgPath *string) *cli.Command {
+func pullCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
+		dashTail,
 		"pull",
 		"pull from remotes (git pull or jj git pull)",
 	)
 }
 
-func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
+func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage string) *cli.Command {
 	return &cli.Command{
 		Name:      subcmd,
 		Usage:     usage,
 		ArgsUsage: "[repo|group...]",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    cmdReposFlag,
 				Aliases: []string{"r"},
@@ -189,16 +282,21 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 				Aliases: []string{"i"},
 				Usage:   "run with a real terminal (sequential, one repo at a time)",
 			},
-		},
+		}, statusFilterFlags...),
 		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, names, err := loadAndResolve(cfgPath, cmd)
+			cfg, names, err := loadAndResolve(cfgPath, cmd, dashTail)
 			if err != nil {
 				return err
 			}
 
+			names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+			if len(names) == 0 {
+				return nil
+			}
+
 			if cmd.Bool("interactive") {
-				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd)
+				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd, nil)
 			}
 
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
@@ -207,7 +305,8 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 					cfg.Repos,
 					names,
 					subcmd,
-					int64(cfg.Settings.Concurrency),
+					nil,
+					cfg.Settings.Concurrency,
 				)
 				for res := range ch {
 					resultCh <- res
@@ -217,7 +316,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cli.Command {
 	}
 }
 
-func shellCmd(cfgPath *string) *cli.Command {
+func shellCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return &cli.Command{
 		Name:          cmdNameShell,
 		Usage:         "run an arbitrary shell command across repos",
@@ -225,28 +324,45 @@ func shellCmd(cfgPath *string) *cli.Command {
 		Flags:         dispatchFlags,
 		ShellComplete: repoGroupCompleter(cfgPath),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return shellCmdAction(ctx, cmd, cfgPath)
+			return shellCmdAction(ctx, cmd, cfgPath, dashTail)
 		},
 	}
 }
 
-func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) error {
-	cfg, names, err := loadAndResolve(cfgPath, cmd)
+func shellCmdAction(
+	ctx context.Context,
+	cmd *cli.Command,
+	cfgPath *string,
+	dashTail []string,
+) error {
+	cfg, names, shellArgs, err := loadAndSplit(cfgPath, cmd, dashTail)
 	if err != nil {
 		return err
 	}
 
-	shellArgs := cmdArgs(cmd, &cfg)
 	if len(shellArgs) == 0 {
 		return errNoShellCommand
 	}
 
-	shellCmdStr := strings.Join(shellArgs, " ")
-
-	if cmd.Bool("interactive") {
-		runShellInteractive(ctx, cfg.Repos, names, shellCmdStr)
-
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	if len(names) == 0 {
 		return nil
+	}
+
+	return runShell(ctx, &cfg, names, shellJoin(shellArgs), cmd.Bool("interactive"))
+}
+
+// runShell dispatches a shell command string across names, sequentially
+// with a TTY when interactive, in parallel otherwise.
+func runShell(
+	ctx context.Context,
+	cfg *config.Config,
+	names []string,
+	shellCmdStr string,
+	interactive bool,
+) error {
+	if interactive {
+		return runShellInteractive(ctx, cfg.Repos, names, shellCmdStr)
 	}
 
 	return dispatch(
@@ -258,7 +374,7 @@ func shellCmdAction(ctx context.Context, cmd *cli.Command, cfgPath *string) erro
 				cfg.Repos,
 				names,
 				shellCmdStr,
-				int64(cfg.Settings.Concurrency),
+				cfg.Settings.Concurrency,
 			)
 			for res := range dispatchCh {
 				resultCh <- res
@@ -272,24 +388,25 @@ func runShellInteractive(
 	repos map[string]config.Repo,
 	names []string,
 	cmdStr string,
-) {
-	runInteractiveEach(
+) error {
+	bin, flag := runner.ShellCommand()
+
+	return runInteractiveEach(
 		ctx,
 		repos,
 		names,
 		func(ctx context.Context, _ string, repo config.Repo) error {
-			return runInteractive(ctx, repo.Path, "sh", []string{"-c", cmdStr})
+			return runInteractive(ctx, repo.Path, bin, []string{flag, cmdStr})
 		},
 	)
 }
 
-func lsCmd(cfgPath *string) *cli.Command {
+func lsCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return &cli.Command{
 		Name:      "ls",
-		Aliases:   []string{"ll"},
 		Usage:     "show status of repos",
 		ArgsUsage: "[repo|group...]",
-		Flags: []cli.Flag{
+		Flags: append([]cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "repos",
 				Aliases: []string{"r"},
@@ -310,22 +427,32 @@ func lsCmd(cfgPath *string) *cli.Command {
 				Aliases: []string{"d"},
 				Usage:   "show repo dirs only, one per line",
 			},
-		},
+		}, statusFilterFlags...),
 		ShellComplete: repoGroupCompleter(cfgPath),
-		Action:        lsAction(cfgPath),
+		Action:        lsAction(cfgPath, dashTail, false),
 	}
+}
+
+// llCmd is lsCmd with the message column always on.
+func llCmd(cfgPath *string, dashTail []string) *cli.Command {
+	cmd := lsCmd(cfgPath, dashTail)
+	cmd.Name = "ll"
+	cmd.Usage = "show status of repos with commit message and time"
+	cmd.Action = lsAction(cfgPath, dashTail, true)
+
+	return cmd
 }
 
 func lsNamesOnly(names []string) {
 	for _, n := range names {
-		ui.Outf(n)
+		ui.Out(n)
 	}
 }
 
 func lsDirsOnly(repos map[string]config.Repo, names []string) {
 	for _, n := range names {
 		if repo, ok := repos[n]; ok {
-			ui.Outf(repo.Path)
+			ui.Out(repo.Path)
 		}
 	}
 }
@@ -334,7 +461,7 @@ func lsGatherCallback(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
-	concurrency int64,
+	concurrency int,
 ) func(chan<- runner.StatusResult) {
 	return func(resultCh chan<- runner.StatusResult) {
 		statusCh := runner.GatherStatus(
@@ -349,15 +476,30 @@ func lsGatherCallback(
 	}
 }
 
-func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
+func lsAction(
+	cfgPath *string,
+	dashTail []string,
+	forceMessage bool,
+) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
-		cfg, names, err := loadAndResolve(cfgPath, cmd)
+		cfg, names, err := loadAndResolve(cfgPath, cmd, dashTail)
 		if errors.Is(err, errNoReposMatched) {
+			if len(cfg.Repos) == 0 {
+				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)
+			} else {
+				ui.Warnf("no repos matched")
+			}
+
 			return nil
 		}
 
 		if err != nil {
 			return err
+		}
+
+		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names)
+		if len(names) == 0 {
+			return nil
 		}
 
 		switch {
@@ -376,18 +518,27 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 			vcsByName[n] = cfg.Repos[n].ActiveBackend()
 		}
 
-		// ll alias implies -m (message)
-		message := cmd.Bool("message")
-		if cmd.Name == "ll" || cmd.Root().Args().First() == "ll" {
-			message = true
+		message := forceMessage || cmd.Bool("message")
+
+		gather := lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
+		if statuses != nil {
+			gather = replayGather(names, statuses)
 		}
 
-		return gatherStatus(
-			names,
-			vcsByName,
-			message,
-			lsGatherCallback(ctx, cfg.Repos, names, int64(cfg.Settings.Concurrency)),
-		)
+		return gatherStatus(names, vcsByName, message, gather)
+	}
+}
+
+// replayGather feeds pre-gathered statuses (from the status filter) into
+// the rendering pipeline instead of hitting the repos a second time.
+func replayGather(
+	names []string,
+	statuses map[string]runner.StatusResult,
+) func(chan<- runner.StatusResult) {
+	return func(resultCh chan<- runner.StatusResult) {
+		for _, n := range names {
+			resultCh <- statuses[n]
+		}
 	}
 }
 
@@ -411,15 +562,25 @@ func filterMatching(names []string, repos map[string]config.Repo, backendName st
 	return out
 }
 
-func runDispatch(ctx context.Context, cmd *cli.Command, cfgPath *string, backendName string) error {
-	cfg, names, err := loadAndResolve(cfgPath, cmd)
+func runDispatch(
+	ctx context.Context,
+	cmd *cli.Command,
+	cfgPath *string,
+	backendName string,
+	dashTail []string,
+) error {
+	cfg, names, cmdArgs, err := loadAndSplit(cfgPath, cmd, dashTail)
 	if err != nil {
 		return err
 	}
 
-	cmdArgs := cmdArgs(cmd, &cfg)
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
+	}
+
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	if len(names) == 0 {
+		return nil
 	}
 
 	if cmd.Bool("interactive") {
@@ -441,7 +602,7 @@ func runInteractiveEach(
 	repos map[string]config.Repo,
 	names []string,
 	fn func(context.Context, string, config.Repo) error,
-) {
+) error {
 	var failed []string
 
 	for _, name := range names {
@@ -453,27 +614,36 @@ func runInteractiveEach(
 		}
 	}
 
-	dispatchSummary(len(names), failed)
+	return dispatchSummary(len(names), failed)
 }
 
-func dispatchSummary(total int, failed []string) {
+// dispatchSummary prints the success/failure summary and returns
+// ErrReposFailed when any repo failed, so callers can surface a non-zero
+// exit code.
+func dispatchSummary(total int, failed []string) error {
 	if len(failed) > 0 {
 		ui.Fail("%s", ui.FormatSummary(total, failed))
-	} else {
-		ui.Success("%s", ui.FormatSummary(total, failed))
+
+		return fmt.Errorf("%w: %d/%d", ErrReposFailed, len(failed), total)
 	}
+
+	ui.Success("%s", ui.FormatSummary(total, failed))
+
+	return nil
 }
 
 // runSubcmdInteractive runs subcmd sequentially across repos with a real TTY.
 // Each repo uses its own active backend (git or jj), resolving arg prefixes
-// like "git fetch" for jj automatically.
+// like "git fetch" for jj automatically. extraArgs (may be nil) are appended
+// after the resolved subcommand args.
 func runSubcmdInteractive(
 	ctx context.Context,
 	repos map[string]config.Repo,
 	names []string,
 	subcmd string,
+	extraArgs []string,
 ) error {
-	runInteractiveEach(
+	return runInteractiveEach(
 		ctx,
 		repos,
 		names,
@@ -483,7 +653,9 @@ func runSubcmdInteractive(
 				return fmt.Errorf("checking backend: %w", err)
 			}
 
-			res, err := bck.Run(ctx, repo.Path, bck.SubcommandArgs(subcmd), true)
+			args := append(bck.SubcommandArgs(subcmd), extraArgs...)
+
+			res, err := bck.Run(ctx, repo.Path, args, true)
 			if err != nil {
 				return fmt.Errorf("%s %s: %w", bck.Name(), subcmd, err)
 			}
@@ -495,8 +667,6 @@ func runSubcmdInteractive(
 			return nil
 		},
 	)
-
-	return nil
 }
 
 func dispatchInteractive(
@@ -511,7 +681,7 @@ func dispatchInteractive(
 		return fmt.Errorf("%w %s", errNoReposWithBackend, backendName)
 	}
 
-	runInteractiveEach(
+	return runInteractiveEach(
 		ctx,
 		repos,
 		names,
@@ -519,8 +689,6 @@ func dispatchInteractive(
 			return runInteractive(ctx, repo.Path, backendName, cmdArgs)
 		},
 	)
-
-	return nil
 }
 
 func dispatchNonInteractive(
@@ -544,7 +712,7 @@ func dispatchNonInteractive(
 			names,
 			backendName,
 			cmdArgs,
-			int64(cfg.Settings.Concurrency),
+			cfg.Settings.Concurrency,
 		)
 		if err != nil {
 			return
@@ -561,7 +729,7 @@ func dispatch(
 	cmdLabel string,
 	dispatch func(resultCh chan<- runner.Result),
 ) error {
-	ui.Outf(cmdLabel)
+	ui.Out(cmdLabel)
 
 	resultCh := make(chan runner.Result, len(names))
 	go func() {
@@ -591,23 +759,21 @@ func dispatch(
 		}
 	}
 
-	dispatchSummary(len(names), errs)
-
-	return nil
+	return dispatchSummary(len(names), errs)
 }
 
 func printDispatchResult(res runner.Result) {
-	ui.Outf(ui.RenderDispatchResult(res))
+	ui.Out(ui.RenderDispatchResult(res))
 
 	if res.Err != nil {
 		ui.Errf("%s", res.Err)
 	} else if res.Output != "" {
 		for line := range strings.SplitSeq(strings.TrimRight(res.Output, "\n"), "\n") {
-			ui.Outf("  " + line)
+			ui.Out("  " + line)
 		}
 	}
 
-	ui.Outf("")
+	ui.Out("")
 }
 
 func gatherStatus(
@@ -645,7 +811,7 @@ func gatherStatus(
 		eff[colStatus] = widths[colStatus]
 	}
 
-	ui.Outf(ui.RenderHeader(header, eff))
+	ui.Out(ui.RenderHeader(header, eff))
 
 	results := make([]*runner.StatusResult, len(names))
 	next := 0
@@ -656,7 +822,7 @@ func gatherStatus(
 
 		for next < len(names) && results[next] != nil {
 			cells := statusRow(names[next], vcsByName[names[next]], results[next], details)
-			ui.Outf(ui.RenderRow(cells, eff))
+			ui.Out(ui.RenderRow(cells, eff))
 
 			next++
 		}
