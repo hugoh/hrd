@@ -293,7 +293,6 @@ func runShellInteractive(
 func lsCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
 		Name:      "ls",
-		Aliases:   []string{"ll"},
 		Usage:     "show status of repos",
 		ArgsUsage: "[repo|group...]",
 		Flags: []cli.Flag{
@@ -319,8 +318,18 @@ func lsCmd(cfgPath *string) *cli.Command {
 			},
 		},
 		ShellComplete: repoGroupCompleter(cfgPath),
-		Action:        lsAction(cfgPath),
+		Action:        lsAction(cfgPath, false),
 	}
+}
+
+// llCmd is lsCmd with the message column always on.
+func llCmd(cfgPath *string) *cli.Command {
+	cmd := lsCmd(cfgPath)
+	cmd.Name = "ll"
+	cmd.Usage = "show status of repos with commit message and time"
+	cmd.Action = lsAction(cfgPath, true)
+
+	return cmd
 }
 
 func lsNamesOnly(names []string) {
@@ -356,7 +365,7 @@ func lsGatherCallback(
 	}
 }
 
-func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
+func lsAction(cfgPath *string, forceMessage bool) func(context.Context, *cli.Command) error {
 	return func(ctx context.Context, cmd *cli.Command) error {
 		cfg, names, err := loadAndResolve(cfgPath, cmd, true)
 		if errors.Is(err, errNoReposMatched) {
@@ -383,11 +392,7 @@ func lsAction(cfgPath *string) func(context.Context, *cli.Command) error {
 			vcsByName[n] = cfg.Repos[n].ActiveBackend()
 		}
 
-		// ll alias implies -m (message)
-		message := cmd.Bool("message")
-		if cmd.Name == "ll" || cmd.Root().Args().First() == "ll" {
-			message = true
-		}
+		message := forceMessage || cmd.Bool("message")
 
 		return gatherStatus(
 			names,

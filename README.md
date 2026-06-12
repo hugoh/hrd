@@ -141,7 +141,8 @@ VERSION:
 COMMANDS:
    repo        manage tracked repositories
    group       list repo groups
-   ls, ll      show status of repos
+   ls          show status of repos
+   ll          show status of repos with commit message and time
    status, st  show detailed status for repos (git status or jj status)
    diff        show diff for repos (git diff or jj diff)
    log         show log for repos (git log or jj log)

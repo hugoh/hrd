@@ -12,7 +12,7 @@ import (
 
 const cmdNameHRD = "hrd"
 
-const staticCmdCount = 11
+const staticCmdCount = 12
 
 var version = "dev"
 
@@ -29,6 +29,7 @@ func buildCommands(cfgPath *string) []*cli.Command {
 		groupCommands(cfgPath),
 
 		lsCmd(cfgPath),
+		llCmd(cfgPath),
 		statusCmd(cfgPath),
 		diffCmd(cfgPath),
 		logCmd(cfgPath),
