@@ -133,8 +133,6 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 	cmd.Dir = path
 	cmd.Stdout = &buf
 
-	cmd.Stderr = &buf
-
 	err := cmd.Run()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w", args[0], err)
