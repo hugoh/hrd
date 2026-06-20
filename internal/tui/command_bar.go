@@ -202,12 +202,12 @@ func (m *model) ensureVCSCompletions(name string) tea.Cmd {
 }
 
 func (m *model) handleCmdBarOpen() (tea.Model, tea.Cmd) {
-	openCommandBar(m, prefixNone)
+	openCommandBar(m)
 
 	return m, nil
 }
 
-func openCommandBar(m *model, _ cmdPrefix) {
+func openCommandBar(m *model) {
 	m.cmdPrefix = prefixNone
 	m.commandOpen = true
 	m.input.SetValue("")
