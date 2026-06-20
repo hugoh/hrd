@@ -180,15 +180,6 @@ func TestSortedSelected(t *testing.T) {
 	assert.Equal(t, []string{"a", "c"}, got)
 }
 
-func TestEqualStringSlices(t *testing.T) {
-	assert.True(t, equalStringSlices([]string{"a", "b"}, []string{"a", "b"}),
-		"equalStringSlices should return true for equal slices")
-	assert.False(t, equalStringSlices([]string{"a"}, []string{"a", "b"}),
-		"equalStringSlices should return false for different lengths")
-	assert.False(t, equalStringSlices([]string{"a", "b"}, []string{"a", "c"}),
-		"equalStringSlices should return false for different elements")
-}
-
 func TestPushSelectionHistory(t *testing.T) {
 	m := &model{
 		selected:  map[string]bool{"a": true, "b": true},

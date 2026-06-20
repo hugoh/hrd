@@ -184,6 +184,7 @@ type model struct {
 	execTotal      int
 	execCancel     context.CancelFunc
 	execResults    []execResult
+	execOutputStr  string
 	resultsCh      <-chan runner.Result
 
 	statusCh <-chan runner.StatusResult
@@ -401,7 +402,7 @@ func (m *model) quit() {
 
 func (m *model) savePersState() {
 	repos := make([]string, 0, len(m.selected))
-	for _, name := range m.filteredRepos() {
+	for _, name := range m.repoOrder {
 		if m.selected[name] {
 			repos = append(repos, name)
 		}

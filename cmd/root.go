@@ -16,7 +16,10 @@ const cmdNameHRD = "hrd"
 
 const staticCmdCount = 12
 
-const flagConfig = "config"
+const (
+	flagConfig      = "config"
+	flagConfigShort = "c"
+)
 
 // completionFlag is urfave/cli's hidden shell-completion trigger.
 const completionFlag = "--generate-shell-completion"
@@ -111,14 +114,14 @@ func NewAppForArgs(args []string) (*cli.Command, []string) {
 func configPathFromArgs(args []string) string {
 	for i, arg := range args {
 		switch {
-		case arg == "--"+flagConfig || arg == "-c":
+		case arg == "--"+flagConfig || arg == "-"+flagConfigShort:
 			if i+1 < len(args) {
 				return args[i+1]
 			}
 		case strings.HasPrefix(arg, "--"+flagConfig+"="):
 			return strings.TrimPrefix(arg, "--"+flagConfig+"=")
-		case strings.HasPrefix(arg, "-c="):
-			return strings.TrimPrefix(arg, "-c=")
+		case strings.HasPrefix(arg, "-"+flagConfigShort+"="):
+			return strings.TrimPrefix(arg, "-"+flagConfigShort+"=")
 		}
 	}
 
@@ -148,7 +151,7 @@ func buildRootCmd(dashTail []string, aliases map[string]string) *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        flagConfig,
-				Aliases:     []string{"c"},
+				Aliases:     []string{flagConfigShort},
 				Usage:       "path to config file",
 				Value:       cfgPath,
 				Destination: &cfgPath,

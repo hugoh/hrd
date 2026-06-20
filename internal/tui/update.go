@@ -288,13 +288,19 @@ func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
 func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.executing = false
+		m.screen = screenOutput
 		m.output.SetContent("error: " + msg.err.Error())
 
 		return m, nil
 	}
 
 	m.execResults = append(m.execResults, msg.result)
-	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
+	m.execOutputStr += formatDispatchResultLine(
+		msg.result.name,
+		msg.result.result,
+		m.output.Width(),
+	) + "\n"
+	m.output.SetContent(m.execOutputStr)
 
 	return m, streamNextResult(m)
 }
@@ -302,7 +308,6 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 	m.executing = false
 	m.resultsCh = nil
-	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
 
 	if m.execSideEffect {
 		m.execSideEffect = false
@@ -364,7 +369,7 @@ func (m *model) pushSelectionHistory() {
 
 	if len(m.persState.SelectionHistory) > 0 {
 		last := m.persState.SelectionHistory[0].Repos
-		if equalStringSlices(current, last) {
+		if slices.Equal(current, last) {
 			return
 		}
 	}
@@ -391,20 +396,6 @@ func sortedSelected(selected map[string]bool) []string {
 	slices.Sort(out)
 
 	return out
-}
-
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (m *model) updateTableRows() {
