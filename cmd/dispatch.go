@@ -705,19 +705,12 @@ func dispatchNonInteractive(
 		return fmt.Errorf("%w %s", errNoReposWithBackend, backendName)
 	}
 
-	return dispatch(names, label, func(resultCh chan<- runner.Result) {
-		dispatchCh, err := runner.Dispatch(
-			ctx,
-			cfg.Repos,
-			names,
-			backendName,
-			cmdArgs,
-			cfg.Settings.Concurrency,
-		)
-		if err != nil {
-			return
-		}
+	dispatchCh, err := runner.Dispatch(ctx, cfg.Repos, names, backendName, cmdArgs, cfg.Settings.Concurrency)
+	if err != nil {
+		return err
+	}
 
+	return dispatch(names, label, func(resultCh chan<- runner.Result) {
 		for res := range dispatchCh {
 			resultCh <- res
 		}
