@@ -92,7 +92,11 @@ func runAlias(
 	}
 
 	tokens, err := shlex.Split(rest)
-	if err != nil || len(tokens) == 0 {
+	if err != nil {
+		return fmt.Errorf("alias %q: invalid syntax: %w", expansion, err)
+	}
+
+	if len(tokens) == 0 {
 		return fmt.Errorf("alias %q: %w", expansion, errNoArgsFmt)
 	}
 
