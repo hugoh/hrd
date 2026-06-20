@@ -295,7 +295,11 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.execResults = append(m.execResults, msg.result)
-	m.execOutputStr += formatDispatchResultLine(msg.result.name, msg.result.result, m.output.Width()) + "\n"
+	m.execOutputStr += formatDispatchResultLine(
+		msg.result.name,
+		msg.result.result,
+		m.output.Width(),
+	) + "\n"
 	m.output.SetContent(m.execOutputStr)
 
 	return m, streamNextResult(m)

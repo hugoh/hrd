@@ -180,7 +180,6 @@ func TestSortedSelected(t *testing.T) {
 	assert.Equal(t, []string{"a", "c"}, got)
 }
 
-
 func TestPushSelectionHistory(t *testing.T) {
 	m := &model{
 		selected:  map[string]bool{"a": true, "b": true},
