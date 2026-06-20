@@ -184,6 +184,7 @@ type model struct {
 	execTotal      int
 	execCancel     context.CancelFunc
 	execResults    []execResult
+	execOutputStr  string
 	resultsCh      <-chan runner.Result
 
 	statusCh <-chan runner.StatusResult

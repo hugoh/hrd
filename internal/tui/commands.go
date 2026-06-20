@@ -126,6 +126,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execCancel = cancel
 	m.execTotal = len(selected)
 	m.execResults = nil
+	m.execOutputStr = ""
 
 	concurrency := m.cfg.Settings.Concurrency
 

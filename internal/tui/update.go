@@ -295,7 +295,8 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.execResults = append(m.execResults, msg.result)
-	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
+	m.execOutputStr += formatDispatchResultLine(msg.result.name, msg.result.result, m.output.Width()) + "\n"
+	m.output.SetContent(m.execOutputStr)
 
 	return m, streamNextResult(m)
 }
@@ -303,7 +304,6 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 	m.executing = false
 	m.resultsCh = nil
-	m.output.SetContent(formatExecOutput(m.execResults, m.output.Width()))
 
 	if m.execSideEffect {
 		m.execSideEffect = false
