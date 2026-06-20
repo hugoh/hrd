@@ -65,11 +65,7 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 	}
 
 	m.cursor = 0
-
-	m.selected = make(map[string]bool)
-	for _, name := range m.filteredRepos() {
-		m.selected[name] = true
-	}
+	m.selected = makeSelectedMap(m.filteredRepos())
 
 	m.screen = screenMain
 	m.loading = true
