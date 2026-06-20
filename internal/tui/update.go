@@ -288,6 +288,7 @@ func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
 func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.executing = false
+		m.screen = screenOutput
 		m.output.SetContent("error: " + msg.err.Error())
 
 		return m, nil
