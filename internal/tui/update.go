@@ -365,7 +365,7 @@ func (m *model) pushSelectionHistory() {
 
 	if len(m.persState.SelectionHistory) > 0 {
 		last := m.persState.SelectionHistory[0].Repos
-		if equalStringSlices(current, last) {
+		if slices.Equal(current, last) {
 			return
 		}
 	}
@@ -392,20 +392,6 @@ func sortedSelected(selected map[string]bool) []string {
 	slices.Sort(out)
 
 	return out
-}
-
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-
-	return true
 }
 
 func (m *model) updateTableRows() {
