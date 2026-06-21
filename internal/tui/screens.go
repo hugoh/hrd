@@ -134,10 +134,16 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case keyEsc, "q":
+	case keyEsc, "q", "o":
 		m.screen = screenMain
 
 		return m, nil
+	case "enter":
+		if !m.executing {
+			m.screen = screenMain
+
+			return m, nil
+		}
 	}
 
 	var cmd tea.Cmd

@@ -176,6 +176,11 @@ var mainBindings = []binding{
 
 		return m, nil
 	}, label: "history", desc: "Restore a previous repo selection", hrd: true, section: secGeneral, order: 25},
+	{key: "o", handler: func(m *model) (tea.Model, tea.Cmd) {
+		m.screen = screenOutput
+
+		return m, nil
+	}, label: "output", desc: "Toggle last output", hrd: true, section: secGeneral, order: 27},
 
 	// Cmd bar
 	{

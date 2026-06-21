@@ -218,7 +218,7 @@ func (m *model) outputView() string {
 
 	var left, right string
 
-	right = ui.MutedStyle().Render(" Esc/q:close")
+	right = ui.MutedStyle().Render(" Enter/o/Esc/q:close")
 
 	if m.executing && m.execTotal > 0 {
 		done := len(m.execResults)
