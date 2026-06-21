@@ -40,6 +40,30 @@ func TestExecCmd(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+func TestExecCmdSetsLabel(t *testing.T) {
+	tests := []struct {
+		name      string
+		prefix    string
+		cmdStr    string
+		wantLabel string
+	}{
+		{"vcs shortcut", "", "status", "status"},
+		{"git command", "git", "diff HEAD", "git diff HEAD"},
+		{"shell command", "sh", "ls -la", "sh ls -la"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &model{
+				cfg: config.Config{Settings: config.Settings{Concurrency: 1}},
+			}
+
+			execCmd(m, nil, tt.prefix, tt.cmdStr)
+			assert.Equal(t, tt.wantLabel, m.execLabel)
+		})
+	}
+}
+
 func TestShortcutCmdPrefixIndependent(t *testing.T) {
 	tests := []struct {
 		name   string

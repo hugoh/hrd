@@ -205,11 +205,16 @@ func (*model) renderFooter() string {
 }
 
 func (m *model) outputView() string {
+	label := m.execLabel
+	if label == "" {
+		label = "Output"
+	}
+
 	var header string
 	if m.executing {
-		header = styleHeader.Render(" Output " + m.spinner.View() + " ")
+		header = styleHeader.Render(" " + label + " " + m.spinner.View() + " ")
 	} else {
-		header = styleHeader.Render(" Output ")
+		header = styleHeader.Render(" " + label + " ")
 	}
 
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
