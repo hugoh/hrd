@@ -43,7 +43,7 @@ run = "golangci-lint run ${usage_fix:+--fix} ./..."
 
 [tasks."lint:release"]
 description = "Check release config if present"
-run = "test -f .goreleaser.yml && goreleaser check || true"
+run = "test ! -f .goreleaser.yml || goreleaser check"
 
 [tasks.lint]
 description = "Lint code, check dead code"
@@ -70,7 +70,7 @@ run = "gotestsum -- -race -coverprofile=${COVEROUT} -covermode=atomic ./..."
 [tasks.test-int]
 description = "Run integration tests"
 sources = ["go.mod", "**/*.go"]
-run = "test -d internal && gotestsum -- -race -tags=integration ./internal/... || true"
+run = "test ! -d internal || gotestsum -- -race -tags=integration ./internal/..."
 
 [tasks.coverage]
 description = "Check test coverage"
@@ -79,7 +79,7 @@ run = "go-test-coverage -config .testcoverage.yml"
 
 [tasks.ci-core]
 description = "Run core CI checks (test, coverage, integration)"
-depends = ["test", "coverage", "test-int"]
+depends = ["coverage", "test-int"]
 
 [tasks.ci]
 description = "Run full CI pipeline (lint, tests, coverage, readme check)"
