@@ -189,7 +189,6 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	switch m.screen { //nolint:exhaustive
 	case screenOutput:
 		m.screen = screenMain
-		m.output.SetContent("")
 
 		return m, nil
 	case screenHelp, screenGroup, screenSelHistory:

@@ -173,6 +173,111 @@ func TestHandleOutputKeyQ(t *testing.T) {
 	assert.Nil(t, cmd, "expected nil cmd when closing output with q")
 }
 
+func TestHandleOutputKeyEnterClosesWhenDone(t *testing.T) {
+	m := &model{
+		screen:    screenOutput,
+		executing: false,
+		output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, cmd := m.handleOutputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Equal(t, screenMain, m.screen, "Enter should close output when not executing")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
+func TestHandleOutputKeyEnterNoOpWhileExecuting(t *testing.T) {
+	m := &model{
+		screen:    screenOutput,
+		executing: true,
+		output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Equal(t, screenOutput, m.screen, "Enter should not close output while executing")
+}
+
+func TestHandleOutputKeyOClosesOutput(t *testing.T) {
+	m := &model{
+		screen: screenOutput,
+		output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, cmd := m.handleOutputKey(tea.KeyPressMsg{Code: 'o'})
+
+	assert.Equal(t, screenMain, m.screen, "o should close the output screen")
+	assert.Nil(t, cmd, "expected nil cmd")
+}
+
+func TestOutputContentPreservedOnClose(t *testing.T) {
+	const content = "repo1 ✓\nrepo2 ✗"
+
+	for _, tc := range []struct {
+		name string
+		key  tea.KeyPressMsg
+	}{
+		{"Esc", tea.KeyPressMsg{Code: tea.KeyEsc}},
+		{"q", tea.KeyPressMsg{Code: 'q'}},
+		{"o", tea.KeyPressMsg{Code: 'o'}},
+		{"Enter", tea.KeyPressMsg{Code: tea.KeyEnter}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := &model{
+				screen: screenOutput,
+				output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+			}
+			m.output.SetContent(content)
+
+			_, _ = m.handleOutputKey(tc.key)
+
+			assert.Equal(
+				t,
+				content,
+				m.output.GetContent(),
+				"output content should be preserved after %s",
+				tc.name,
+			)
+		})
+	}
+}
+
+func TestHandleEscOutputPreservesContent(t *testing.T) {
+	const content = "repo1 ✓"
+
+	m := &model{
+		screen: screenOutput,
+		output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+	m.output.SetContent(content)
+
+	_, _ = m.handleEscKey()
+
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.Equal(t, content, m.output.GetContent(), "output content should be preserved after Esc")
+}
+
+func TestHandleMainKeyOOpensOutputWithResults(t *testing.T) {
+	m := &model{
+		execResults: []execResult{{name: "repo1"}},
+		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'o'})
+
+	assert.Equal(t, screenOutput, m.screen, "o should open output screen when results exist")
+}
+
+func TestHandleMainKeyOOpensOutputWithoutResults(t *testing.T) {
+	m := &model{
+		output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+
+	_, _ = m.handleKeyMsg(tea.KeyPressMsg{Code: 'o'})
+
+	assert.Equal(t, screenOutput, m.screen, "o should open output screen even with no results")
+}
+
 func TestSortedSelected(t *testing.T) {
 	selected := map[string]bool{"c": true, "a": true, "b": false}
 	got := sortedSelected(selected)
