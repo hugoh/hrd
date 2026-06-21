@@ -104,6 +104,34 @@ func TestOutputView(t *testing.T) {
 	assert.Contains(t, view, "Output")
 }
 
+func TestOutputViewWithLabel(t *testing.T) {
+	tests := []struct {
+		name      string
+		execLabel string
+		want      string
+	}{
+		{"vcs shortcut", "status", "status"},
+		{"git command", "git diff HEAD", "git diff HEAD"},
+		{"shell command", "sh ls -la", "sh ls -la"},
+		{"no label falls back", "", "Output"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &model{
+				screen:    screenOutput,
+				width:     80,
+				height:    30,
+				execLabel: tt.execLabel,
+				output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+			}
+			m.ready = true
+
+			assert.Contains(t, m.outputView(), tt.want)
+		})
+	}
+}
+
 func TestOutputViewExecuting(t *testing.T) {
 	m := &model{
 		screen:    screenOutput,
