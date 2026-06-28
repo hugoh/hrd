@@ -207,7 +207,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("loading config: %w", err)
 	}
 
 	persState, err := loadState(statePath)
