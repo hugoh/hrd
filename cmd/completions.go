@@ -33,7 +33,10 @@ func completeGroups(cfg *config.Config) []string {
 	return names
 }
 
-func makeCompleter(cfgPath *string, getters ...func(*config.Config) []string) func(context.Context, *cli.Command) {
+func makeCompleter(
+	cfgPath *string,
+	getters ...func(*config.Config) []string,
+) func(context.Context, *cli.Command) {
 	return func(_ context.Context, cmd *cli.Command) {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
