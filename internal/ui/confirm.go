@@ -14,12 +14,12 @@ func Confirm(prompt string) bool {
 		return false
 	}
 
-	m, err := tea.NewProgram(confirmModel{prompt: prompt}).Run()
+	m, err := tea.NewProgram(&confirmModel{prompt: prompt}).Run()
 	if err != nil {
 		return false
 	}
 
-	result, ok := m.(confirmModel)
+	result, ok := m.(*confirmModel)
 	if !ok {
 		return false
 	}
@@ -34,7 +34,7 @@ type confirmModel struct {
 
 func (confirmModel) Init() tea.Cmd { return nil }
 
-func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if key.String() == "y" || key.String() == "Y" {
 			m.confirmed = true
@@ -46,6 +46,6 @@ func (m confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m confirmModel) View() tea.View {
+func (m *confirmModel) View() tea.View {
 	return tea.NewView(m.prompt + " [y/N]: ")
 }
