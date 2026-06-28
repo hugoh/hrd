@@ -207,7 +207,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 
 	cfg, err := config.Load(opts.ConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("new model: %w", err)
+		return nil, err
 	}
 
 	persState, err := loadState(statePath)
@@ -222,7 +222,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	if len(opts.Repos) > 0 {
 		resolved, err := cfg.ResolveScope(opts.Repos)
 		if err != nil {
-			return nil, fmt.Errorf("new model: resolving repos: %w", err)
+			return nil, fmt.Errorf("resolving repos: %w", err)
 		}
 
 		selected = makeSelectedMap(resolved)
