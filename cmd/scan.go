@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -16,14 +17,35 @@ import (
 const (
 	defaultScanDepth = 5
 	cmdNameScan      = "scan"
+	cmdNameScanAdd   = "add"
+	cmdNameScanList  = "list"
 )
+
+//nolint:gochecknoglobals // package-level variable required for test injection
+var confirmFn func(string) bool = ui.Confirm
 
 func repoScanCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      cmdNameScan,
+		Name:  cmdNameScan,
+		Usage: "discover repositories under one or more directories",
+		Commands: []*cli.Command{
+			repoScanAddCmd(cfgPath),
+			repoScanListCmd(cfgPath),
+		},
+	}
+}
+
+func repoScanAddCmd(cfgPath *string) *cli.Command {
+	return &cli.Command{
+		Name:      cmdNameScanAdd,
 		Usage:     "discover and add repositories under one or more directories",
 		ArgsUsage: "<dir>...",
 		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "pattern",
+				Aliases: []string{"p"},
+				Usage:   "glob pattern matched against repo directory name to filter results",
+			},
 			&cli.StringFlag{
 				Name:    cmdNameGroup,
 				Aliases: []string{"g"},
@@ -35,52 +57,108 @@ func repoScanCmd(cfgPath *string) *cli.Command {
 				Usage: "maximum directory depth to descend",
 			},
 			&cli.BoolFlag{
-				Name:  "dry-run",
-				Usage: "print what would be added without saving",
+				Name:    "confirm",
+				Aliases: []string{"i"},
+				Usage:   "prompt before adding each repo",
 			},
 		},
-		Action: repoScanAction(cfgPath),
+		Action: repoScanAddAction(cfgPath),
 	}
 }
 
-func repoScanAction(cfgPath *string) func(context.Context, *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		if cmd.NArg() == 0 {
-			return errAtLeastOnePath
-		}
+func repoScanListCmd(cfgPath *string) *cli.Command {
+	return &cli.Command{
+		Name:      cmdNameScanList,
+		Usage:     "list repositories discovered under one or more directories",
+		ArgsUsage: "<dir>...",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "pattern",
+				Aliases: []string{"p"},
+				Usage:   "glob pattern matched against repo directory name to filter results",
+			},
+			&cli.IntFlag{
+				Name:  "depth",
+				Value: defaultScanDepth,
+				Usage: "maximum directory depth to descend",
+			},
+			&cli.StringFlag{
+				Name:    cmdNameGroup,
+				Aliases: []string{"g"},
+				Usage:   "assign tracked repos in results to this group",
+			},
+			&cli.BoolFlag{
+				Name:  "tracked",
+				Usage: "show only repos already in config",
+			},
+			&cli.BoolFlag{
+				Name:  "untracked",
+				Usage: "show only repos not yet in config",
+			},
+		},
+		Action: repoScanListAction(cfgPath),
+	}
+}
 
-		cfg, err := config.Load(*cfgPath)
+func loadScanConfig(cfgPath *string, cmd *cli.Command, op string) (config.Config, error) {
+	if cmd.NArg() == 0 {
+		return config.Config{}, errAtLeastOnePath
+	}
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("repo scan %s: %w", op, err)
+	}
+
+	return cfg, nil
+}
+
+func collectRepoPaths(roots []string, depth int) ([]string, error) {
+	var all []string
+
+	for _, root := range roots {
+		abs, err := filepath.Abs(root)
 		if err != nil {
-			return fmt.Errorf("repo scan: %w", err)
+			return nil, fmt.Errorf("resolving %q: %w", root, err)
 		}
 
-		dryRun := cmd.Bool("dry-run")
+		paths, err := scanForRepos(abs, depth)
+		if err != nil {
+			return nil, fmt.Errorf("scanning %q: %w", root, err)
+		}
+
+		all = append(all, paths...)
+	}
+
+	return all, nil
+}
+
+func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) error {
+	return func(_ context.Context, cmd *cli.Command) error {
+		cfg, err := loadScanConfig(cfgPath, cmd, "add")
+		if err != nil {
+			return err
+		}
+
 		group := stripGroupPrefix(cmd.String(cmdNameGroup))
 		tracked := trackedPaths(&cfg)
-		added := 0
+		pattern := cmd.String("pattern")
+		confirm := cmd.Bool("confirm")
 
-		for _, root := range cmd.Args().Slice() {
-			abs, err := filepath.Abs(root)
-			if err != nil {
-				return fmt.Errorf("resolving %q: %w", root, err)
-			}
-
-			repoPaths, err := scanForRepos(abs, cmd.Int("depth"))
-			if err != nil {
-				return fmt.Errorf("scanning %q: %w", root, err)
-			}
-
-			added += addScanned(&cfg, tracked, repoPaths, group, dryRun)
+		repoPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		if err != nil {
+			return err
 		}
+
+		filtered, err := filterByPattern(repoPaths, pattern)
+		if err != nil {
+			return err
+		}
+
+		added := addScanned(&cfg, tracked, filtered, group, confirm)
 
 		if added == 0 {
 			ui.Warnf("no new repos found")
-
-			return nil
-		}
-
-		if dryRun {
-			ui.Outf("would add %d repo(s); re-run without --dry-run to save", added)
 
 			return nil
 		}
@@ -89,22 +167,146 @@ func repoScanAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	}
 }
 
-// addScanned registers each discovered path in cfg (unless dryRun),
-// returning how many were added. Already-tracked paths are skipped
-// silently; unresolvable name conflicts are skipped with a warning.
+func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) error {
+	return func(_ context.Context, cmd *cli.Command) error {
+		cfg, err := loadScanConfig(cfgPath, cmd, "list")
+		if err != nil {
+			return err
+		}
+
+		tracked := trackedPaths(&cfg)
+		pattern := cmd.String("pattern")
+		group := stripGroupPrefix(cmd.String(cmdNameGroup))
+		onlyTracked := cmd.Bool("tracked")
+		onlyUntracked := cmd.Bool("untracked")
+
+		allPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		if err != nil {
+			return err
+		}
+
+		filtered, err := filterByPattern(allPaths, pattern)
+		if err != nil {
+			return err
+		}
+
+		const nameWidth, statusWidth, gap = 30, 10, 2
+
+		pathWidth := ui.GetTermWidth() - nameWidth - statusWidth - gap
+
+		header := []string{"NAME", "PATH", "STATUS"}
+		maxWidths := []int{nameWidth, pathWidth, statusWidth}
+
+		rows := buildScanListRows(filtered, tracked, &cfg, onlyTracked, onlyUntracked)
+
+		if len(rows) == 0 {
+			ui.Warnf("no repos found")
+
+			return nil
+		}
+
+		_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
+			header, rows, ui.EffectiveWidths(header, rows, maxWidths),
+		))
+
+		return groupTracked(&cfg, *cfgPath, filtered, tracked, group)
+	}
+}
+
+// groupTracked assigns all tracked paths in filtered to group and saves config.
+// A no-op when group is empty or no tracked paths are found.
+func groupTracked(
+	cfg *config.Config,
+	cfgPath string,
+	filtered []string,
+	tracked map[string]string,
+	group string,
+) error {
+	if group == "" {
+		return nil
+	}
+
+	grouped := 0
+
+	for _, path := range filtered {
+		name, isTracked := tracked[path]
+		if !isTracked {
+			continue
+		}
+
+		cfg.AddRepoToGroup(name, group)
+
+		grouped++
+	}
+
+	if grouped == 0 {
+		return nil
+	}
+
+	ui.Outf("assigned %d repo(s) to group %s", grouped, displayGroup(group))
+
+	return config.Save(cfgPath, *cfg) //nolint:wrapcheck // caller provides context
+}
+
+// buildScanListRows classifies discovered paths as tracked or untracked and
+// returns table rows filtered by the caller's onlyTracked/onlyUntracked flags.
+func buildScanListRows(
+	paths []string,
+	tracked map[string]string,
+	cfg *config.Config,
+	onlyTracked, onlyUntracked bool,
+) [][]string {
+	showAll := !onlyTracked && !onlyUntracked
+
+	var rows [][]string
+
+	for _, path := range paths {
+		trackedName, isTracked := tracked[path]
+
+		name := resolveDisplayName(cfg, path, trackedName, isTracked)
+
+		status := "tracked"
+		if !isTracked {
+			status = "untracked"
+		}
+
+		if showAll || (onlyTracked && isTracked) || (onlyUntracked && !isTracked) {
+			rows = append(rows, []string{name, path, status})
+		}
+	}
+
+	return rows
+}
+
+// resolveDisplayName returns the config name for a tracked path, or the
+// would-be auto-generated name for an untracked one.
+func resolveDisplayName(cfg *config.Config, path, trackedName string, isTracked bool) string {
+	if isTracked {
+		return trackedName
+	}
+
+	if name, ok := scanRepoName(cfg, path); ok {
+		return name
+	}
+
+	return filepath.Base(path) + " (!)"
+}
+
+// addScanned registers each discovered path in cfg, returning how many were
+// added. Already-tracked paths are skipped silently; unresolvable name
+// conflicts are skipped with a warning. When confirm is true the user is
+// prompted before each addition.
 func addScanned(
 	cfg *config.Config,
 	tracked map[string]string,
 	repoPaths []string,
 	group string,
-	dryRun bool,
+	confirm bool,
 ) int {
 	added := 0
 
 	for _, path := range repoPaths {
-		if name, ok := tracked[path]; ok {
-			ui.Outf("%s already tracked as %q", path, name)
-
+		if _, ok := tracked[path]; ok {
 			continue
 		}
 
@@ -115,11 +317,7 @@ func addScanned(
 			continue
 		}
 
-		added++
-
-		if dryRun {
-			ui.Outf("would add %s as %q", path, name)
-
+		if confirm && !promptYN(fmt.Sprintf("Add %s as %q?", path, name)) {
 			continue
 		}
 
@@ -128,12 +326,43 @@ func addScanned(
 
 		if group != "" {
 			cfg.AddRepoToGroup(name, group)
+			ui.Success("added %s as %q in group %s", path, name, group)
+		} else {
+			ui.Success("added %s as %q", path, name)
 		}
 
-		ui.Success("added %s as %q", path, name)
+		added++
 	}
 
 	return added
+}
+
+// promptYN asks the user a yes/no question via confirmFn.
+func promptYN(prompt string) bool {
+	return confirmFn(prompt)
+}
+
+// filterByPattern returns paths whose base name matches the given glob
+// pattern. Returns all paths unchanged when pattern is empty.
+func filterByPattern(paths []string, pattern string) ([]string, error) {
+	if pattern == "" {
+		return paths, nil
+	}
+
+	var out []string
+
+	for _, p := range paths {
+		matched, err := filepath.Match(pattern, filepath.Base(p))
+		if err != nil {
+			return nil, fmt.Errorf("invalid pattern %q: %w", pattern, err)
+		}
+
+		if matched {
+			out = append(out, p)
+		}
+	}
+
+	return out, nil
 }
 
 // scanForRepos walks root up to maxDepth levels deep and returns the

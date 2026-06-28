@@ -62,7 +62,8 @@ func repoAddCmd(cfgPath *string) *cli.Command {
 				Usage:   "add the repo(s) to this group",
 			},
 		},
-		Action: repoAddAction(cfgPath),
+		ShellComplete: func(_ context.Context, _ *cli.Command) {},
+		Action:        repoAddAction(cfgPath),
 	}
 }
 
@@ -125,7 +126,11 @@ func addRepo(cfg *config.Config, path, explicitName, group string) error {
 		cfg.AddRepoToGroup(name, group)
 	}
 
-	ui.Success("added %s as %q", abs, name)
+	if group != "" {
+		ui.Success("added %s as %q in group %s", abs, name, group)
+	} else {
+		ui.Success("added %s as %q", abs, name)
+	}
 
 	return nil
 }

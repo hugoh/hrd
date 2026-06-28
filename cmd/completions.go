@@ -33,7 +33,10 @@ func completeGroups(cfg *config.Config) []string {
 	return names
 }
 
-func repoGroupCompleter(cfgPath *string) func(context.Context, *cli.Command) {
+func makeCompleter(
+	cfgPath *string,
+	getters ...func(*config.Config) []string,
+) func(context.Context, *cli.Command) {
 	return func(_ context.Context, cmd *cli.Command) {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
@@ -42,42 +45,22 @@ func repoGroupCompleter(cfgPath *string) func(context.Context, *cli.Command) {
 
 		w := cmd.Root().Writer
 
-		for _, name := range completeRepos(&cfg) {
-			_, _ = fmt.Fprintln(w, name)
-		}
-
-		for _, name := range completeGroups(&cfg) {
-			_, _ = fmt.Fprintln(w, name)
+		for _, get := range getters {
+			for _, name := range get(&cfg) {
+				_, _ = fmt.Fprintln(w, name)
+			}
 		}
 	}
+}
+
+func repoGroupCompleter(cfgPath *string) func(context.Context, *cli.Command) {
+	return makeCompleter(cfgPath, completeRepos, completeGroups)
 }
 
 func reposOnlyCompleter(cfgPath *string) func(context.Context, *cli.Command) {
-	return func(_ context.Context, cmd *cli.Command) {
-		cfg, err := config.Load(*cfgPath)
-		if err != nil {
-			return
-		}
-
-		w := cmd.Root().Writer
-
-		for _, name := range completeRepos(&cfg) {
-			_, _ = fmt.Fprintln(w, name)
-		}
-	}
+	return makeCompleter(cfgPath, completeRepos)
 }
 
 func groupsOnlyCompleter(cfgPath *string) func(context.Context, *cli.Command) {
-	return func(_ context.Context, cmd *cli.Command) {
-		cfg, err := config.Load(*cfgPath)
-		if err != nil {
-			return
-		}
-
-		w := cmd.Root().Writer
-
-		for _, name := range completeGroups(&cfg) {
-			_, _ = fmt.Fprintln(w, name)
-		}
-	}
+	return makeCompleter(cfgPath, completeGroups)
 }
