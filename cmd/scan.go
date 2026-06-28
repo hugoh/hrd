@@ -39,7 +39,8 @@ func repoScanCmd(cfgPath *string) *cli.Command {
 				Usage: "print what would be added without saving",
 			},
 		},
-		Action: repoScanAction(cfgPath),
+		ShellComplete: func(_ context.Context, _ *cli.Command) {},
+		Action:        repoScanAction(cfgPath),
 	}
 }
 

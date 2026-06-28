@@ -62,7 +62,8 @@ func repoAddCmd(cfgPath *string) *cli.Command {
 				Usage:   "add the repo(s) to this group",
 			},
 		},
-		Action: repoAddAction(cfgPath),
+		ShellComplete: func(_ context.Context, _ *cli.Command) {},
+		Action:        repoAddAction(cfgPath),
 	}
 }
 
