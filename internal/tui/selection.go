@@ -6,7 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
+func (m *model) toggleMode(target mode, saveSelection bool) {
 	cur := m.tableRepos()
 
 	saved := ""
@@ -14,12 +14,14 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 		saved = cur[m.cursor]
 	}
 
-	if m.mode == modeSelect {
+	if m.mode == target {
 		m.mode = modeNormal
 	} else {
-		m.selectSaved = maps.Clone(m.selected)
+		if saveSelection {
+			m.selectSaved = maps.Clone(m.selected)
+		}
 
-		m.mode = modeSelect
+		m.mode = target
 	}
 
 	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
@@ -35,6 +37,10 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 			}
 		}
 	}
+}
+
+func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
+	m.toggleMode(modeSelect, true)
 
 	return m, nil
 }
@@ -57,32 +63,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSingleToggle() (tea.Model, tea.Cmd) {
-	cur := m.tableRepos()
-
-	saved := ""
-	if m.cursor >= 0 && m.cursor < len(cur) {
-		saved = cur[m.cursor]
-	}
-
-	if m.mode == modeSingle {
-		m.mode = modeNormal
-	} else {
-		m.mode = modeSingle
-	}
-
-	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
-	m.updateTableRows()
-
-	if saved != "" {
-		for i, name := range m.tableRepos() {
-			if name == saved {
-				m.cursor = i
-				m.repoTable.SetCursor(i)
-
-				break
-			}
-		}
-	}
+	m.toggleMode(modeSingle, false)
 
 	return m, nil
 }
