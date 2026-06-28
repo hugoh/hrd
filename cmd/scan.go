@@ -130,7 +130,11 @@ func addScanned(
 			cfg.AddRepoToGroup(name, group)
 		}
 
-		ui.Success("added %s as %q", path, name)
+		if group != "" {
+				ui.Success("added %s as %q in group %s", path, name, group)
+			} else {
+				ui.Success("added %s as %q", path, name)
+			}
 	}
 
 	return added

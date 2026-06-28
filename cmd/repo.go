@@ -125,7 +125,11 @@ func addRepo(cfg *config.Config, path, explicitName, group string) error {
 		cfg.AddRepoToGroup(name, group)
 	}
 
-	ui.Success("added %s as %q", abs, name)
+	if group != "" {
+		ui.Success("added %s as %q in group %s", abs, name, group)
+	} else {
+		ui.Success("added %s as %q", abs, name)
+	}
 
 	return nil
 }
