@@ -32,7 +32,7 @@ type confirmModel struct {
 	confirmed bool
 }
 
-func (confirmModel) Init() tea.Cmd { return nil }
+func (*confirmModel) Init() tea.Cmd { return nil }
 
 func (m *confirmModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
