@@ -100,41 +100,62 @@ func repoScanListCmd(cfgPath *string) *cli.Command {
 	}
 }
 
-func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		if cmd.NArg() == 0 {
-			return errAtLeastOnePath
+func loadScanConfig(cfgPath *string, cmd *cli.Command, op string) (config.Config, error) {
+	if cmd.NArg() == 0 {
+		return config.Config{}, errAtLeastOnePath
+	}
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("repo scan %s: %w", op, err)
+	}
+
+	return cfg, nil
+}
+
+func collectRepoPaths(roots []string, depth int) ([]string, error) {
+	var all []string
+
+	for _, root := range roots {
+		abs, err := filepath.Abs(root)
+		if err != nil {
+			return nil, fmt.Errorf("resolving %q: %w", root, err)
 		}
 
-		cfg, err := config.Load(*cfgPath)
+		paths, err := scanForRepos(abs, depth)
 		if err != nil {
-			return fmt.Errorf("repo scan add: %w", err)
+			return nil, fmt.Errorf("scanning %q: %w", root, err)
+		}
+
+		all = append(all, paths...)
+	}
+
+	return all, nil
+}
+
+func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) error {
+	return func(_ context.Context, cmd *cli.Command) error {
+		cfg, err := loadScanConfig(cfgPath, cmd, "add")
+		if err != nil {
+			return err
 		}
 
 		group := stripGroupPrefix(cmd.String(cmdNameGroup))
 		tracked := trackedPaths(&cfg)
 		pattern := cmd.String("pattern")
 		confirm := cmd.Bool("confirm")
-		added := 0
 
-		for _, root := range cmd.Args().Slice() {
-			abs, err := filepath.Abs(root)
-			if err != nil {
-				return fmt.Errorf("resolving %q: %w", root, err)
-			}
-
-			repoPaths, err := scanForRepos(abs, cmd.Int("depth"))
-			if err != nil {
-				return fmt.Errorf("scanning %q: %w", root, err)
-			}
-
-			filtered, err := filterByPattern(repoPaths, pattern)
-			if err != nil {
-				return err
-			}
-
-			added += addScanned(&cfg, tracked, filtered, group, confirm)
+		repoPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		if err != nil {
+			return err
 		}
+
+		filtered, err := filterByPattern(repoPaths, pattern)
+		if err != nil {
+			return err
+		}
+
+		added := addScanned(&cfg, tracked, filtered, group, confirm)
 
 		if added == 0 {
 			ui.Warnf("no new repos found")
@@ -148,13 +169,9 @@ func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) erro
 
 func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) error {
 	return func(_ context.Context, cmd *cli.Command) error {
-		if cmd.NArg() == 0 {
-			return errAtLeastOnePath
-		}
-
-		cfg, err := config.Load(*cfgPath)
+		cfg, err := loadScanConfig(cfgPath, cmd, "list")
 		if err != nil {
-			return fmt.Errorf("repo scan list: %w", err)
+			return err
 		}
 
 		tracked := trackedPaths(&cfg)
@@ -163,20 +180,9 @@ func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) err
 		onlyTracked := cmd.Bool("tracked")
 		onlyUntracked := cmd.Bool("untracked")
 
-		var allPaths []string
-
-		for _, root := range cmd.Args().Slice() {
-			abs, err := filepath.Abs(root)
-			if err != nil {
-				return fmt.Errorf("resolving %q: %w", root, err)
-			}
-
-			repoPaths, err := scanForRepos(abs, cmd.Int("depth"))
-			if err != nil {
-				return fmt.Errorf("scanning %q: %w", root, err)
-			}
-
-			allPaths = append(allPaths, repoPaths...)
+		allPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		if err != nil {
+			return err
 		}
 
 		filtered, err := filterByPattern(allPaths, pattern)
