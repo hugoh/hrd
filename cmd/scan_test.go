@@ -278,6 +278,30 @@ func TestRepoScanListUntracked(t *testing.T) {
 	assert.Contains(t, out, "work-app")
 }
 
+func TestRepoScanListGroup(t *testing.T) {
+	backend.ResetDetectCache()
+
+	root := scanTree(t)
+	ossApp := filepath.Join(root, "oss", "app")
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"app":      {Path: ossApp},
+			"work-app": {Path: filepath.Join(root, "work", "app")},
+		},
+	})
+
+	// Assign only the "app" repo (oss/app) to the spoon group via scan list.
+	args := []string{
+		"repo", cmdNameScan, cmdNameScanList,
+		"-p", "app", "-g", "spoon", "--tracked", root,
+	}
+	require.NoError(t, runApp(t, cfgPath, args))
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"app", "work-app"}, cfg.Groups["spoon"].Repos)
+}
+
 func TestRepoAddWithGroup(t *testing.T) {
 	backend.ResetDetectCache()
 

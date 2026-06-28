@@ -82,6 +82,11 @@ func repoScanListCmd(cfgPath *string) *cli.Command {
 				Value: defaultScanDepth,
 				Usage: "maximum directory depth to descend",
 			},
+			&cli.StringFlag{
+				Name:    cmdNameGroup,
+				Aliases: []string{"g"},
+				Usage:   "assign tracked repos in results to this group",
+			},
 			&cli.BoolFlag{
 				Name:  "tracked",
 				Usage: "show only repos already in config",
@@ -154,6 +159,7 @@ func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) err
 
 		tracked := trackedPaths(&cfg)
 		pattern := cmd.String("pattern")
+		group := stripGroupPrefix(cmd.String(cmdNameGroup))
 		onlyTracked := cmd.Bool("tracked")
 		onlyUntracked := cmd.Bool("untracked")
 
@@ -197,8 +203,43 @@ func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) err
 			header, rows, ui.EffectiveWidths(header, rows, maxWidths),
 		))
 
+		return groupTracked(&cfg, *cfgPath, filtered, tracked, group)
+	}
+}
+
+// groupTracked assigns all tracked paths in filtered to group and saves config.
+// A no-op when group is empty or no tracked paths are found.
+func groupTracked(
+	cfg *config.Config,
+	cfgPath string,
+	filtered []string,
+	tracked map[string]string,
+	group string,
+) error {
+	if group == "" {
 		return nil
 	}
+
+	grouped := 0
+
+	for _, path := range filtered {
+		name, isTracked := tracked[path]
+		if !isTracked {
+			continue
+		}
+
+		cfg.AddRepoToGroup(name, group)
+
+		grouped++
+	}
+
+	if grouped == 0 {
+		return nil
+	}
+
+	ui.Outf("assigned %d repo(s) to group %s", grouped, displayGroup(group))
+
+	return config.Save(cfgPath, *cfg) //nolint:wrapcheck // caller provides context
 }
 
 // buildScanListRows classifies discovered paths as tracked or untracked and
