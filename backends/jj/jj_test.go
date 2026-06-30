@@ -2,6 +2,7 @@ package jj
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -100,27 +101,35 @@ func TestParseWorkingCopy_Empty(t *testing.T) {
 	assert.False(t, st.Conflict)
 }
 
+func TestParseWorkingCopy_Malformed(t *testing.T) {
+	st := parseWorkingCopy("not json")
+	assert.Empty(t, st.Ref)
+	assert.False(t, st.Dirty)
+	assert.False(t, st.Conflict)
+}
+
 func TestParseWorkingCopy_ChangeIDOnly(t *testing.T) {
-	input := "rlkvwrto\n"
+	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":""}`
 	st := parseWorkingCopy(input)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 }
 
 func TestParseWorkingCopy_WithDirty(t *testing.T) {
-	input := "rlkvwrto\x1fdirty\x1f\x1fmsg\x1ftime\n"
+	input := `{"changeId":"rlkvwrto","dirty":true,"conflict":false,"description":"msg","ago":"time"}`
 	st := parseWorkingCopy(input)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 	assert.True(t, st.Dirty)
 }
 
 func TestParseWorkingCopy_WithConflict(t *testing.T) {
-	input := "rlkvwrto\x1f\x1fconflict\x1fmsg\x1ftime\n"
+	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":true,"description":"msg","ago":"time"}`
 	st := parseWorkingCopy(input)
 	assert.True(t, st.Conflict)
 }
 
 func TestParseWorkingCopy_FullFields(t *testing.T) {
-	input := "rlkvwrto\x1fdirty\x1fconflict\x1fmy commit message\x1f3 days ago\n"
+	input := `{"changeId":"rlkvwrto","dirty":true,"conflict":true,` +
+		`"description":"my commit message","ago":"3 days ago"}`
 	st := parseWorkingCopy(input)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 	assert.True(t, st.Dirty)
@@ -129,44 +138,53 @@ func TestParseWorkingCopy_FullFields(t *testing.T) {
 	assert.Equal(t, "(3 days ago)", st.CommitTime)
 }
 
-func TestParseWorkingCopy_PartialFields(t *testing.T) {
-	input := "rlkvwrto\x1fdirty\n"
-	st := parseWorkingCopy(input)
-	assert.Equal(t, "rlkvwrto", st.Ref)
-	assert.True(t, st.Dirty)
-}
-
 func TestParseWorkingCopy_CommitTimeFormatting(t *testing.T) {
-	input := "rlkvwrto\x1f\x1f\x1f\x1f3 days ago\n"
+	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":"3 days ago"}`
 	st := parseWorkingCopy(input)
 	assert.Equal(t, "(3 days ago)", st.CommitTime)
 }
 
 func TestParseWorkingCopy_NoFields(t *testing.T) {
-	input := "\x1f\x1f\x1f\x1f\n"
-	st := parseWorkingCopy(input)
+	st := parseWorkingCopy("{}")
 	assert.Empty(t, st.Ref)
 	assert.False(t, st.Dirty)
 	assert.False(t, st.Conflict)
 }
 
-func TestParseBookmarks_Empty(t *testing.T) {
-	result := parseBookmarks("")
+func bookmarkRefJSON(
+	name, remote string,
+	tracked, present, conflict bool,
+	ahead, behind int,
+) string {
+	b, err := json.Marshal(bookmarkRef{
+		Name: name, Remote: remote, Tracked: tracked, Present: present,
+		Conflict: conflict, Ahead: ahead, Behind: behind,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	return string(b)
+}
+
+func TestParseBookmarkRefs_Empty(t *testing.T) {
+	result := parseBookmarkRefs("")
 	assert.Nil(t, result)
 }
 
-func TestParseBookmarks_NoRemote(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  (no tracking remote)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_NoRemote(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Empty(t, result[0].Remote)
 	assert.Equal(t, "local", result[0].State.String())
 }
 
-func TestParseBookmarks_WithRemoteSynced(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (tracking)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_WithRemoteSynced(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "origin", result[0].Remote)
@@ -175,10 +193,11 @@ func TestParseBookmarks_WithRemoteSynced(t *testing.T) {
 	assert.Equal(t, "synced", result[0].State.String())
 }
 
-func TestParseBookmarks_WithRemoteAhead(t *testing.T) {
-	// "ahead by 3" means remote is 3 ahead → local is 3 behind.
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (ahead by 3 commits)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_WithRemoteAhead(t *testing.T) {
+	// Local 3 behind remote.
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 3) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 	assert.Equal(t, 0, result[0].Ahead)
@@ -186,107 +205,103 @@ func TestParseBookmarks_WithRemoteAhead(t *testing.T) {
 	assert.Equal(t, "behind", result[0].State.String())
 }
 
-func TestParseBookmarks_WithRemoteBehind(t *testing.T) {
-	// "behind by 2" means remote is 2 behind → local is 2 ahead.
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (behind by 2 commits)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_WithRemoteBehind(t *testing.T) {
+	// Local 2 ahead of remote.
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 2, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, 2, result[0].Ahead)
 	assert.Equal(t, 0, result[0].Behind)
 	assert.Equal(t, "ahead", result[0].State.String())
 }
 
-func TestParseBookmarks_WithRemoteDiverged(t *testing.T) {
-	// "ahead by 2, behind by 1" means remote ahead by 2 (local behind 2)
-	// and remote behind by 1 (local ahead 1).
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (ahead by 2 commits, behind by 1 commit)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_WithRemoteDiverged(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 1, 2) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, 1, result[0].Ahead)
 	assert.Equal(t, 2, result[0].Behind)
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
-func TestParseBookmarks_Gone(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  @origin (gone)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_Gone(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, false, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "origin", result[0].Remote)
 	assert.Equal(t, "gone", result[0].State.String())
 }
 
-func TestParseBookmarks_Conflicted(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c (conflicted)\n  @origin (tracking)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_Conflicted(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.True(t, result[0].Conflict)
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
-func TestParseBookmarks_ConflictedNoRemote(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c (conflicted)\n  (no tracking remote)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_ConflictedNoRemote(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.True(t, result[0].Conflict)
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
-func TestParseBookmarks_MultipleBookmarks(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c\n  @origin (tracking)\nfeature: qpvuntop 1a2b3c4d\n  @origin (ahead by 1 commits)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_MultipleBookmarks(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("feature", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("feature", "origin", true, true, false, 0, 1) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 2)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "feature", result[1].Name)
 }
 
-func TestParseBookmarks_MultipleBookmarksDifferentStates(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c\n  @origin (tracking)\n" +
-		"feature: qpvuntop 1a2b3c4d\n  @origin (gone)\n" +
-		"old: zzzzzzzz 00000000\n  (no tracking remote)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_MultipleBookmarksDifferentStates(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("feature", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("feature", "origin", true, false, false, 0, 0) + "\n" +
+		bookmarkRefJSON("old", "", false, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 3)
 	assert.Equal(t, "synced", result[0].State.String())
 	assert.Equal(t, "gone", result[1].State.String())
 	assert.Equal(t, "local", result[2].State.String())
 }
 
-func TestParseBookmarks_SkipAtInName(t *testing.T) {
-	input := "main@something: rlkvwrto 9f3a1b2c\n  @origin (tracking)\n"
-	result := parseBookmarks(input)
-	assert.Empty(t, result)
-}
-
-func TestParseBookmarks_FirstRemoteOnly(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c\n  @origin (tracking)\n  @upstream (tracking)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_FirstRemoteOnly(t *testing.T) {
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "upstream", true, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 }
 
-func TestParseBookmarks_NoTrackingRemote(t *testing.T) {
-	input := "main: rlkvwrto 9f3a1b2c commit message\n  (no tracking remote)\n"
-	result := parseBookmarks(input)
-	require.Len(t, result, 1)
-	assert.Empty(t, result[0].Remote)
-	assert.Equal(t, "local", result[0].State.String())
-}
-
-func TestParseBookmarks_EmptyBookmarkName(t *testing.T) {
-	input := ": rlkvwrto 9f3a1b2c\n  @origin (tracking)\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_EmptyBookmarkName(t *testing.T) {
+	input := bookmarkRefJSON("", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("", "origin", true, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Empty(t, result[0].Name)
 }
 
-func TestParseBookmarks_SkipGitRemote(t *testing.T) {
+func TestParseBookmarkRefs_SkipGitRemote(t *testing.T) {
 	// Colocated jj+git repos have a synthetic @git remote that always
 	// appears before @origin in the output. We must skip @git and
 	// use @origin as the true remote.
-	input := "main: lolyspwl 5d874311 lint fix\n" +
-		"  @git: lolyspwl 5d874311 lint fix\n" +
-		"  @origin (ahead by 1 commits, behind by 1 commits): lolyspwl/1 6f42490f (hidden) lint fix\n"
-	result := parseBookmarks(input)
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "git", true, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 1, 1) + "\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 	assert.Equal(t, 1, result[0].Ahead)
@@ -294,42 +309,19 @@ func TestParseBookmarks_SkipGitRemote(t *testing.T) {
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
-func TestParseBookmarks_BlankLines(t *testing.T) {
-	input := "\nmain: rlkvwrto 9f3a1b2c\n\n  @origin (tracking)\n\n"
-	result := parseBookmarks(input)
+func TestParseBookmarkRefs_BlankLines(t *testing.T) {
+	input := "\n" + bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n\n" +
+		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n\n"
+	result := parseBookmarkRefs(input)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 }
 
-func TestExtractCount(t *testing.T) {
-	tests := []struct {
-		s        string
-		keyword  string
-		expected int
-	}{
-		{"ahead by 2 commits", "ahead by", 2},
-		{"behind by 1 commit", "behind by", 1},
-		{"no match here", "ahead by", 0},
-		{"", "ahead by", 0},
-		{"ahead by 10 commits", "ahead by", 10},
-		{"behind by 100 commits", "behind by", 100},
-	}
-	for _, tt := range tests {
-		t.Run(tt.s, func(t *testing.T) {
-			assert.Equal(t, tt.expected, extractCount(tt.s, tt.keyword))
-		})
-	}
-}
-
-func TestExtractCommitMsg(t *testing.T) {
-	assert.Equal(t, "msg", extractCommitMsg("msg"))
-	assert.Empty(t, extractCommitMsg(""))
-}
-
-func TestExtractCommitTime(t *testing.T) {
-	assert.Equal(t, "time", extractCommitTime("msg\x1ftime"))
-	assert.Empty(t, extractCommitTime("msg"))
-	assert.Empty(t, extractCommitTime(""))
+func TestParseBookmarkRefs_MalformedLine(t *testing.T) {
+	input := "not json\n" + bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
+	require.Len(t, result, 1)
+	assert.Equal(t, "main", result[0].Name)
 }
 
 func TestBackend_Name_JJ(t *testing.T) {
@@ -488,78 +480,33 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 	assert.NotEmpty(t, st.Ref)
 }
 
-func TestEnrichWithRemoteBookmark_Found(t *testing.T) {
+func TestBackend_Status_ColocatedRemoteFromSingleQuery(t *testing.T) {
+	// In colocated jj/git repos, a single `bookmark list --all-remotes <name>`
+	// call already returns the @git and @origin entries together — no second
+	// query is needed to discover the real remote.
 	b := &Backend{}
 	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		switch {
+		case slices.Contains(args, "@") && slices.Contains(args, "--template"):
+			return `{"changeId":"sxoqvoon","dirty":false,"conflict":false,"description":"msg","ago":"now"}`, nil
+		case slices.Contains(args, "bookmarks.first().name()"):
+			return "main\n", nil
 		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
-			return "main: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
-				"  @git: sxoqvoon 2c688398 (empty) Merge pull request #15\n" +
-				"main@origin: opxqzwyo e67b1a90 (empty) Merge pull request #17\n", nil
-		case slices.Contains(args, "main..main@origin") && slices.Contains(args, "--count"):
-			return "1", nil
-		case slices.Contains(args, "main@origin..main") && slices.Contains(args, "--count"):
-			return "0", nil
+			return bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+				bookmarkRefJSON("main", "git", true, true, false, 0, 0) + "\n" +
+				bookmarkRefJSON("main", "origin", true, true, false, 0, 1) + "\n", nil
 		default:
-			return "", nil
+			return "0", nil
 		}
 	}
 
-	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
-
-	assert.Equal(t, "origin", bm.Remote)
-	assert.Equal(t, 0, bm.Ahead)
-	assert.Equal(t, 1, bm.Behind)
-	assert.Equal(t, "behind", bm.State.String())
-}
-
-func TestEnrichWithRemoteBookmark_NotFound(t *testing.T) {
-	b := &Backend{}
-	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
-		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
-			return "main: sxoqvoon 2c688398\n  @git: sxoqvoon 2c688398\n", nil
-		}
-
-		return "", nil
-	}
-
-	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
-
-	assert.Empty(t, bm.Remote)
-	assert.Equal(t, backend.RefStateNoRemote, bm.State)
-}
-
-func TestEnrichWithRemoteBookmark_SkipGit(t *testing.T) {
-	b := &Backend{}
-	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
-		if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
-			return "main: sxoqvoon 2c688398\n" +
-				"  @git: sxoqvoon 2c688398\n" +
-				"main@git: sxoqvoon 2c688398\n", nil
-		}
-
-		return "", nil
-	}
-
-	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
-
-	assert.Empty(t, bm.Remote)
-	assert.Equal(t, backend.RefStateNoRemote, bm.State)
-}
-
-func TestEnrichWithRemoteBookmark_FetchError(t *testing.T) {
-	b := &Backend{}
-	b.runJJFn = func(_ context.Context, _ string, _ []string) (string, error) {
-		return "", assert.AnError
-	}
-
-	bm := &backend.BookmarkStatus{Name: "main", State: backend.RefStateNoRemote}
-	b.enrichWithRemoteBookmark(t.Context(), "/tmp", "main", bm)
-
-	assert.Empty(t, bm.Remote)
+	st, err := b.Status(t.Context(), "/tmp")
+	require.NoError(t, err)
+	require.Len(t, st.Bookmarks, 1)
+	assert.Equal(t, "origin", st.Bookmarks[0].Remote)
+	assert.Equal(t, 0, st.Bookmarks[0].Ahead)
+	assert.Equal(t, 1, st.Bookmarks[0].Behind)
+	assert.Equal(t, "behind", st.Bookmarks[0].State.String())
 }
 
 func TestCountRevs(t *testing.T) {
@@ -670,19 +617,22 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 		wantMsg   string
 	}{
 		{
-			name:      "described",
-			wcOutput:  "rlkvwrto\x1f\x1f\x1ffeat: initial\x1f2 hours ago\n",
+			name: "described",
+			wcOutput: `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
+				`"description":"feat: initial","ago":"2 hours ago"}`,
 			wantAhead: 2,
 			wantMsg:   "feat: initial",
 		},
 		{
-			name:      "undescribed",
-			wcOutput:  "rlkvwrto\x1f\x1f\x1f\x1f2 hours ago\n",
+			name: "undescribed",
+			wcOutput: `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
+				`"description":"","ago":"2 hours ago"}`,
 			wantAhead: 2,
 		},
 		{
-			name:      "undescribed dirty",
-			wcOutput:  "rlkvwrto\x1fdirty\x1f\x1f\x1f2 hours ago\n",
+			name: "undescribed dirty",
+			wcOutput: `{"changeId":"rlkvwrto","dirty":true,"conflict":false,` +
+				`"description":"","ago":"2 hours ago"}`,
 			wantAhead: 2,
 			wantDirty: true,
 		},
@@ -701,7 +651,7 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 				}
 
 				if slices.Contains(args, "bookmark") && slices.Contains(args, "list") {
-					return "main: rlkvwrto ...\n  (no tracking remote)\n", nil
+					return bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n", nil
 				}
 
 				if (slices.Contains(args, "main..@") || slices.Contains(args, "..@")) &&
