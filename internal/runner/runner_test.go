@@ -12,6 +12,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 const (
@@ -26,7 +27,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
-	os.Exit(m.Run())
+	goleak.VerifyTestMain(m)
 }
 
 type gitBackend struct{}
@@ -64,6 +65,22 @@ func TestDispatch(t *testing.T) {
 	}
 
 	ch, err := Dispatch(t.Context(), repos, []string{"r1"}, "git", []string{"status"}, 1)
+	require.NoError(t, err)
+
+	count := 0
+	for range ch {
+		count++
+	}
+
+	assert.Equal(t, 1, count)
+}
+
+func TestDispatch_ZeroConcurrencyDoesNotDeadlock(t *testing.T) {
+	repos := map[string]config.Repo{
+		"r1": {Path: "/tmp/r1"},
+	}
+
+	ch, err := Dispatch(t.Context(), repos, []string{"r1"}, "git", []string{"status"}, 0)
 	require.NoError(t, err)
 
 	count := 0
@@ -136,6 +153,13 @@ func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 }
 
 func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+
 	dir := t.TempDir()
 	runGit(t, dir, "init", initMain, branchMain)
 	runGit(t, dir, "config", "user.email", testEmail)
@@ -166,7 +190,7 @@ func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	require.NoError(t, cmd.Run())
 }
@@ -201,6 +225,13 @@ func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
 }
 
 func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+
 	dir := t.TempDir()
 	runGit(t, dir, "init", initMain, branchMain)
 	runGit(t, dir, "config", "user.email", testEmail)
@@ -295,6 +326,24 @@ func TestErrRepoNotFound(t *testing.T) {
 	err := errRepoNotFound
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "repo not found")
+}
+
+func TestResultColor(t *testing.T) {
+	tests := []struct {
+		name string
+		res  Result
+		want string
+	}{
+		{"success", Result{ExitCode: 0}, "green"},
+		{"nonzero exit code", Result{ExitCode: 1}, colorRed},
+		{"error set", Result{Err: errRepoNotFound}, colorRed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ResultColor(tt.res))
+		})
+	}
 }
 
 func TestDispatch_MultipleRepos(t *testing.T) {
