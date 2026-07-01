@@ -70,6 +70,30 @@ func RunCommand(
 	return RunResult{Output: buf.String(), ExitCode: exitCode}, err
 }
 
+// RunTool validates args and runs binary via RunCommand, wrapping any
+// infrastructure error with the binary name and failing subcommand. It
+// implements the common case of Backend.Run: reject empty args, run, wrap
+// errors. Backends with extra dispatch logic (e.g. multi-step ops) should
+// perform that logic first and fall through to RunTool for the common path.
+func RunTool(
+	ctx context.Context,
+	binary string,
+	path string,
+	args []string,
+	interactive bool,
+) (RunResult, error) {
+	if len(args) == 0 {
+		return RunResult{}, ErrNoArgs
+	}
+
+	res, err := RunCommand(ctx, binary, path, args, interactive)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("%s %s: %w", binary, args[0], err)
+	}
+
+	return res, nil
+}
+
 // DetectDir returns true if the directory at path contains a directory with
 // the given marker name (e.g. ".git" or ".jj").
 func DetectDir(path, marker string) (bool, error) {

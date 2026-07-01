@@ -237,12 +237,8 @@ func (*Backend) Run(
 		return runSteps(ctx, path, args[0], steps, interactive)
 	}
 
-	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
-	if err != nil {
-		return backend.RunResult{}, fmt.Errorf("jj run: %w", err)
-	}
-
-	return res, nil
+	//nolint:wrapcheck // RunTool already wraps with the binary name and subcommand
+	return backend.RunTool(ctx, "jj", path, args, interactive)
 }
 
 func (b *Backend) runJJ(ctx context.Context, path string, args []string) (string, error) {
