@@ -11,6 +11,7 @@ import (
 
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/backend/backendtest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -409,32 +410,7 @@ func TestBackend_SubcommandArgs_JJ(t *testing.T) {
 }
 
 func TestBackend_Detect(t *testing.T) {
-	t.Run("with jj dir", func(t *testing.T) {
-		dir := t.TempDir()
-		err := os.MkdirAll(filepath.Join(dir, ".jj"), 0o750)
-		require.NoError(t, err)
-
-		b := &Backend{}
-		ok, err := b.Detect(dir)
-		require.NoError(t, err)
-		assert.True(t, ok)
-	})
-
-	t.Run("without jj dir", func(t *testing.T) {
-		dir := t.TempDir()
-
-		b := &Backend{}
-		ok, err := b.Detect(dir)
-		require.NoError(t, err)
-		assert.False(t, ok)
-	})
-
-	t.Run("error on invalid path", func(t *testing.T) {
-		b := &Backend{}
-		ok, err := b.Detect("\x00invalid")
-		assert.False(t, ok)
-		assert.Error(t, err)
-	})
+	backendtest.AssertDetect(t, func() backend.Backend { return &Backend{} }, ".jj")
 }
 
 func TestBackend_Detect_NonColocated(t *testing.T) {
@@ -649,11 +625,7 @@ func TestBackend_Run(t *testing.T) {
 }
 
 func TestBackend_Run_NoArgs(t *testing.T) {
-	dir := t.TempDir()
-
-	b := &Backend{}
-	_, err := b.Run(t.Context(), dir, nil, false)
-	assert.ErrorIs(t, err, backend.ErrNoArgs)
+	backendtest.AssertRunNoArgs(t, &Backend{})
 }
 
 func TestBackend_Run_NonZeroExit(t *testing.T) {
@@ -883,13 +855,7 @@ func TestBackend_Subcommands(t *testing.T) {
 }
 
 func TestBackend_Subcommands_Error(t *testing.T) {
-	b := &Backend{}
-
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	_, err := b.Subcommands(ctx)
-	assert.Error(t, err)
+	backendtest.AssertSubcommandsErrorsOnCanceledContext(t, &Backend{})
 }
 
 func TestParseJjCmdList(t *testing.T) {
