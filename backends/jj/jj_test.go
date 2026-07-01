@@ -168,13 +168,13 @@ func bookmarkRefJSON(
 }
 
 func TestParseBookmarkRefs_Empty(t *testing.T) {
-	result := parseBookmarkRefs("")
+	result := parseBookmarkRefs("", nil)
 	assert.Nil(t, result)
 }
 
 func TestParseBookmarkRefs_NoRemote(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Empty(t, result[0].Remote)
@@ -184,7 +184,7 @@ func TestParseBookmarkRefs_NoRemote(t *testing.T) {
 func TestParseBookmarkRefs_WithRemoteSynced(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "origin", result[0].Remote)
@@ -197,7 +197,7 @@ func TestParseBookmarkRefs_WithRemoteAhead(t *testing.T) {
 	// Local 3 behind remote.
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 3) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 	assert.Equal(t, 0, result[0].Ahead)
@@ -209,7 +209,7 @@ func TestParseBookmarkRefs_WithRemoteBehind(t *testing.T) {
 	// Local 2 ahead of remote.
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 2, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, 2, result[0].Ahead)
 	assert.Equal(t, 0, result[0].Behind)
@@ -219,17 +219,54 @@ func TestParseBookmarkRefs_WithRemoteBehind(t *testing.T) {
 func TestParseBookmarkRefs_WithRemoteDiverged(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 1, 2) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, 1, result[0].Ahead)
 	assert.Equal(t, 2, result[0].Behind)
 	assert.Equal(t, "diverged", result[0].State.String())
 }
 
+func TestParseBookmarkRefs_UntrackedRemoteResolvesAheadBehind(t *testing.T) {
+	// jj only computes tracking_ahead_count/tracking_behind_count for
+	// tracked remotes, so an untracked-but-present remote always carries
+	// ahead=0/behind=0 in the JSON itself. resolveUntracked must be
+	// consulted instead of trusting those zeroed fields.
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", false, true, false, 0, 0) + "\n"
+
+	var gotName, gotRemote string
+
+	result := parseBookmarkRefs(input, func(name, remote string) (int, int) {
+		gotName, gotRemote = name, remote
+
+		return 2, 5
+	})
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "main", gotName)
+	assert.Equal(t, "origin", gotRemote)
+	assert.Equal(t, "origin", result[0].Remote)
+	assert.Equal(t, 2, result[0].Ahead)
+	assert.Equal(t, 5, result[0].Behind)
+	assert.Equal(t, "diverged", result[0].State.String())
+}
+
+func TestParseBookmarkRefs_UntrackedRemoteNilResolver(t *testing.T) {
+	// A nil resolver (e.g. from a bare parseBookmarkRefs(raw, nil) call)
+	// must not panic, and simply leaves ahead/behind at zero.
+	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", false, true, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input, nil)
+	require.Len(t, result, 1)
+	assert.Equal(t, 0, result[0].Ahead)
+	assert.Equal(t, 0, result[0].Behind)
+	assert.Equal(t, "synced", result[0].State.String())
+}
+
 func TestParseBookmarkRefs_Gone(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, false, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "origin", result[0].Remote)
@@ -242,7 +279,7 @@ func TestParseBookmarkRefs_ConflictedAndGoneKeepsDiverged(t *testing.T) {
 	// not have it clobbered by the "gone" remote state.
 	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, false, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.True(t, result[0].Conflict)
 	assert.Equal(t, "origin", result[0].Remote)
@@ -252,7 +289,7 @@ func TestParseBookmarkRefs_ConflictedAndGoneKeepsDiverged(t *testing.T) {
 func TestParseBookmarkRefs_Conflicted(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.True(t, result[0].Conflict)
 	assert.Equal(t, "diverged", result[0].State.String())
@@ -260,7 +297,7 @@ func TestParseBookmarkRefs_Conflicted(t *testing.T) {
 
 func TestParseBookmarkRefs_ConflictedNoRemote(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.True(t, result[0].Conflict)
 	assert.Equal(t, "diverged", result[0].State.String())
@@ -271,7 +308,7 @@ func TestParseBookmarkRefs_MultipleBookmarks(t *testing.T) {
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("feature", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("feature", "origin", true, true, false, 0, 1) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 2)
 	assert.Equal(t, "main", result[0].Name)
 	assert.Equal(t, "feature", result[1].Name)
@@ -283,7 +320,7 @@ func TestParseBookmarkRefs_MultipleBookmarksDifferentStates(t *testing.T) {
 		bookmarkRefJSON("feature", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("feature", "origin", true, false, false, 0, 0) + "\n" +
 		bookmarkRefJSON("old", "", false, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 3)
 	assert.Equal(t, "synced", result[0].State.String())
 	assert.Equal(t, "gone", result[1].State.String())
@@ -294,7 +331,7 @@ func TestParseBookmarkRefs_FirstRemoteOnly(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "upstream", true, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 }
@@ -302,7 +339,7 @@ func TestParseBookmarkRefs_FirstRemoteOnly(t *testing.T) {
 func TestParseBookmarkRefs_EmptyBookmarkName(t *testing.T) {
 	input := bookmarkRefJSON("", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("", "origin", true, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Empty(t, result[0].Name)
 }
@@ -314,7 +351,7 @@ func TestParseBookmarkRefs_SkipGitRemote(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "git", true, true, false, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 1, 1) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "origin", result[0].Remote)
 	assert.Equal(t, 1, result[0].Ahead)
@@ -325,14 +362,14 @@ func TestParseBookmarkRefs_SkipGitRemote(t *testing.T) {
 func TestParseBookmarkRefs_BlankLines(t *testing.T) {
 	input := "\n" + bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 }
 
 func TestParseBookmarkRefs_MalformedLine(t *testing.T) {
 	input := "not json\n" + bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n"
-	result := parseBookmarkRefs(input)
+	result := parseBookmarkRefs(input, nil)
 	require.Len(t, result, 1)
 	assert.Equal(t, "main", result[0].Name)
 }
@@ -493,10 +530,13 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 	assert.NotEmpty(t, st.Ref)
 }
 
+//nolint:cyclop // runJJFn dispatch switch covers several distinct jj subcommands
 func TestBackend_Status_ColocatedRemoteFromSingleQuery(t *testing.T) {
 	// In colocated jj/git repos, a single `bookmark list --all-remotes <name>`
 	// call already returns the @git and @origin entries together — no second
-	// query is needed to discover the real remote.
+	// query is needed to discover the real remote. @origin is untracked here
+	// (the common colocated-repo case), so jj itself reports ahead=0/behind=0
+	// for it and Status must fall back to countRevs to get the real counts.
 	b := &Backend{}
 	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 		switch {
@@ -507,7 +547,11 @@ func TestBackend_Status_ColocatedRemoteFromSingleQuery(t *testing.T) {
 		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
 			return bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n" +
 				bookmarkRefJSON("main", "git", true, true, false, 0, 0) + "\n" +
-				bookmarkRefJSON("main", "origin", true, true, false, 0, 1) + "\n", nil
+				bookmarkRefJSON("main", "origin", false, true, false, 0, 0) + "\n", nil
+		case slices.Contains(args, "main@origin..main") && slices.Contains(args, "--count"):
+			return "0", nil
+		case slices.Contains(args, "main..main@origin") && slices.Contains(args, "--count"):
+			return "1", nil
 		default:
 			return "0", nil
 		}

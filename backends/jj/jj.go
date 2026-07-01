@@ -166,8 +166,11 @@ func parseJjCmdList(completion string) []string {
 //
 // Subprocess calls:
 //  1. jj log -r @ → change ID, dirty flag, conflict flag
-//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data,
-//     including ahead/behind/gone state for every remote, computed by jj itself.
+//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data.
+//     jj itself computes ahead/behind for tracked remotes; for a present but
+//     untracked remote (colocated repos where the counterpart isn't an
+//     explicit tracking remote), ahead/behind is computed with an extra
+//     jj log --count call per direction (see countRevs).
 func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
 	wcArgs := append([]string{}, logBaseArgs...)
 	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
@@ -194,7 +197,13 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		bmOut, _ := b.runJJ(ctx, path, []string{
 			subCmdBookmark, subCmdList, "--all-remotes", headName, templateFlag, bookmarkTmpl,
 		})
-		status.Bookmarks = parseBookmarkRefs(bmOut)
+		status.Bookmarks = parseBookmarkRefs(bmOut, func(name, remote string) (int, int) {
+			remoteRef := name + "@" + remote
+			ahead := b.countRevs(ctx, path, remoteRef+".."+name)
+			behind := b.countRevs(ctx, path, name+".."+remoteRef)
+
+			return ahead, behind
+		})
 	}
 
 	if headName != "" {
@@ -369,8 +378,14 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 
 // parseBookmarkRefs decodes bookmarkTmpl's output — one JSON CommitRef per
 // line — and groups entries by name into backend.BookmarkStatus, picking the
-// first non-@git tracked remote for ahead/behind/gone state.
-func parseBookmarkRefs(raw string) []backend.BookmarkStatus {
+// first non-@git remote for ahead/behind/gone state. For a present remote
+// that isn't tracked, resolveUntracked (may be nil) computes real ahead/behind
+// counts, since jj's own tracking_ahead_count/tracking_behind_count are only
+// meaningful for tracked remotes.
+func parseBookmarkRefs(
+	raw string,
+	resolveUntracked func(name, remote string) (ahead, behind int),
+) []backend.BookmarkStatus {
 	var (
 		bookmarks []backend.BookmarkStatus
 		current   *backend.BookmarkStatus
@@ -407,7 +422,7 @@ func parseBookmarkRefs(raw string) []backend.BookmarkStatus {
 			continue
 		}
 
-		applyRemoteRef(current, ref)
+		applyRemoteRef(current, ref, resolveUntracked)
 	}
 
 	flush()
@@ -427,7 +442,14 @@ func newBookmarkStatus(ref bookmarkRef) *backend.BookmarkStatus {
 // applyRemoteRef folds a remote CommitRef entry into the bookmark it
 // belongs to, skipping the synthetic @git remote (colocation bookmark, not
 // a real remote), entries for a different bookmark, and an already-set remote.
-func applyRemoteRef(current *backend.BookmarkStatus, ref bookmarkRef) {
+// For a present but untracked remote, resolveUntracked (may be nil) computes
+// real ahead/behind counts, since jj only reports tracking_ahead_count/
+// tracking_behind_count for tracked remotes.
+func applyRemoteRef(
+	current *backend.BookmarkStatus,
+	ref bookmarkRef,
+	resolveUntracked func(name, remote string) (ahead, behind int),
+) {
 	if current == nil || current.Name != ref.Name || ref.Remote == cmdGit || current.Remote != "" {
 		return
 	}
@@ -444,8 +466,14 @@ func applyRemoteRef(current *backend.BookmarkStatus, ref bookmarkRef) {
 		return
 	}
 
-	current.Ahead = ref.Ahead
-	current.Behind = ref.Behind
+	switch {
+	case ref.Tracked:
+		current.Ahead = ref.Ahead
+		current.Behind = ref.Behind
+	case resolveUntracked != nil:
+		current.Ahead, current.Behind = resolveUntracked(ref.Name, ref.Remote)
+	}
+
 	backend.ComputeBookmarkState(current)
 }
 
