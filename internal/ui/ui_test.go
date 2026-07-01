@@ -259,3 +259,25 @@ func TestMutedStyle(t *testing.T) {
 
 	assert.NotEmpty(t, ui.Muted("test"))
 }
+
+func TestWarnStyle(t *testing.T) {
+	style := ui.WarnStyle()
+	assert.NotEmpty(t, style.Render("test"))
+}
+
+func TestOut(t *testing.T) {
+	out := capturer.CaptureStdout(func() {
+		ui.Out("plain line %s")
+	})
+	assert.Equal(t, "plain line %s\n", out)
+}
+
+func TestWarnf(t *testing.T) {
+	var buf bytes.Buffer
+
+	ui.SetLogger(log.New(&buf))
+	defer ui.SetLogger(nil)
+
+	ui.Warnf("warn %s", "msg")
+	assert.Contains(t, buf.String(), "warn msg")
+}

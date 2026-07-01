@@ -1,10 +1,12 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -401,4 +403,48 @@ path = "/c"
 	require.Contains(t, cfg.Groups, "personal")
 	assert.Equal(t, []string{"b"}, cfg.Groups["personal"].Repos)
 	assert.NotContains(t, cfg.Groups, "c")
+}
+
+type fakeConfigBackend struct{}
+
+func (*fakeConfigBackend) Name() string  { return "fake" }
+func (*fakeConfigBackend) Priority() int { return 10 }
+func (*fakeConfigBackend) Detect(path string) (bool, error) {
+	_, err := os.Stat(filepath.Join(path, ".fake"))
+
+	return err == nil, nil
+}
+
+func (*fakeConfigBackend) Status(_ context.Context, _ string) (backend.RepoStatus, error) {
+	return backend.RepoStatus{}, nil
+}
+
+func (*fakeConfigBackend) SubcommandArgs(_ string) []string { return nil }
+func (*fakeConfigBackend) Subcommands(_ context.Context) ([]string, error) {
+	return nil, nil
+}
+
+func (*fakeConfigBackend) Run(
+	_ context.Context,
+	_ string,
+	_ []string,
+	_ bool,
+) (backend.RunResult, error) {
+	return backend.RunResult{}, nil
+}
+
+func TestActiveBackend(t *testing.T) {
+	require.NoError(t, backend.Register(&fakeConfigBackend{}))
+	t.Cleanup(backend.ResetDetectCache)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".fake"), []byte(""), 0o644))
+
+	r := Repo{Path: dir}
+	assert.Equal(t, "fake", r.ActiveBackend())
+}
+
+func TestActiveBackend_NoMatch(t *testing.T) {
+	r := Repo{Path: t.TempDir()}
+	assert.Empty(t, r.ActiveBackend())
 }
