@@ -513,8 +513,37 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 	st, err := b.Status(t.Context(), dir)
 	require.NoError(t, err)
 	assert.Equal(t, "feat: initial", st.CommitMsg)
+	assert.NotEmpty(
+		t,
+		st.CommitTime,
+		"ancestor CommitTime must be filled in the same '(...)' form as the working copy",
+	)
 	assert.Len(t, st.Bookmarks, 1)
 	assert.Equal(t, "main", st.Bookmarks[0].Name)
+}
+
+func TestBackend_Status_AncestorCommitTimeFormat(t *testing.T) {
+	// fillCommitMsgFromAncestors reuses parseWorkingCopy to decode ancestor
+	// output, so it must apply the same "(...)" CommitTime formatting.
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
+		switch {
+		case slices.Contains(args, "@") && slices.Contains(args, "--template"):
+			return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":""}`, nil
+		case slices.Contains(args, "@-") && slices.Contains(args, "--template"):
+			return `{"changeId":"qzkswnpm","dirty":false,"conflict":false,` +
+				`"description":"feat: ancestor","ago":"5 minutes ago"}`, nil
+		case slices.Contains(args, "bookmarks.first().name()"):
+			return "", nil
+		default:
+			return "", nil
+		}
+	}
+
+	st, err := b.Status(t.Context(), "/tmp")
+	require.NoError(t, err)
+	assert.Equal(t, "feat: ancestor", st.CommitMsg)
+	assert.Equal(t, "(5 minutes ago)", st.CommitTime)
 }
 
 func TestBackend_Status_AncestorWalkError(t *testing.T) {

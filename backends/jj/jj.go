@@ -293,17 +293,14 @@ func (b *Backend) fillCommitMsgFromAncestors(
 			break
 		}
 
-		var detail wcDetail
-		if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &detail); err != nil {
+		detail, err := parseWorkingCopy(out)
+		if err != nil {
 			continue
 		}
 
-		if detail.Description != "" {
-			status.CommitMsg = detail.Description
-
-			if detail.Ago != "" {
-				status.CommitTime = "(" + detail.Ago + ")"
-			}
+		if detail.CommitMsg != "" {
+			status.CommitMsg = detail.CommitMsg
+			status.CommitTime = detail.CommitTime
 
 			break
 		}
