@@ -2,13 +2,13 @@ version: "2"
 linters:
   default: all
   disable:
+    - gomodguard
+    - noinlineerr
+    - paralleltest
     - depguard
     - exhaustruct
     - godoclint
-    - gomodguard
     - ireturn
-    - noinlineerr
-    - paralleltest
     - testpackage
     - varnamelen
     - wsl

@@ -51,7 +51,6 @@ homebrew_casks:
     homepage: "https://github.com/hugoh/hrd"
     binaries:
       - hrd
-
 changelog:
   use: git
   sort: asc
