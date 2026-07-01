@@ -53,6 +53,13 @@ func TestStatusFilterMatches(t *testing.T) {
 func setupRealGitRepo(t *testing.T, dirty bool) string {
 	t.Helper()
 
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+
 	dir := t.TempDir()
 
 	for _, args := range [][]string{
@@ -97,6 +104,22 @@ func TestLsFilterNoMatch(t *testing.T) {
 
 	out := runAppCapture(t, cfgPath, []string{"ls", "--dirty", "--names"})
 	assert.Empty(t, strings.TrimSpace(out))
+}
+
+// TestLsDirtyFilterRendersStatus exercises replayGather: with a status
+// filter active and --names/--dirs not set, ls must render status using the
+// statuses already gathered for filtering, without re-querying the repos.
+func TestLsDirtyFilterRendersStatus(t *testing.T) {
+	backend.ResetDetectCache()
+
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"cleanrepo": {Path: setupRealGitRepo(t, false)},
+		"dirtyrepo": {Path: setupRealGitRepo(t, true)},
+	}})
+
+	out := runAppCapture(t, cfgPath, []string{"ls", "--dirty"})
+	assert.Contains(t, out, "dirtyrepo")
+	assert.NotContains(t, out, "cleanrepo")
 }
 
 func TestShellDirtyFilter(t *testing.T) {
