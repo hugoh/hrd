@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+#MISE description="Regenerate committed generated files"
+#MISE sources=["README.md.tpl", "cmd/**/*.go"]
+#MISE outputs=["README.md"]
+set -e
+go generate ./...
+dprint fmt README.md

@@ -1,0 +1,62 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 528783e
+_src_path: gh:hugoh/go-tools
+codecov_components:
+-   id: backends_git
+    name: backends/git
+    path: backends/git/**
+-   id: backends_jj
+    name: backends/jj
+    path: backends/jj/**
+codecov_ignore:
+- main.go
+- cmd/genreadme/**
+codecov_style: full
+codecov_target: 80%
+cog_omit_type: ''
+coverage_backends_override: true
+coverage_total: 90
+dev_watch: false
+dprint_has_excludes: false
+gen_check_cmd: git diff --exit-code README.md
+gen_cmd:
+- go generate ./...
+- dprint fmt README.md
+gen_outputs:
+- README.md
+gen_sources:
+- README.md.tpl
+- cmd/**/*.go
+golangci_extra_disable:
+- depguard
+- exhaustruct
+- godoclint
+- ireturn
+- testpackage
+- varnamelen
+golangci_extra_exclusions: []
+golangci_revive_overrides: true
+golangci_test_exclude_linters:
+- err113
+- noctx
+- varnamelen
+- goconst
+- gosec
+goreleaser_version_pkg: github.com/hugoh/hrd/cmd
+has_fuzz: false
+has_gen: true
+has_goreleaser: true
+has_homebrew_cask: true
+has_test_int: false
+hk_has_golangci_step: false
+hk_has_goreleaser_step: true
+hk_prepush_with_go_ci: true
+project_description: Multi-repo manager for git and jj with parallel execution and
+    live status
+project_name: hrd
+testcoverage_excludes:
+- 'main\.go$ # Program entry point'
+- cmd/genreadme/
+- 'internal/backend/backendtest/ # shared test helpers, exercised only from other
+    packages'' tests'
+

@@ -14,7 +14,6 @@ component_management:
       name: backends/jj
       paths:
         - backends/jj/**
-
 ignore:
   - main.go
   - cmd/genreadme/**
