@@ -21,30 +21,47 @@ import (
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
 	git.Register()
 	jj.Register()
-	os.Exit(m.Run())
+	goleak.VerifyTestMain(m,
+		// teatest.NewTestModel spawns an output-forwarding goroutine that
+		// outlives WaitFinished; it's internal to the third-party library,
+		// not something callers can drain or cancel.
+		goleak.IgnoreTopFunction("github.com/charmbracelet/x/exp/teatest/v2.NewTestModel.func2"),
+	)
 }
 
+// initGitRepo initializes a real git repository in dir, isolated from the
+// developer's global git config, and skips the test if git is unavailable.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 
-	for _, cmd := range []string{
-		"git init",
-		"git config user.email test@test.com",
-		"git config user.name test",
-		"echo content > file.txt",
-		"git add .",
-		"git commit -m 'initial commit'",
-	} {
-		c := exec.Command("bash", "-c", cmd)
-		c.Dir = dir
-		out, err := c.CombinedOutput()
-		require.NoError(t, err, "git setup failed: %s", out)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
 	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+
+	runGitCmd(t, dir, "init")
+	runGitCmd(t, dir, "config", "user.email", "test@test.com")
+	runGitCmd(t, dir, "config", "user.name", "test")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "file.txt"), []byte("content\n"), 0o644))
+	runGitCmd(t, dir, "add", ".")
+	runGitCmd(t, dir, "commit", "-m", "initial commit")
+}
+
+func runGitCmd(t *testing.T, dir string, args ...string) {
+	t.Helper()
+
+	c := exec.CommandContext(t.Context(), "git", args...)
+	c.Dir = dir
+	out, err := c.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, out)
 }
 
 func TestTableShowsRepoStatus(t *testing.T) {

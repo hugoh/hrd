@@ -46,28 +46,31 @@ func TestRestoreSelectedEmptyRepos(t *testing.T) {
 	assert.Equal(t, map[string]bool{}, got)
 }
 
-//nolint:gochecknoglobals // shared test config
-var cfg = config.Config{
-	Groups: map[string]config.Group{
-		"work":     {Repos: []string{"a", "b"}},
-		"personal": {Repos: []string{"c", "d"}},
-	},
+// testGroupConfig returns a fresh config.Config per call so tests can't
+// leak mutations to each other via a shared package-level fixture.
+func testGroupConfig() config.Config {
+	return config.Config{
+		Groups: map[string]config.Group{
+			"work":     {Repos: []string{"a", "b"}},
+			"personal": {Repos: []string{"c", "d"}},
+		},
+	}
 }
 
 func TestResolveGroupFilterOptGroupTakesPriority(t *testing.T) {
-	got, err := resolveGroupFilter("personal", "work", cfg)
+	got, err := resolveGroupFilter("personal", "work", testGroupConfig())
 	require.NoError(t, err)
 	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterFallsBackToLastGroup(t *testing.T) {
-	got, err := resolveGroupFilter("", "personal", cfg)
+	got, err := resolveGroupFilter("", "personal", testGroupConfig())
 	require.NoError(t, err)
 	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterLastGroupNotInConfig(t *testing.T) {
-	got, err := resolveGroupFilter("", "nonexistent", cfg)
+	got, err := resolveGroupFilter("", "nonexistent", testGroupConfig())
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
@@ -79,17 +82,17 @@ func TestResolveGroupFilterAllEmpty(t *testing.T) {
 }
 
 func TestResolveGroupFilterOptGroupUnknown(t *testing.T) {
-	_, err := resolveGroupFilter("nonexistent", "", cfg)
+	_, err := resolveGroupFilter("nonexistent", "", testGroupConfig())
 	assert.Error(t, err)
 }
 
 func TestResolveGroupFilterOptGroupWithAtPrefix(t *testing.T) {
-	got, err := resolveGroupFilter("@personal", "", cfg)
+	got, err := resolveGroupFilter("@personal", "", testGroupConfig())
 	require.NoError(t, err)
 	assert.Equal(t, "personal", got)
 }
 
 func TestResolveGroupFilterAtPrefixUnknown(t *testing.T) {
-	_, err := resolveGroupFilter("@nonexistent", "", cfg)
+	_, err := resolveGroupFilter("@nonexistent", "", testGroupConfig())
 	assert.Error(t, err)
 }
