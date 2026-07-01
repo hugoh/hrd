@@ -146,44 +146,38 @@ func TestHistoryEntriesNoMatch(t *testing.T) {
 	assert.Nil(t, m.historyEntries())
 }
 
-func TestHistoryPrevFirstCall(t *testing.T) {
-	m := &model{
-		input: initInput(),
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-				{Prefix: "git", Command: "status"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-		historyIdx:          -1,
+func TestHistoryPrev(t *testing.T) {
+	tests := []struct {
+		name       string
+		historyIdx int
+		wantIdx    int
+		wantValue  string
+	}{
+		{"first call", -1, 0, "git log"},
+		{"clamps at end", 1, 1, "git status"},
 	}
 
-	m.historyPrev()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &model{
+				input: initInput(),
+				persState: PersistentState{
+					History: []HistoryEntry{
+						{Prefix: "git", Command: "log"},
+						{Prefix: "git", Command: "status"},
+					},
+				},
+				cmdPrefix:           prefixNone,
+				historyFilterPrefix: "git",
+				historyIdx:          tt.historyIdx,
+			}
 
-	assert.Equal(t, 0, m.historyIdx)
-	assert.Equal(t, "git log", m.input.Value())
-}
+			m.historyPrev()
 
-func TestHistoryPrevClampsAtEnd(t *testing.T) {
-	m := &model{
-		input: initInput(),
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-				{Prefix: "git", Command: "status"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-		historyIdx:          1,
+			assert.Equal(t, tt.wantIdx, m.historyIdx)
+			assert.Equal(t, tt.wantValue, m.input.Value())
+		})
 	}
-
-	m.historyPrev()
-
-	assert.Equal(t, 1, m.historyIdx)
-	assert.Equal(t, "git status", m.input.Value())
 }
 
 func TestHistoryPrevNoEntries(t *testing.T) {
@@ -199,23 +193,35 @@ func TestHistoryPrevNoEntries(t *testing.T) {
 	assert.Equal(t, -1, m.historyIdx)
 }
 
-func TestHistoryNextFromNewest(t *testing.T) {
-	m := &model{
-		input: initInput(),
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-		historyIdx:          0,
+func TestHistoryNextEndsAtEmptyInput(t *testing.T) {
+	tests := []struct {
+		name       string
+		historyIdx int
+	}{
+		{"from newest", 0},
+		{"at min bound", -1},
 	}
 
-	m.historyNext()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &model{
+				input: initInput(),
+				persState: PersistentState{
+					History: []HistoryEntry{
+						{Prefix: "git", Command: "log"},
+					},
+				},
+				cmdPrefix:           prefixNone,
+				historyFilterPrefix: "git",
+				historyIdx:          tt.historyIdx,
+			}
 
-	assert.Equal(t, -1, m.historyIdx)
-	assert.Empty(t, m.input.Value())
+			m.historyNext()
+
+			assert.Equal(t, -1, m.historyIdx)
+			assert.Empty(t, m.input.Value())
+		})
+	}
 }
 
 func TestHistoryNextCyclesBack(t *testing.T) {
@@ -237,25 +243,6 @@ func TestHistoryNextCyclesBack(t *testing.T) {
 
 	assert.Equal(t, 1, m.historyIdx)
 	assert.Equal(t, "git status", m.input.Value())
-}
-
-func TestHistoryNextAtMinBound(t *testing.T) {
-	m := &model{
-		input: initInput(),
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-		historyIdx:          -1,
-	}
-
-	m.historyNext()
-
-	assert.Equal(t, -1, m.historyIdx)
-	assert.Empty(t, m.input.Value())
 }
 
 func TestHistoryReset(t *testing.T) {
@@ -323,29 +310,6 @@ func TestHistoryFilterFromInput_NoPrefix(t *testing.T) {
 	m.input.SetValue("status")
 
 	assert.Empty(t, m.historyFilterFromInput())
-}
-
-func TestHistoryEntries_FilteredByHistoryFilterPrefix(t *testing.T) {
-	m := &model{
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-				{Prefix: "sh", Command: "ls"},
-				{Prefix: "git", Command: "status"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-	}
-
-	got := m.historyEntries()
-	want := []HistoryEntry{
-		{Prefix: "git", Command: "log"},
-		{Prefix: "git", Command: "status"},
-	}
-
-	require.Len(t, got, len(want))
-	assert.Equal(t, want, got)
 }
 
 func TestHistoryEntries_EmptyFilterReturnsAll(t *testing.T) {
