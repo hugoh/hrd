@@ -4,6 +4,7 @@ package jj
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -19,7 +20,6 @@ const (
 	ignoreWorkingCopyArg = "--ignore-working-copy"
 	noGraphFlag          = "--no-graph"
 	templateFlag         = "--template"
-	separator            = "\x1f"
 	cmdNameLog           = "log"
 	cmdGit               = "git"
 	subCmdBookmark       = "bookmark"
@@ -29,6 +29,55 @@ const (
 	opPush               = "push"
 	subCmdRebase         = "rebase"
 )
+
+// detailTmpl renders a working-copy/ancestor commit as a JSON object. jj has
+// no whole-object JSON serializer, so the object is built by hand-joining
+// "key": json(value) segments — json() guarantees each value is safely
+// escaped, unlike the \x1f-separator splitting this replaced.
+const detailTmpl = `"{\"changeId\":" ++ json(change_id.short(8)) ++ ` +
+	`",\"dirty\":" ++ json(diff.stat().files().len() > 0) ++ ` +
+	`",\"conflict\":" ++ json(conflict) ++ ` +
+	`",\"description\":" ++ json(description.first_line()) ++ ` +
+	`",\"ago\":" ++ json(committer.timestamp().ago()) ++ "}"`
+
+// bookmarkTmpl renders one CommitRef (jj bookmark list -T) per line as JSON.
+//
+// ahead/behind are intentionally read from the opposite-named jj function:
+// jj reports tracking_ahead_count/tracking_behind_count from the remote
+// ref's own perspective, e.g. a remote ref that is "ahead" of the local
+// tracking ref means the local bookmark is that many commits *behind*.
+//
+// json() must wrap each branch of if(tracked, ...) individually rather than
+// the whole if() — wrapping the whole expression makes jj eagerly evaluate
+// both branches (erroring on tracking_*_count for untracked/local refs)
+// instead of lazily rendering only the matching one.
+const bookmarkTmpl = `"{\"name\":" ++ json(name) ++ ` +
+	`",\"remote\":" ++ json(remote) ++ ` +
+	`",\"tracked\":" ++ json(tracked) ++ ` +
+	`",\"present\":" ++ json(present) ++ ` +
+	`",\"conflict\":" ++ json(conflict) ++ ` +
+	`",\"ahead\":" ++ if(tracked, json(tracking_behind_count.lower()), json(0)) ++ ` +
+	`",\"behind\":" ++ if(tracked, json(tracking_ahead_count.lower()), json(0)) ++ "}\n"`
+
+// wcDetail mirrors detailTmpl's JSON shape.
+type wcDetail struct {
+	ChangeID    string `json:"changeId"`
+	Dirty       bool   `json:"dirty"`
+	Conflict    bool   `json:"conflict"`
+	Description string `json:"description"`
+	Ago         string `json:"ago"`
+}
+
+// bookmarkRef mirrors bookmarkTmpl's JSON shape — one CommitRef entry.
+type bookmarkRef struct {
+	Name     string `json:"name"`
+	Remote   string `json:"remote"`
+	Tracked  bool   `json:"tracked"`
+	Present  bool   `json:"present"`
+	Conflict bool   `json:"conflict"`
+	Ahead    int    `json:"ahead"`
+	Behind   int    `json:"behind"`
+}
 
 //nolint:gochecknoglobals // common jj log flags shared across Status calls
 var logBaseArgs = []string{cmdNameLog, noGraphFlag, colorNeverFlag}
@@ -117,18 +166,12 @@ func parseJjCmdList(completion string) []string {
 //
 // Subprocess calls:
 //  1. jj log -r @ → change ID, dirty flag, conflict flag
-//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data
-//  3. jj bookmark list --all-remotes + jj log ×2 (only when HEAD bookmark
-//     has no tracking remote but a @remote counterpart exists — colocated repos)
+//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data.
+//     jj itself computes ahead/behind for tracked remotes; for a present but
+//     untracked remote (colocated repos where the counterpart isn't an
+//     explicit tracking remote), ahead/behind is computed with an extra
+//     jj log --count call per direction (see countRevs).
 func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
-	const sep = "\x1f"
-
-	const detailTmpl = `change_id.short(8) ++ "` + sep + `" ++ ` +
-		`if(diff.stat().files().len() > 0, "dirty", "") ++ "` + sep + `" ++ ` +
-		`if(conflict, "conflict", "") ++ "` + sep + `" ++ ` +
-		`description.first_line() ++ "` + sep + `" ++ ` +
-		`committer.timestamp().ago()`
-
 	wcArgs := append([]string{}, logBaseArgs...)
 	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
 
@@ -137,7 +180,10 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
 	}
 
-	status := parseWorkingCopy(wcOut)
+	status, err := parseWorkingCopy(wcOut)
+	if err != nil {
+		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
+	}
 
 	if status.CommitMsg == "" {
 		b.fillCommitMsgFromAncestors(ctx, path, &status)
@@ -152,15 +198,15 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 	headName := strings.TrimSpace(headOut)
 	if headName != "" {
 		bmOut, _ := b.runJJ(ctx, path, []string{
-			subCmdBookmark, subCmdList, "--all-remotes", headName,
+			subCmdBookmark, subCmdList, "--all-remotes", headName, templateFlag, bookmarkTmpl,
 		})
-		status.Bookmarks = parseBookmarks(bmOut)
+		status.Bookmarks = parseBookmarkRefs(bmOut, func(name, remote string) (int, int) {
+			remoteRef := name + "@" + remote
+			ahead := b.countRevs(ctx, path, remoteRef+".."+name)
+			behind := b.countRevs(ctx, path, name+".."+remoteRef)
 
-		// For colocated repos the HEAD bookmark may have @git tracking
-		// but no @origin — look for a @remote counterpart.
-		if len(status.Bookmarks) > 0 && status.Bookmarks[0].Remote == "" {
-			b.enrichWithRemoteBookmark(ctx, path, headName, &status.Bookmarks[0])
-		}
+			return ahead, behind
+		})
 	}
 
 	if headName != "" {
@@ -191,12 +237,8 @@ func (*Backend) Run(
 		return runSteps(ctx, path, args[0], steps, interactive)
 	}
 
-	res, err := backend.RunCommand(ctx, "jj", path, args, interactive)
-	if err != nil {
-		return backend.RunResult{}, fmt.Errorf("jj run: %w", err)
-	}
-
-	return res, nil
+	//nolint:wrapcheck // RunTool already wraps with the binary name and subcommand
+	return backend.RunTool(ctx, "jj", path, args, interactive)
 }
 
 func (b *Backend) runJJ(ctx context.Context, path string, args []string) (string, error) {
@@ -205,48 +247,6 @@ func (b *Backend) runJJ(ctx context.Context, path string, args []string) (string
 	}
 
 	return defaultRunJJ(ctx, path, args)
-}
-
-// enrichWithRemoteBookmark looks for a @remote bookmark (e.g. main@origin)
-// matching headName and, if found, computes ahead/behind against it.
-//
-// This handles colocated jj/git repos where bookmarks don't have explicit
-// tracking remotes configured — the remote bookmark exists as a separate
-// @remote entry in jj's bookmark list.
-func (b *Backend) enrichWithRemoteBookmark(
-	ctx context.Context,
-	path, headName string,
-	bm *backend.BookmarkStatus,
-) {
-	out, err := b.runJJ(ctx, path, []string{subCmdBookmark, subCmdList, "--all-remotes"})
-	if err != nil || strings.TrimSpace(out) == "" {
-		return
-	}
-
-	for line := range strings.SplitSeq(out, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, headName+"@") || !strings.Contains(trimmed, ":") {
-			continue
-		}
-
-		before, _, _ := strings.Cut(trimmed, ":")
-
-		remoteName := strings.TrimPrefix(strings.TrimSpace(before), headName+"@")
-		if remoteName == "" || remoteName == cmdGit {
-			continue
-		}
-
-		remoteBm := headName + "@" + remoteName
-		behind := b.countRevs(ctx, path, headName+".."+remoteBm)
-		ahead := b.countRevs(ctx, path, remoteBm+".."+headName)
-
-		bm.Remote = remoteName
-		bm.Ahead = ahead
-		bm.Behind = behind
-		backend.ComputeBookmarkState(bm)
-
-		return
-	}
 }
 
 // countRevs runs jj log -r <revset> --count and returns the number.
@@ -281,22 +281,22 @@ func (b *Backend) fillCommitMsgFromAncestors(
 	for i := 1; i <= maxAncestors; i++ {
 		rev := "@" + strings.Repeat("-", i)
 
-		const tmpl = `description.first_line() ++ "` + separator + `" ++ committer.timestamp().ago()`
-
 		args := append([]string{}, logBaseArgs...)
-		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, tmpl)
+		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, detailTmpl)
 
 		out, err := b.runJJ(ctx, path, args)
 		if err != nil {
 			break
 		}
 
-		if msg := extractCommitMsg(out); msg != "" {
-			status.CommitMsg = msg
+		detail, err := parseWorkingCopy(out)
+		if err != nil {
+			continue
+		}
 
-			if time := extractCommitTime(out); time != "" {
-				status.CommitTime = "(" + time + ")"
-			}
+		if detail.CommitMsg != "" {
+			status.CommitMsg = detail.CommitMsg
+			status.CommitTime = detail.CommitTime
 
 			break
 		}
@@ -351,88 +351,39 @@ func defaultRunJJ(ctx context.Context, path string, args []string) (string, erro
 	return buf.String(), nil
 }
 
-// parseWorkingCopy parses unit-separated log template output.
-//
-// Fields: changeID \x1f "dirty"|"" \x1f "conflict"|"" \x1f description \x1f time_ago.
-func parseWorkingCopy(raw string) backend.RepoStatus {
-	const (
-		idxDirty = iota + 2
-		idxConflict
-		idxDescription
-		idxTimeAgo
-	)
-
-	parts := strings.SplitN(
-		strings.TrimRight(raw, "\n"),
-		separator,
-		5, //nolint:mnd // changeID, dirty, conflict, description, time
-	)
-
-	var status backend.RepoStatus
-	if len(parts) >= 1 {
-		status.Ref = strings.TrimSpace(parts[0])
+// parseWorkingCopy decodes detailTmpl's JSON output. An error means the jj
+// invocation succeeded but its output wasn't the JSON we expected — the
+// caller must treat this as a failure, not as "nothing to report".
+func parseWorkingCopy(raw string) (backend.RepoStatus, error) {
+	var detail wcDetail
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &detail); err != nil {
+		return backend.RepoStatus{}, fmt.Errorf("decode jj log output: %w", err)
 	}
 
-	if len(parts) >= idxDirty {
-		status.Dirty = strings.TrimSpace(parts[1]) == "dirty"
+	status := backend.RepoStatus{
+		Ref:       detail.ChangeID,
+		Dirty:     detail.Dirty,
+		Conflict:  detail.Conflict,
+		CommitMsg: detail.Description,
 	}
 
-	if len(parts) >= idxConflict {
-		status.Conflict = strings.TrimSpace(parts[2]) == "conflict"
+	if detail.Ago != "" {
+		status.CommitTime = "(" + detail.Ago + ")"
 	}
 
-	if len(parts) >= idxDescription {
-		status.CommitMsg = strings.TrimSpace(parts[3])
-	}
-
-	if len(parts) >= idxTimeAgo {
-		if t := strings.TrimSpace(parts[4]); t != "" {
-			status.CommitTime = "(" + t + ")"
-		}
-	}
-
-	return status
+	return status, nil
 }
 
-func extractCommitMsg(out string) string {
-	msg, _, _ := strings.Cut(strings.TrimRight(out, "\n"), separator)
-
-	return strings.TrimSpace(msg)
-}
-
-func extractCommitTime(out string) string {
-	_, timePart, found := strings.Cut(strings.TrimRight(out, "\n"), separator)
-
-	if found {
-		return strings.TrimSpace(timePart)
-	}
-
-	return ""
-}
-
-// parseBookmarks parses `jj bookmark list --all-remotes` output.
-//
-// jj output format (jj 0.21+):
-//
-//	main: rlkvwrto 9f3a1b2c commit message
-//	  @origin (ahead by 2 commits, behind by 1 commit)
-//	feature: qpvuntop 1a2b3c4d another commit
-//	  (no tracking remote)
-//	conflicted: (conflicted)
-//	  @origin (tracking)
-//	deleted@origin: (gone)
-//
-// - Non-indented lines are bookmark headers.
-// - Indented @<remote> lines are tracking entries with ahead/behind info.
-// - "(gone)" means the remote ref was deleted.
-// - "(conflicted)" on the header means the bookmark is in conflict.
-func parseBookmarks(
+// parseBookmarkRefs decodes bookmarkTmpl's output — one JSON CommitRef per
+// line — and groups entries by name into backend.BookmarkStatus, picking the
+// first non-@git remote for ahead/behind/gone state. For a present remote
+// that isn't tracked, resolveUntracked (may be nil) computes real ahead/behind
+// counts, since jj's own tracking_ahead_count/tracking_behind_count are only
+// meaningful for tracked remotes.
+func parseBookmarkRefs(
 	raw string,
+	resolveUntracked func(name, remote string) (ahead, behind int),
 ) []backend.BookmarkStatus {
-	if strings.TrimSpace(raw) == "" {
-		return nil
-	}
-
 	var (
 		bookmarks []backend.BookmarkStatus
 		current   *backend.BookmarkStatus
@@ -452,23 +403,24 @@ func parseBookmarks(
 	}
 
 	for line := range strings.SplitSeq(raw, "\n") {
-		if line == "" {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		if line[0] != ' ' && line[0] != '\t' {
+		var ref bookmarkRef
+		if err := json.Unmarshal([]byte(line), &ref); err != nil {
+			continue
+		}
+
+		if ref.Remote == "" {
 			flush()
 
-			current = handleBookmarkLine(line)
+			current = newBookmarkStatus(ref)
 
 			continue
 		}
 
-		if current == nil {
-			continue
-		}
-
-		handleRemoteLine(current, line)
+		applyRemoteRef(current, ref, resolveUntracked)
 	}
 
 	flush()
@@ -476,83 +428,51 @@ func parseBookmarks(
 	return bookmarks
 }
 
-func handleBookmarkLine(line string) *backend.BookmarkStatus {
-	// Name is everything before the first ":"
-	name := line
-	if before, _, ok := strings.Cut(line, ":"); ok {
-		name = before
+func newBookmarkStatus(ref bookmarkRef) *backend.BookmarkStatus {
+	bm := &backend.BookmarkStatus{Name: ref.Name, Conflict: ref.Conflict}
+	if ref.Conflict {
+		bm.State = backend.RefStateDiverged
 	}
 
-	name = strings.TrimSpace(name)
-
-	if strings.Contains(name, "@") {
-		return nil
-	}
-
-	current := &backend.BookmarkStatus{Name: name}
-
-	if strings.Contains(line, "(conflicted)") {
-		current.Conflict = true
-		current.State = backend.RefStateDiverged
-	}
-
-	return current
+	return bm
 }
 
-func handleRemoteLine(current *backend.BookmarkStatus, line string) {
-	trimmed := strings.TrimSpace(line)
-	if !strings.HasPrefix(trimmed, "@") {
+// applyRemoteRef folds a remote CommitRef entry into the bookmark it
+// belongs to, skipping the synthetic @git remote (colocation bookmark, not
+// a real remote), entries for a different bookmark, and an already-set remote.
+// For a present but untracked remote, resolveUntracked (may be nil) computes
+// real ahead/behind counts, since jj only reports tracking_ahead_count/
+// tracking_behind_count for tracked remotes.
+func applyRemoteRef(
+	current *backend.BookmarkStatus,
+	ref bookmarkRef,
+	resolveUntracked func(name, remote string) (ahead, behind int),
+) {
+	if current == nil || current.Name != ref.Name || ref.Remote == cmdGit || current.Remote != "" {
 		return
 	}
 
-	// "@origin (ahead by 2 commits, behind by 1 commit)"
-	remotePart := strings.TrimPrefix(trimmed, "@")
+	current.Remote = ref.Remote
 
-	remote := remotePart
-	if idx := strings.IndexAny(remotePart, " ("); idx >= 0 {
-		remote = remotePart[:idx]
-	}
-
-	remote = strings.TrimSuffix(remote, ":")
-
-	// Skip synthetic @git remote (internal colocation bookmark, not a real remote).
-	if remote == cmdGit {
-		return
-	}
-
-	// Use the first tracking remote only.
-	if current.Remote != "" {
-		return
-	}
-
-	current.Remote = remote
-
-	if strings.Contains(trimmed, "(gone)") {
-		current.State = backend.RefStateGone
+	if !ref.Present {
+		// A bookmark conflict (RefStateDiverged, set in newBookmarkStatus)
+		// is more specific than "remote gone" — don't clobber it.
+		if !current.Conflict {
+			current.State = backend.RefStateGone
+		}
 
 		return
 	}
 
-	// jj reports ahead/behind from the remote bookmark's perspective:
-	// "ahead by N" means the remote is N ahead, i.e. local is N behind.
-	// The apparent swap below is intentional.
-	current.Ahead = extractCount(trimmed, "behind by")
-	current.Behind = extractCount(trimmed, "ahead by")
+	switch {
+	case ref.Tracked:
+		current.Ahead = ref.Ahead
+		current.Behind = ref.Behind
+	case resolveUntracked != nil:
+		current.Ahead, current.Behind = resolveUntracked(ref.Name, ref.Remote)
+	}
+
 	backend.ComputeBookmarkState(current)
-}
-
-// extractCount finds "keyword N" in s and returns N.
-func extractCount(s, keyword string) int {
-	_, after, ok := strings.Cut(s, keyword)
-	if !ok {
-		return 0
-	}
-
-	rest := strings.TrimSpace(after)
-	numStr, _, _ := strings.Cut(rest, " ")
-	n, _ := strconv.Atoi(numStr)
-
-	return n
 }
 
 // Register adds the jj backend to the global registry.

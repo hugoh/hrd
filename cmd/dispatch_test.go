@@ -28,9 +28,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) string {
 				t.Helper()
 
-				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1"},
-				}})
+				return cfgFakeRepoPath(t)
 			},
 			args:        []string{"shell"},
 			expectError: true,
@@ -51,9 +49,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) string {
 				t.Helper()
 
-				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: "/tmp/repo1"},
-				}})
+				return cfgFakeRepoPath(t)
 			},
 			args:          []string{"git", "--", "status"},
 			expectError:   true,
@@ -77,12 +73,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) string {
 				t.Helper()
 
-				gitDir := setupFakeGitRepo(t)
-
-				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir},
-					"repo2": {Path: "/tmp/other"},
-				}})
+				return cfgGitRepoPlusMissing(t)
 			},
 			args:          []string{"git", "--repos", "repo1", "--", "status"},
 			expectError:   true,
@@ -93,12 +84,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) string {
 				t.Helper()
 
-				gitDir := setupFakeGitRepo(t)
-
-				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir},
-					"repo2": {Path: "/tmp/other"},
-				}})
+				return cfgGitRepoPlusMissing(t)
 			},
 			args:          []string{"git", "-i", "repo1", "repo2", "--", "log"},
 			expectError:   true,
@@ -161,12 +147,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) string {
 				t.Helper()
 
-				gitDir := setupFakeGitRepo(t)
-
-				return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo1": {Path: gitDir},
-					"repo2": {Path: "/tmp/other"},
-				}})
+				return cfgGitRepoPlusMissing(t)
 			},
 			args:          []string{"fetch", "--repos", "repo1"},
 			expectError:   true,
@@ -251,6 +232,24 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 		assert  func(t *testing.T, stdout string)
 	}
 
+	assertRepo1AndStatusLabel := func(t *testing.T, stdout string) {
+		t.Helper()
+		assert.Contains(t, stdout, "repo1")
+		assert.Contains(t, stdout, StatusLabel)
+	}
+
+	setupSingleRepoWithArgs := func(args []string) func(t *testing.T) setupResult {
+		return func(t *testing.T) setupResult {
+			t.Helper()
+
+			return setupResult{
+				cfgPath: cfgSingleGitRepo(t),
+				args:    args,
+				assert:  assertRepo1AndStatusLabel,
+			}
+		}
+	}
+
 	tests := []struct {
 		name  string
 		setup func(t *testing.T) setupResult
@@ -285,40 +284,12 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 			},
 		},
 		{
-			name: "TestLsCmdWithMessage",
-			setup: func(t *testing.T) setupResult {
-				t.Helper()
-
-				cfgPath := cfgSingleGitRepo(t)
-
-				return setupResult{
-					cfgPath: cfgPath,
-					args:    []string{"ls", "-m"},
-					assert: func(t *testing.T, stdout string) {
-						t.Helper()
-						assert.Contains(t, stdout, "repo1")
-						assert.Contains(t, stdout, StatusLabel)
-					},
-				}
-			},
+			name:  "TestLsCmdWithMessage",
+			setup: setupSingleRepoWithArgs([]string{"ls", "-m"}),
 		},
 		{
-			name: "TestLlCmd",
-			setup: func(t *testing.T) setupResult {
-				t.Helper()
-
-				cfgPath := cfgSingleGitRepo(t)
-
-				return setupResult{
-					cfgPath: cfgPath,
-					args:    []string{"ll"},
-					assert: func(t *testing.T, stdout string) {
-						t.Helper()
-						assert.Contains(t, stdout, "repo1")
-						assert.Contains(t, stdout, StatusLabel)
-					},
-				}
-			},
+			name:  "TestLlCmd",
+			setup: setupSingleRepoWithArgs([]string{"ll"}),
 		},
 		{
 			name: "TestLsCmdWithReposFlag",
@@ -644,15 +615,8 @@ func TestDispatchCommandsBadConfig(t *testing.T) {
 }
 
 func TestSplitScopeArgs(t *testing.T) { //nolint:funlen // table-driven
-	cfg := &config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1"},
-			"repo2": {Path: "/tmp/repo2"},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	}
+	fixtureCfg := cfgTwoReposOneGroup()
+	cfg := &fixtureCfg
 
 	for _, tt := range []struct {
 		name      string

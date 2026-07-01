@@ -59,6 +59,24 @@ func TestRunCommand_Interactive(t *testing.T) {
 	assert.Empty(t, res.Output)
 }
 
+func TestRunTool_NoArgs(t *testing.T) {
+	_, err := RunTool(t.Context(), "echo", "", nil, false)
+	assert.ErrorIs(t, err, ErrNoArgs)
+}
+
+func TestRunTool_Success(t *testing.T) {
+	res, err := RunTool(t.Context(), "echo", "", []string{"hello"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+	assert.Contains(t, res.Output, "hello")
+}
+
+func TestRunTool_BinaryNotFound(t *testing.T) {
+	_, err := RunTool(t.Context(), "nonexistent-binary-12345", "", []string{"arg"}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-binary-12345 arg")
+}
+
 func TestDetectDir_MarkerExists(t *testing.T) {
 	dir := t.TempDir()
 	err := os.MkdirAll(filepath.Join(dir, ".testmarker"), 0o750)

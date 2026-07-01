@@ -112,16 +112,8 @@ func (*Backend) Run(
 	args []string,
 	interactive bool,
 ) (backend.RunResult, error) {
-	if len(args) == 0 {
-		return backend.RunResult{}, backend.ErrNoArgs
-	}
-
-	res, err := backend.RunCommand(ctx, "git", path, args, interactive)
-	if err != nil {
-		return backend.RunResult{}, fmt.Errorf("git %s: %w", args[0], err)
-	}
-
-	return res, nil
+	//nolint:wrapcheck // RunTool already wraps with the binary name and subcommand
+	return backend.RunTool(ctx, "git", path, args, interactive)
 }
 
 // runGit is a helper for internal status queries.
