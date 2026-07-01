@@ -236,6 +236,19 @@ func TestParseBookmarkRefs_Gone(t *testing.T) {
 	assert.Equal(t, "gone", result[0].State.String())
 }
 
+func TestParseBookmarkRefs_ConflictedAndGoneKeepsDiverged(t *testing.T) {
+	// A bookmark that is both locally conflicted and whose tracked remote
+	// has been deleted must report "diverged" (the more specific signal),
+	// not have it clobbered by the "gone" remote state.
+	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n" +
+		bookmarkRefJSON("main", "origin", true, false, false, 0, 0) + "\n"
+	result := parseBookmarkRefs(input)
+	require.Len(t, result, 1)
+	assert.True(t, result[0].Conflict)
+	assert.Equal(t, "origin", result[0].Remote)
+	assert.Equal(t, "diverged", result[0].State.String())
+}
+
 func TestParseBookmarkRefs_Conflicted(t *testing.T) {
 	input := bookmarkRefJSON("main", "", false, true, true, 0, 0) + "\n" +
 		bookmarkRefJSON("main", "origin", true, true, false, 0, 0) + "\n"

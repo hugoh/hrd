@@ -435,7 +435,11 @@ func applyRemoteRef(current *backend.BookmarkStatus, ref bookmarkRef) {
 	current.Remote = ref.Remote
 
 	if !ref.Present {
-		current.State = backend.RefStateGone
+		// A bookmark conflict (RefStateDiverged, set in newBookmarkStatus)
+		// is more specific than "remote gone" — don't clobber it.
+		if !current.Conflict {
+			current.State = backend.RefStateGone
+		}
 
 		return
 	}
