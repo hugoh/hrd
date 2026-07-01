@@ -75,11 +75,30 @@ func setupJJDir(t *testing.T) string {
 	return dir
 }
 
+// isolateJJConfig points JJ_CONFIG at a fresh per-test config file with a
+// fixed user identity, so tests don't depend on (or corrupt) the
+// developer's/CI runner's ambient jj config.
+func isolateJJConfig(t *testing.T) {
+	t.Helper()
+
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not found in PATH")
+	}
+
+	cfgPath := filepath.Join(t.TempDir(), "jj-config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(
+		"[user]\nname = \"Test\"\nemail = \"test@test.com\"\n",
+	), 0o644))
+	t.Setenv("JJ_CONFIG", cfgPath)
+}
+
 // initJJRepo initializes a real jj repository and skips the test if jj is not available.
 func initJJRepo(t *testing.T) string {
 	t.Helper()
+	isolateJJConfig(t)
+
 	dir := t.TempDir()
-	cmd := exec.Command("jj", "git", "init")
+	cmd := exec.CommandContext(t.Context(), "jj", "git", "init")
 	cmd.Dir = dir
 	_ = cmd.Run()
 
@@ -414,8 +433,9 @@ func TestBackend_Detect(t *testing.T) {
 }
 
 func TestBackend_Detect_NonColocated(t *testing.T) {
+	isolateJJConfig(t)
 	dir := t.TempDir()
-	cmd := exec.Command("jj", "git", "init", "--no-colocate")
+	cmd := exec.CommandContext(t.Context(), "jj", "git", "init", "--no-colocate")
 	cmd.Dir = dir
 	out, _ := cmd.CombinedOutput()
 
@@ -477,7 +497,7 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 	dir := initJJRepo(t)
 
 	setup := func(args ...string) {
-		c := exec.Command("jj", args...)
+		c := exec.CommandContext(t.Context(), "jj", args...)
 		c.Dir = dir
 		_ = c.Run()
 	}

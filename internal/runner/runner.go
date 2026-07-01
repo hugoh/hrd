@@ -44,7 +44,12 @@ func forEachRepo(
 	workFn func(ctx context.Context, repo config.Repo, name string) error,
 ) error {
 	group, ctx := errgroup.WithContext(ctx)
-	group.SetLimit(concurrency)
+	// A non-positive concurrency (e.g. a zero-value Settings in tests, or
+	// misconfiguration) must not reach errgroup.SetLimit: SetLimit(0) makes
+	// every Go() block forever waiting on a zero-capacity semaphore.
+	if concurrency > 0 {
+		group.SetLimit(concurrency)
+	}
 
 	for _, name := range names {
 		repo, ok := repos[name]
@@ -241,11 +246,13 @@ func Shell(
 	)
 }
 
+const colorRed = "red"
+
 // ResultColor returns the display color ("red" or "green") for a result
 // based on whether it errored or had a non-zero exit code.
 func ResultColor(res Result) string {
 	if res.Err != nil || res.ExitCode != 0 {
-		return "red"
+		return colorRed
 	}
 
 	return "green"

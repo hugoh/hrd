@@ -498,6 +498,24 @@ func TestDispatchWithFewerResultsThanNames(t *testing.T) {
 	}
 }
 
+func TestShellCmdInteractive(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: t.TempDir()},
+	}})
+
+	out := runAppCapture(t, cfgPath, []string{"shell", "-i", "--", "echo hello"})
+	assert.Contains(t, out, "hello")
+}
+
+func TestShellCmdInteractiveFailure(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: t.TempDir()},
+	}})
+
+	err := runApp(t, cfgPath, []string{"shell", "-i", "--", "exit 1"})
+	require.Error(t, err)
+}
+
 func TestDispatch(t *testing.T) { //nolint:funlen
 	tests := []struct {
 		name        string

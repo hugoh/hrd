@@ -14,12 +14,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zenizh/go-capturer"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
 	git.Register()
 	jj.Register()
-	m.Run()
+	goleak.VerifyTestMain(m)
 }
 
 // Helper to create a config file and return its path + cleanup function.
