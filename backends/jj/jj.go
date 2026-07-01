@@ -180,7 +180,10 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
 	}
 
-	status := parseWorkingCopy(wcOut)
+	status, err := parseWorkingCopy(wcOut)
+	if err != nil {
+		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
+	}
 
 	if status.CommitMsg == "" {
 		b.fillCommitMsgFromAncestors(ctx, path, &status)
@@ -355,11 +358,13 @@ func defaultRunJJ(ctx context.Context, path string, args []string) (string, erro
 	return buf.String(), nil
 }
 
-// parseWorkingCopy decodes detailTmpl's JSON output.
-func parseWorkingCopy(raw string) backend.RepoStatus {
+// parseWorkingCopy decodes detailTmpl's JSON output. An error means the jj
+// invocation succeeded but its output wasn't the JSON we expected — the
+// caller must treat this as a failure, not as "nothing to report".
+func parseWorkingCopy(raw string) (backend.RepoStatus, error) {
 	var detail wcDetail
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &detail); err != nil {
-		return backend.RepoStatus{}
+		return backend.RepoStatus{}, fmt.Errorf("decode jj log output: %w", err)
 	}
 
 	status := backend.RepoStatus{
@@ -373,7 +378,7 @@ func parseWorkingCopy(raw string) backend.RepoStatus {
 		status.CommitTime = "(" + detail.Ago + ")"
 	}
 
-	return status
+	return status, nil
 }
 
 // parseBookmarkRefs decodes bookmarkTmpl's output — one JSON CommitRef per

@@ -95,14 +95,16 @@ func TestBackend_Priority(t *testing.T) {
 }
 
 func TestParseWorkingCopy_Empty(t *testing.T) {
-	st := parseWorkingCopy("")
+	st, err := parseWorkingCopy("")
+	require.Error(t, err)
 	assert.Empty(t, st.Ref)
 	assert.False(t, st.Dirty)
 	assert.False(t, st.Conflict)
 }
 
 func TestParseWorkingCopy_Malformed(t *testing.T) {
-	st := parseWorkingCopy("not json")
+	st, err := parseWorkingCopy("not json")
+	require.Error(t, err)
 	assert.Empty(t, st.Ref)
 	assert.False(t, st.Dirty)
 	assert.False(t, st.Conflict)
@@ -110,27 +112,31 @@ func TestParseWorkingCopy_Malformed(t *testing.T) {
 
 func TestParseWorkingCopy_ChangeIDOnly(t *testing.T) {
 	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":""}`
-	st := parseWorkingCopy(input)
+	st, err := parseWorkingCopy(input)
+	require.NoError(t, err)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 }
 
 func TestParseWorkingCopy_WithDirty(t *testing.T) {
 	input := `{"changeId":"rlkvwrto","dirty":true,"conflict":false,"description":"msg","ago":"time"}`
-	st := parseWorkingCopy(input)
+	st, err := parseWorkingCopy(input)
+	require.NoError(t, err)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 	assert.True(t, st.Dirty)
 }
 
 func TestParseWorkingCopy_WithConflict(t *testing.T) {
 	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":true,"description":"msg","ago":"time"}`
-	st := parseWorkingCopy(input)
+	st, err := parseWorkingCopy(input)
+	require.NoError(t, err)
 	assert.True(t, st.Conflict)
 }
 
 func TestParseWorkingCopy_FullFields(t *testing.T) {
 	input := `{"changeId":"rlkvwrto","dirty":true,"conflict":true,` +
 		`"description":"my commit message","ago":"3 days ago"}`
-	st := parseWorkingCopy(input)
+	st, err := parseWorkingCopy(input)
+	require.NoError(t, err)
 	assert.Equal(t, "rlkvwrto", st.Ref)
 	assert.True(t, st.Dirty)
 	assert.True(t, st.Conflict)
@@ -140,12 +146,14 @@ func TestParseWorkingCopy_FullFields(t *testing.T) {
 
 func TestParseWorkingCopy_CommitTimeFormatting(t *testing.T) {
 	input := `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":"3 days ago"}`
-	st := parseWorkingCopy(input)
+	st, err := parseWorkingCopy(input)
+	require.NoError(t, err)
 	assert.Equal(t, "(3 days ago)", st.CommitTime)
 }
 
 func TestParseWorkingCopy_NoFields(t *testing.T) {
-	st := parseWorkingCopy("{}")
+	st, err := parseWorkingCopy("{}")
+	require.NoError(t, err)
 	assert.Empty(t, st.Ref)
 	assert.False(t, st.Dirty)
 	assert.False(t, st.Conflict)
@@ -662,6 +670,25 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 	_, err := b.Status(t.Context(), dir)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "jj log")
+}
+
+func TestBackend_Status_MalformedWorkingCopyOutput(t *testing.T) {
+	// jj merges stdout and stderr (defaultRunJJ), so a stray warning line
+	// can corrupt the JSON even though the process exits 0. Status must
+	// surface this as an error, not silently return a zeroed status.
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
+		if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+			return "Warning: something jj printed to stderr\n{\"changeId\":\"abc\"}", nil
+		}
+
+		return "", nil
+	}
+
+	st, err := b.Status(t.Context(), "/tmp")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "jj log")
+	assert.Empty(t, st.Ref)
 }
 
 //nolint:cyclop,funlen // table-driven test with 3 cases
