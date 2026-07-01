@@ -23,6 +23,55 @@ func cfgSingleGitRepo(t *testing.T) string {
 	})
 }
 
+// cfgTwoReposOneGroup builds a fixture config with two repos ("repo1",
+// "repo2", neither path required to exist) and a group ("work") containing
+// only "repo1" — used by scope-resolution tests.
+func cfgTwoReposOneGroup() config.Config {
+	return config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
+		},
+		Groups: map[string]config.Group{
+			"work": {Repos: []string{"repo1"}},
+		},
+	}
+}
+
+// cfgRepoNameTaken creates a config where "repo" is already registered
+// (pointing at an unrelated path), for tests asserting a name collision.
+func cfgRepoNameTaken(t *testing.T) string {
+	t.Helper()
+
+	return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo": {Path: "/tmp/other"},
+	}})
+}
+
+// cfgFakeRepoPath creates a config with a single repo ("repo1") pointing at a
+// path that doesn't need to exist — for tests that fail before touching disk.
+func cfgFakeRepoPath(t *testing.T) string {
+	t.Helper()
+
+	return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: "/tmp/repo1"},
+	}})
+}
+
+// cfgGitRepoPlusMissing creates a temp dir with a fake git repo ("repo1") plus
+// a second repo ("repo2") whose configured path doesn't exist, and returns
+// the config path. Used by dispatch tests that expect a partial-repo failure.
+func cfgGitRepoPlusMissing(t *testing.T) string {
+	t.Helper()
+
+	gitDir := setupFakeGitRepo(t)
+
+	return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"repo1": {Path: gitDir},
+		"repo2": {Path: "/tmp/other"},
+	}})
+}
+
 // runApp creates a new test app and runs it with the given args, applying
 // the same "--" pre-split and alias registration as production (main.Run).
 func runApp(t *testing.T, cfgPath string, args []string) error {

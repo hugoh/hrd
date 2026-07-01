@@ -39,16 +39,22 @@ func captureStdout(t *testing.T, fn func()) string {
 	return capturer.CaptureStdout(fn)
 }
 
-// Helper to create a temporary directory that looks like a git repo.
-func setupFakeGitRepo(t *testing.T) string {
+// makeFakeGitRepoAt turns dir into what backend.DetectAll recognizes as a git repo.
+func makeFakeGitRepoAt(t *testing.T, dir string) {
 	t.Helper()
-	dir := t.TempDir()
 	// Initialize a real git repo so backend.DetectAll can find it.
 	err := os.MkdirAll(filepath.Join(dir, ".git"), 0o750)
 	require.NoError(t, err)
 	// Create minimal git repo structure
 	err = os.WriteFile(filepath.Join(dir, ".git", "config"), []byte("[core]\n"), 0o644)
 	require.NoError(t, err)
+}
+
+// Helper to create a temporary directory that looks like a git repo.
+func setupFakeGitRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	makeFakeGitRepoAt(t, dir)
 
 	return dir
 }
@@ -107,6 +113,13 @@ func TestFilterMatching(t *testing.T) {
 }
 
 // ─── Command-level tests via app.Run() ──────────────────────────────────────────
+
+// checkNameFlagHint asserts the app error nudges the user toward --name/-n,
+// the error TestRepoAdd expects on any repo-name collision.
+func checkNameFlagHint(t *testing.T, _ string, appErr error) {
+	t.Helper()
+	assert.Contains(t, appErr.Error(), "--name/-n")
+}
 
 func TestRepoAdd(t *testing.T) { //nolint:funlen
 	tests := []struct {
@@ -177,17 +190,12 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) (string, []string) {
 				t.Helper()
 				gitDir := setupFakeGitRepo(t)
-				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo": {Path: "/tmp/other"},
-				}})
+				cfgPath := cfgRepoNameTaken(t)
 
 				return cfgPath, []string{"repo", "add", "--name", "repo", gitDir}
 			},
 			wantErr: errRepoExists,
-			check: func(t *testing.T, _ string, appErr error) {
-				t.Helper()
-				assert.Contains(t, appErr.Error(), "--name/-n")
-			},
+			check:   checkNameFlagHint,
 		},
 		{
 			name: "TestRepoAddImplicitNameCollision",
@@ -195,25 +203,13 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 				t.Helper()
 				dir := t.TempDir()
 				repoDir := filepath.Join(dir, "repo")
-				err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0o750)
-				require.NoError(t, err)
-				err = os.WriteFile(
-					filepath.Join(repoDir, ".git", "config"),
-					[]byte("[core]\n"),
-					0o644,
-				)
-				require.NoError(t, err)
-				cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-					"repo": {Path: "/tmp/other"},
-				}})
+				makeFakeGitRepoAt(t, repoDir)
+				cfgPath := cfgRepoNameTaken(t)
 
 				return cfgPath, []string{"repo", "add", repoDir}
 			},
 			wantErr: errRepoExists,
-			check: func(t *testing.T, _ string, appErr error) {
-				t.Helper()
-				assert.Contains(t, appErr.Error(), "--name/-n")
-			},
+			check:   checkNameFlagHint,
 		},
 		{
 			name: "TestRepoAddNoPath",
@@ -404,15 +400,7 @@ func TestRepoRename(t *testing.T) { //nolint:funlen
 }
 
 func TestResolveScope(t *testing.T) {
-	cfg := config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1"},
-			"repo2": {Path: "/tmp/repo2"},
-		},
-		Groups: map[string]config.Group{
-			"work": {Repos: []string{"repo1"}},
-		},
-	}
+	cfg := cfgTwoReposOneGroup()
 
 	// Note: resolveScope takes a *cli.Command, which is hard to mock directly.
 	// We'll test it indirectly through the command actions.
