@@ -158,12 +158,7 @@ func openSelHistoryPopup(m *model) {
 		return
 	}
 
-	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
-	for name := range m.cfg.Repos {
-		allRepoSet[name] = struct{}{}
-	}
-
-	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, m.allRepoSet())
 	m.historyList.SetItems(items)
 	m.historyList.Select(0)
 

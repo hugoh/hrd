@@ -53,29 +53,29 @@ func EffectiveWidths(header []string, rows [][]string, maxWidths []int) []int {
 }
 
 func writeHeader(buf *strings.Builder, cells []string, widths []int) {
-	for i, cell := range cells {
-		if lipgloss.Width(cell) > widths[i] {
-			cell = truncate.String(cell, uint(widths[i]))
-		}
-
-		cell += strings.Repeat(" ", widths[i]-lipgloss.Width(cell))
-		cell = "\x1b[1;96m" + cell + "\x1b[0m"
-
-		if i > 0 {
-			buf.WriteByte(' ')
-		}
-
-		buf.WriteString(cell)
-	}
+	writeCells(buf, cells, widths, func(cell string) string {
+		return "\x1b[1;96m" + cell + "\x1b[0m"
+	})
 }
 
 func writeRow(buf *strings.Builder, cells []string, widths []int) {
+	writeCells(buf, cells, widths, nil)
+}
+
+// writeCells pads/truncates each cell to its column width and writes it to
+// buf, space-separated. style, if non-nil, wraps the padded cell (e.g. in
+// ANSI codes) before it's written.
+func writeCells(buf *strings.Builder, cells []string, widths []int, style func(string) string) {
 	for i, cell := range cells {
 		if lipgloss.Width(cell) > widths[i] {
 			cell = truncate.String(cell, uint(widths[i]))
 		}
 
 		cell += strings.Repeat(" ", widths[i]-lipgloss.Width(cell))
+
+		if style != nil {
+			cell = style(cell)
+		}
 
 		if i > 0 {
 			buf.WriteByte(' ')
