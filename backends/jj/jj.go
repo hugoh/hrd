@@ -331,7 +331,7 @@ func runSteps(
 }
 
 func defaultRunJJ(ctx context.Context, path string, args []string) (string, error) {
-	var buf bytes.Buffer
+	var stdout, stderr bytes.Buffer
 
 	//nolint:gosec // controlled command execution, args from user input
 	cmd := exec.CommandContext(
@@ -340,15 +340,15 @@ func defaultRunJJ(ctx context.Context, path string, args []string) (string, erro
 		args...,
 	)
 	cmd.Dir = path
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 	if err != nil {
-		return "", fmt.Errorf("jj %s: %w\n%s", args[0], err, buf.String())
+		return "", fmt.Errorf("jj %s: %w\n%s", args[0], err, stderr.String())
 	}
 
-	return buf.String(), nil
+	return stdout.String(), nil
 }
 
 // parseWorkingCopy decodes detailTmpl's JSON output. An error means the jj

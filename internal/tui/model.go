@@ -363,13 +363,18 @@ func (m *model) initHelpViewport() {
 }
 
 func (m *model) initHistoryList() {
-	allRepoSet := make(map[string]struct{}, len(m.cfg.Repos))
+	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, m.allRepoSet())
+	m.historyList = initList(defaultItemDelegate(0), items, defaultViewW)
+}
+
+// allRepoSet returns the set of all configured repo names.
+func (m *model) allRepoSet() map[string]struct{} {
+	set := make(map[string]struct{}, len(m.cfg.Repos))
 	for name := range m.cfg.Repos {
-		allRepoSet[name] = struct{}{}
+		set[name] = struct{}{}
 	}
 
-	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, allRepoSet)
-	m.historyList = initList(defaultItemDelegate(0), items, defaultViewW)
+	return set
 }
 
 func (m *model) initGroupList() {

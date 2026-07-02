@@ -238,16 +238,22 @@ const (
 	cmdNameUngroup = "ungroup"
 )
 
+// completeFirstArgWithRepos completes the first (and only the first)
+// positional arg with repo names.
+func completeFirstArgWithRepos(cfgPath *string) func(context.Context, *cli.Command) {
+	return func(ctx context.Context, cmd *cli.Command) {
+		if cmd.Args().Len() == 0 {
+			reposOnlyCompleter(cfgPath)(ctx, cmd)
+		}
+	}
+}
+
 func repoRenameCmd(cfgPath *string) *cli.Command {
 	return &cli.Command{
-		Name:      cmdNameRename,
-		Usage:     "rename a repository",
-		ArgsUsage: "<old-name> <new-name>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.Args().Len() == 0 {
-				reposOnlyCompleter(cfgPath)(ctx, cmd)
-			}
-		},
+		Name:          cmdNameRename,
+		Usage:         "rename a repository",
+		ArgsUsage:     "<old-name> <new-name>",
+		ShellComplete: completeFirstArgWithRepos(cfgPath),
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 2 { //nolint:mnd // expects old and new name
 				return errRepoRenameUsage
@@ -323,14 +329,10 @@ func groupActionCmd(
 	act func(*config.Config, string, string),
 ) *cli.Command {
 	return &cli.Command{
-		Name:      name,
-		Usage:     usage,
-		ArgsUsage: "<repo> <group>",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.Args().Len() == 0 {
-				reposOnlyCompleter(cfgPath)(ctx, cmd)
-			}
-		},
+		Name:          name,
+		Usage:         usage,
+		ArgsUsage:     "<repo> <group>",
+		ShellComplete: completeFirstArgWithRepos(cfgPath),
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			if cmd.NArg() != 2 { //nolint:mnd // expects repo and group name
 				return usageErr
