@@ -10,6 +10,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zenizh/go-capturer"
@@ -219,7 +220,7 @@ func TestNoReposMatched(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := newTestApp()
 
-			err := app.Run(t.Context(), tt.args)
+			err := RunApp(t.Context(), app, tt.args)
 			assert.ErrorIs(t, err, errNoReposMatched)
 		})
 	}
@@ -707,7 +708,17 @@ func TestSplitScopeArgs(t *testing.T) { //nolint:funlen // table-driven
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			scope, args, err := splitScopeArgs(tt.args, tt.tail, cfg)
+			fullArgs := tt.args
+			dashIdx := -1
+
+			if tt.tail != nil {
+				dashIdx = len(tt.args)
+				fullArgs = append(append([]string{}, tt.args...), tt.tail...)
+			}
+
+			cmd := cmdWithArgsLenAtDash(t, dashIdx)
+
+			scope, args, err := splitScopeArgs(cmd, fullArgs, cfg)
 			if tt.wantErr {
 				require.Error(t, err)
 
@@ -721,38 +732,30 @@ func TestSplitScopeArgs(t *testing.T) { //nolint:funlen // table-driven
 	}
 }
 
-func TestSplitDashTail(t *testing.T) {
-	for _, tt := range []struct {
-		name     string
-		args     []string
-		wantHead []string
-		wantTail []string
-	}{
-		{
-			name:     "no separator",
-			args:     []string{"hrd", "fetch", "repo1"},
-			wantHead: []string{"hrd", "fetch", "repo1"},
-			wantTail: nil,
-		},
-		{
-			name:     "splits at first separator",
-			args:     []string{"hrd", "shell", "--", "echo", "--", "hi"},
-			wantHead: []string{"hrd", "shell"},
-			wantTail: []string{"echo", "--", "hi"},
-		},
-		{
-			name:     "completion invocation passes through",
-			args:     []string{"hrd", "git", "repo1", "--", completionFlag},
-			wantHead: []string{"hrd", "git", "repo1", "--", completionFlag},
-			wantTail: nil,
-		},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			head, tail := SplitDashTail(tt.args)
-			assert.Equal(t, tt.wantHead, head)
-			assert.Equal(t, tt.wantTail, tail)
-		})
+// cmdWithArgsLenAtDash returns a bare *cobra.Command whose
+// cmd.ArgsLenAtDash() reports dashIdx, by feeding its flag parser just
+// enough placeholder positionals to land the "--" terminator at that
+// index (or none at all, for dashIdx < 0). splitScopeArgs only reads this
+// derived state plus an explicitly-passed args slice, so the placeholder
+// content itself is irrelevant to the assertions.
+func cmdWithArgsLenAtDash(t *testing.T, dashIdx int) *cobra.Command {
+	t.Helper()
+
+	cmd := &cobra.Command{}
+
+	var raw []string
+
+	if dashIdx >= 0 {
+		for range dashIdx {
+			raw = append(raw, "x")
+		}
+
+		raw = append(raw, "--")
 	}
+
+	require.NoError(t, cmd.Flags().Parse(raw))
+
+	return cmd
 }
 
 func TestShellJoin(t *testing.T) {

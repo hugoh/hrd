@@ -10,7 +10,7 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 // aliasCommands builds one top-level command per config alias, in name
@@ -20,8 +20,7 @@ func aliasCommands(
 	cfgPath *string,
 	aliases map[string]string,
 	taken map[string]bool,
-	dashTail []string,
-) []*cli.Command {
+) []*cobra.Command {
 	names := make([]string, 0, len(aliases))
 	for name := range aliases {
 		names = append(names, name)
@@ -29,7 +28,7 @@ func aliasCommands(
 
 	slices.Sort(names)
 
-	cmds := make([]*cli.Command, 0, len(names))
+	cmds := make([]*cobra.Command, 0, len(names))
 
 	for _, name := range names {
 		if taken[name] {
@@ -38,24 +37,26 @@ func aliasCommands(
 			continue
 		}
 
-		cmds = append(cmds, aliasCmd(cfgPath, name, aliases[name], dashTail))
+		cmds = append(cmds, aliasCmd(cfgPath, name, aliases[name]))
 	}
 
 	return cmds
 }
 
-func aliasCmd(cfgPath *string, name, expansion string, dashTail []string) *cli.Command {
-	return &cli.Command{
-		Name:          name,
-		Usage:         "alias for: " + expansion,
-		ArgsUsage:     "[repo|group...] [-- <extra args>]",
-		Category:      "aliases",
-		Flags:         dispatchFlags,
-		ShellComplete: repoGroupCompleter(cfgPath),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runAlias(ctx, cmd, cfgPath, expansion, dashTail)
+func aliasCmd(cfgPath *string, name, expansion string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     name + " [repo|group...] [-- <extra args>]",
+		Short:   "alias for: " + expansion,
+		GroupID: "aliases",
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runAlias(cmd, args, cfgPath, expansion)
 		},
 	}
+	addDispatchFlags(cmd.Flags())
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }
 
 // runAlias resolves the scope like any dispatch command, then routes the
@@ -63,13 +64,14 @@ func aliasCmd(cfgPath *string, name, expansion string, dashTail []string) *cli.C
 // Extra positional args (typically after "--") are appended to the
 // expanded command.
 func runAlias(
-	ctx context.Context,
-	cmd *cli.Command,
+	cmd *cobra.Command,
+	args []string,
 	cfgPath *string,
 	expansion string,
-	dashTail []string,
 ) error {
-	cfg, names, extraArgs, err := loadAndSplit(cfgPath, cmd, dashTail)
+	ctx := cmd.Context()
+
+	cfg, names, extraArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -79,7 +81,7 @@ func runAlias(
 		return nil
 	}
 
-	interactive := cmd.Bool("interactive")
+	interactive := flagBool(cmd, "interactive")
 
 	prefix, rest := cmdspec.Parse(expansion)
 	if prefix == cmdspec.PrefixShell {

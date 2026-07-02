@@ -3,17 +3,17 @@ package cmd
 import (
 	"bytes"
 
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 // newTestApp creates a CLI app with buffered writers for testing.
-func newTestApp() *cli.Command {
+func newTestApp() *cobra.Command {
 	return bufferWriters(NewApp())
 }
 
-func bufferWriters(app *cli.Command) *cli.Command {
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+func bufferWriters(app *cobra.Command) *cobra.Command {
+	app.SetOut(&bytes.Buffer{})
+	app.SetErr(&bytes.Buffer{})
 
 	return app
 }

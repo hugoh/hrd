@@ -154,9 +154,10 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 				var err error
 
 				captureStdout(t, func() {
-					app.ErrWriter = &bytes.Buffer{}
-					err = app.Run(
+					app.SetErr(&bytes.Buffer{})
+					err = RunApp(
 						t.Context(),
+						app,
 						[]string{"hrd", "--config", cfgPath, "repo", "ls"},
 					)
 				})
@@ -429,8 +430,8 @@ func TestCompletion(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			app := NewApp()
 			stdout := captureStdout(t, func() {
-				app.ErrWriter = &bytes.Buffer{}
-				err := app.Run(t.Context(), []string{"hrd", "completion", tt.shell})
+				app.SetErr(&bytes.Buffer{})
+				err := RunApp(t.Context(), app, []string{"hrd", "completion", tt.shell})
 				assert.NoError(t, err)
 			})
 			assert.Contains(t, stdout, "hrd")
@@ -449,7 +450,7 @@ func TestGitCommandNoArgs(t *testing.T) {
 	app := newTestApp()
 
 	// git command without -- and args should fail
-	err := app.Run(t.Context(), []string{"hrd", "--config", cfgPath, "git"})
+	err := RunApp(t.Context(), app, []string{"hrd", "--config", cfgPath, "git"})
 	assert.Error(t, err)
 }
 
@@ -489,9 +490,10 @@ func TestRepoList(t *testing.T) {
 			var err error
 
 			stdout := captureStdout(t, func() {
-				app.ErrWriter = &bytes.Buffer{}
-				err = app.Run(
+				app.SetErr(&bytes.Buffer{})
+				err = RunApp(
 					t.Context(),
+					app,
 					[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", tt.group},
 				)
 			})
@@ -540,6 +542,7 @@ func TestRootAction(t *testing.T) {
 	defer func() { runTUI = orig }()
 
 	app := NewApp()
-	err := app.Action(t.Context(), app)
+	app.SetContext(t.Context())
+	err := app.RunE(app, nil)
 	require.NoError(t, err)
 }

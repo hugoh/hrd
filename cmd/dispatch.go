@@ -12,7 +12,8 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -36,37 +37,32 @@ var (
 // failures on stderr.
 var ErrReposFailed = errors.New("repos failed")
 
-//nolint:gochecknoglobals // CLI flag definitions are package-level by nature
-var dispatchFlags = append([]cli.Flag{
-	&cli.StringSliceFlag{
-		Name:    cmdReposFlag,
-		Aliases: []string{"r"},
-		Usage:   "comma-separated repo names or a single group name",
-	},
-	&cli.BoolFlag{
-		Name:    "interactive",
-		Aliases: []string{"i"},
-		Usage:   "run with a real terminal (sequential, one repo at a time)",
-	},
-}, statusFilterFlags...)
+// addDispatchFlags registers the flags shared by every command that
+// dispatches a VCS operation across a repo scope.
+func addDispatchFlags(fs *pflag.FlagSet) {
+	fs.StringSliceP(cmdReposFlag, "r", nil, "comma-separated repo names or a single group name")
+	fs.BoolP("interactive", "i", false, "run with a real terminal (sequential, one repo at a time)")
+	addStatusFilterFlags(fs)
+}
 
 // loadAndResolve loads the config and resolves the CLI scope (-r flag plus
-// positional args, all of which must be known repos or groups). Args after
-// a "--" separator are scope too for these commands — they take no
-// subprocess args. The loaded config is returned alongside
-// errNoReposMatched so callers can inspect it (e.g. for the ls onboarding
-// hint).
+// positional args, all of which must be known repos or groups). These
+// commands take no subprocess args, so args after a "--" separator are
+// scope too — parsing already folds both sides of "--" into one args slice
+// (see splitScopeArgs for the commands that do distinguish the two sides).
+// The loaded config is returned alongside errNoReposMatched so callers can
+// inspect it (e.g. for the ls onboarding hint).
 func loadAndResolve(
 	cfgPath *string,
-	cmd *cli.Command,
-	dashTail []string,
+	cmd *cobra.Command,
+	args []string,
 ) (config.Config, []string, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return config.Config{}, nil, fmt.Errorf("dispatch: %w", err)
 	}
 
-	names, err := resolveScope(cmd, dashTail, &cfg)
+	names, err := resolveScope(cmd, args, &cfg)
 	if err != nil {
 		return config.Config{}, nil, err
 	}
@@ -78,10 +74,10 @@ func loadAndResolve(
 	return cfg, names, nil
 }
 
-func resolveScope(cmd *cli.Command, dashTail []string, cfg *config.Config) ([]string, error) {
-	names := slices.Clone(cmd.StringSlice(cmdReposFlag))
+func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]string, error) {
+	names := slices.Clone(flagStringSlice(cmd, cmdReposFlag))
 
-	for _, arg := range slices.Concat(cmd.Args().Slice(), dashTail) {
+	for _, arg := range args {
 		name, ok := scopeName(arg, cfg)
 		if !ok {
 			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
@@ -123,20 +119,20 @@ func scopeName(arg string, cfg *config.Config) (string, bool) {
 // jj, shell). See splitScopeArgs for the split rules.
 func loadAndSplit(
 	cfgPath *string,
-	cmd *cli.Command,
-	dashTail []string,
+	cmd *cobra.Command,
+	args []string,
 ) (config.Config, []string, []string, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return config.Config{}, nil, nil, fmt.Errorf("dispatch: %w", err)
 	}
 
-	scope, cmdArgs, err := splitScopeArgs(cmd.Args().Slice(), dashTail, &cfg)
+	scope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
 	if err != nil {
 		return config.Config{}, nil, nil, err
 	}
 
-	names := slices.Concat(cmd.StringSlice(cmdReposFlag), scope)
+	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), scope)
 
 	resolved, err := cfg.ResolveScope(names)
 	if err != nil {
@@ -151,27 +147,42 @@ func loadAndSplit(
 }
 
 // splitScopeArgs splits positional args into repo/group scope and
-// subprocess args. dashTail is the verbatim argv after "--" (nil when no
-// separator was given; see SplitDashTail). With a separator, every
-// positional must be a known repo or group and the tail passes through
-// untouched — repo names are never filtered out of the command. Without
-// one, the leading args that match repos/groups form the scope and the
-// first non-matching arg starts the subprocess args.
-func splitScopeArgs(args, dashTail []string, cfg *config.Config) ([]string, []string, error) {
+// subprocess args. cmd.ArgsLenAtDash (see `go doc pflag.FlagSet.ArgsLenAtDash`)
+// tells an explicit "--" separator (every positional before it must be a
+// known repo or group, and the tail passes through untouched — repo names
+// are never filtered out of the command) from no separator at all (the
+// leading args that match repos/groups form the scope, and the first
+// non-matching arg starts the subprocess args). args is the already-parsed
+// positional list, which folds in both sides of "--".
+func splitScopeArgs(
+	cmd *cobra.Command,
+	args []string,
+	cfg *config.Config,
+) ([]string, []string, error) {
+	dashIdx := cmd.ArgsLenAtDash()
+
+	head := args
+
+	var dashTail []string
+
+	if dashIdx >= 0 {
+		head, dashTail = args[:dashIdx], args[dashIdx:]
+	}
+
 	var scope []string
 
-	for i, arg := range args {
+	for i, arg := range head {
 		if name, ok := scopeName(arg, cfg); ok {
 			scope = append(scope, name)
 
 			continue
 		}
 
-		if dashTail != nil || strings.HasPrefix(arg, "@") {
+		if dashIdx >= 0 || strings.HasPrefix(arg, "@") {
 			return nil, nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 
-		return scope, args[i:], nil
+		return scope, head[i:], nil
 	}
 
 	return scope, dashTail, nil
@@ -205,24 +216,24 @@ func shellJoin(args []string) string {
 	return strings.Join(quoted, " ")
 }
 
-func vcsCmd(cfgPath *string, name string, dashTail []string) *cli.Command {
-	return &cli.Command{
-		Name:            name,
-		Usage:           fmt.Sprintf("run a %s command across repos", name),
-		ArgsUsage:       "[repo|group...] -- <args>",
-		SkipFlagParsing: false,
-		Flags:           dispatchFlags,
-		ShellComplete:   repoGroupCompleter(cfgPath),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return runDispatch(ctx, cmd, cfgPath, name, dashTail)
+func vcsCmd(cfgPath *string, name string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   name + " [repo|group...] -- <args>",
+		Short: fmt.Sprintf("run a %s command across repos", name),
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDispatch(cmd.Context(), cmd, args, cfgPath, name)
 		},
 	}
+	addDispatchFlags(cmd.Flags())
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }
 
-func statusCmd(cfgPath *string, dashTail []string) *cli.Command {
+func statusCmd(cfgPath *string) *cobra.Command {
 	cmd := vcsSubcmdCmd(
 		cfgPath,
-		dashTail,
 		"status",
 		"show detailed status for repos (git status or jj status)",
 	)
@@ -231,61 +242,47 @@ func statusCmd(cfgPath *string, dashTail []string) *cli.Command {
 	return cmd
 }
 
-func diffCmd(cfgPath *string, dashTail []string) *cli.Command {
-	return vcsSubcmdCmd(cfgPath, dashTail, "diff", "show diff for repos (git diff or jj diff)")
+func diffCmd(cfgPath *string) *cobra.Command {
+	return vcsSubcmdCmd(cfgPath, "diff", "show diff for repos (git diff or jj diff)")
 }
 
-func logCmd(cfgPath *string, dashTail []string) *cli.Command {
-	return vcsSubcmdCmd(cfgPath, dashTail, "log", "show log for repos (git log or jj log)")
+func logCmd(cfgPath *string) *cobra.Command {
+	return vcsSubcmdCmd(cfgPath, "log", "show log for repos (git log or jj log)")
 }
 
-func fetchCmd(cfgPath *string, dashTail []string) *cli.Command {
+func fetchCmd(cfgPath *string) *cobra.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
-		dashTail,
 		"fetch",
 		"fetch from remotes (git fetch or jj git fetch)",
 	)
 }
 
-func pushCmd(cfgPath *string, dashTail []string) *cli.Command {
+func pushCmd(cfgPath *string) *cobra.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
-		dashTail,
 		"push",
 		"push to remotes (git push or jj git push)",
 	)
 }
 
-func pullCmd(cfgPath *string, dashTail []string) *cli.Command {
+func pullCmd(cfgPath *string) *cobra.Command {
 	return vcsSubcmdCmd(
 		cfgPath,
-		dashTail,
 		"pull",
 		"pull from remotes (git pull or jj git pull)",
 	)
 }
 
-func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage string) *cli.Command {
-	return &cli.Command{
-		Name:      subcmd,
-		Usage:     usage,
-		ArgsUsage: "[repo|group...]",
-		Flags: append([]cli.Flag{
-			&cli.StringSliceFlag{
-				Name:    cmdReposFlag,
-				Aliases: []string{"r"},
-				Usage:   "repo names or a group name",
-			},
-			&cli.BoolFlag{
-				Name:    "interactive",
-				Aliases: []string{"i"},
-				Usage:   "run with a real terminal (sequential, one repo at a time)",
-			},
-		}, statusFilterFlags...),
-		ShellComplete: repoGroupCompleter(cfgPath),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, names, err := loadAndResolve(cfgPath, cmd, dashTail)
+func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   subcmd + " [repo|group...]",
+		Short: usage,
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			cfg, names, err := loadAndResolve(cfgPath, cmd, args)
 			if err != nil {
 				return err
 			}
@@ -295,7 +292,7 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 				return nil
 			}
 
-			if cmd.Bool("interactive") {
+			if flagBool(cmd, "interactive") {
 				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd, nil)
 			}
 
@@ -314,28 +311,35 @@ func vcsSubcmdCmd(cfgPath *string, dashTail []string, subcmd string, usage strin
 			})
 		},
 	}
+	addDispatchFlags(cmd.Flags())
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }
 
-func shellCmd(cfgPath *string, dashTail []string) *cli.Command {
-	return &cli.Command{
-		Name:          cmdNameShell,
-		Usage:         "run an arbitrary shell command across repos",
-		ArgsUsage:     "[repo|group...] -- <shell command>",
-		Flags:         dispatchFlags,
-		ShellComplete: repoGroupCompleter(cfgPath),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			return shellCmdAction(ctx, cmd, cfgPath, dashTail)
+func shellCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameShell + " [repo|group...] -- <shell command>",
+		Short: "run an arbitrary shell command across repos",
+		Args:  cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return shellCmdAction(cmd, args, cfgPath)
 		},
 	}
+	addDispatchFlags(cmd.Flags())
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }
 
 func shellCmdAction(
-	ctx context.Context,
-	cmd *cli.Command,
+	cmd *cobra.Command,
+	args []string,
 	cfgPath *string,
-	dashTail []string,
 ) error {
-	cfg, names, shellArgs, err := loadAndSplit(cfgPath, cmd, dashTail)
+	ctx := cmd.Context()
+
+	cfg, names, shellArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -349,7 +353,7 @@ func shellCmdAction(
 		return nil
 	}
 
-	return runShell(ctx, &cfg, names, shellJoin(shellArgs), cmd.Bool("interactive"))
+	return runShell(ctx, &cfg, names, shellJoin(shellArgs), flagBool(cmd, "interactive"))
 }
 
 // runShell dispatches a shell command string across names, sequentially
@@ -401,44 +405,33 @@ func runShellInteractive(
 	)
 }
 
-func lsCmd(cfgPath *string, dashTail []string) *cli.Command {
-	return &cli.Command{
-		Name:      "ls",
-		Usage:     "show status of repos",
-		ArgsUsage: "[repo|group...]",
-		Flags: append([]cli.Flag{
-			&cli.StringSliceFlag{
-				Name:    "repos",
-				Aliases: []string{"r"},
-				Usage:   "repo names or a group name",
-			},
-			&cli.BoolFlag{
-				Name:    "message",
-				Aliases: []string{"m"},
-				Usage:   "show commit message and time",
-			},
-			&cli.BoolFlag{
-				Name:    "names",
-				Aliases: []string{"n"},
-				Usage:   "show repo names only, one per line",
-			},
-			&cli.BoolFlag{
-				Name:    "dirs",
-				Aliases: []string{"d"},
-				Usage:   "show repo dirs only, one per line",
-			},
-		}, statusFilterFlags...),
-		ShellComplete: repoGroupCompleter(cfgPath),
-		Action:        lsAction(cfgPath, dashTail, false),
+func addLsFlags(fs *pflag.FlagSet) {
+	fs.StringSliceP("repos", "r", nil, "repo names or a group name")
+	fs.BoolP("message", "m", false, "show commit message and time")
+	fs.BoolP("names", "n", false, "show repo names only, one per line")
+	fs.BoolP("dirs", "d", false, "show repo dirs only, one per line")
+	addStatusFilterFlags(fs)
+}
+
+func lsCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ls [repo|group...]",
+		Short: "show status of repos",
+		Args:  cobra.ArbitraryArgs,
+		RunE:  lsAction(cfgPath, false),
 	}
+	addLsFlags(cmd.Flags())
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }
 
 // llCmd is lsCmd with the message column always on.
-func llCmd(cfgPath *string, dashTail []string) *cli.Command {
-	cmd := lsCmd(cfgPath, dashTail)
-	cmd.Name = "ll"
-	cmd.Usage = "show status of repos with commit message and time"
-	cmd.Action = lsAction(cfgPath, dashTail, true)
+func llCmd(cfgPath *string) *cobra.Command {
+	cmd := lsCmd(cfgPath)
+	cmd.Use = "ll [repo|group...]"
+	cmd.Short = "show status of repos with commit message and time"
+	cmd.RunE = lsAction(cfgPath, true)
 
 	return cmd
 }
@@ -478,11 +471,12 @@ func lsGatherCallback(
 
 func lsAction(
 	cfgPath *string,
-	dashTail []string,
 	forceMessage bool,
-) func(context.Context, *cli.Command) error {
-	return func(ctx context.Context, cmd *cli.Command) error {
-		cfg, names, err := loadAndResolve(cfgPath, cmd, dashTail)
+) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		ctx := cmd.Context()
+
+		cfg, names, err := loadAndResolve(cfgPath, cmd, args)
 		if errors.Is(err, errNoReposMatched) {
 			if len(cfg.Repos) == 0 {
 				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)
@@ -503,11 +497,11 @@ func lsAction(
 		}
 
 		switch {
-		case cmd.Bool("names"):
+		case flagBool(cmd, "names"):
 			lsNamesOnly(names)
 
 			return nil
-		case cmd.Bool("dirs"):
+		case flagBool(cmd, "dirs"):
 			lsDirsOnly(cfg.Repos, names)
 
 			return nil
@@ -518,7 +512,7 @@ func lsAction(
 			vcsByName[n] = cfg.Repos[n].ActiveBackend()
 		}
 
-		message := forceMessage || cmd.Bool("message")
+		message := forceMessage || flagBool(cmd, "message")
 
 		gather := lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
 		if statuses != nil {
@@ -564,12 +558,12 @@ func filterMatching(names []string, repos map[string]config.Repo, backendName st
 
 func runDispatch(
 	ctx context.Context,
-	cmd *cli.Command,
+	cmd *cobra.Command,
+	args []string,
 	cfgPath *string,
 	backendName string,
-	dashTail []string,
 ) error {
-	cfg, names, cmdArgs, err := loadAndSplit(cfgPath, cmd, dashTail)
+	cfg, names, cmdArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -583,7 +577,7 @@ func runDispatch(
 		return nil
 	}
 
-	if cmd.Bool("interactive") {
+	if flagBool(cmd, "interactive") {
 		return dispatchInteractive(ctx, cfg.Repos, names, backendName, cmdArgs)
 	}
 

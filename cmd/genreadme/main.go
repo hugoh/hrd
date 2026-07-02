@@ -63,8 +63,8 @@ func generateHelp() string {
 
 	var buf bytes.Buffer
 
-	app.Writer = &buf
-	_ = app.Run(context.Background(), []string{"hrd", "--help"})
+	app.SetOut(&buf)
+	_ = cmd.RunApp(context.Background(), app, []string{"hrd", "--help"})
 
 	out := stripANSI(buf.String())
 

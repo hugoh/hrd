@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,7 +11,7 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -29,51 +28,47 @@ var (
 )
 
 // repoCommands returns the `repo` subcommand with its children.
-func repoCommands(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  cmdNameRepo,
-		Usage: "manage tracked repositories",
-		Commands: []*cli.Command{
-			repoAddCmd(cfgPath),
-			repoScanCmd(cfgPath),
-			repoRemoveCmd(cfgPath),
-			repoListCmd(cfgPath),
-			repoRenameCmd(cfgPath),
-			repoGroupCmd(cfgPath),
-			repoUngroupCmd(cfgPath),
-		},
+func repoCommands(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameRepo,
+		Short: "manage tracked repositories",
 	}
+	cmd.AddCommand(
+		repoAddCmd(cfgPath),
+		repoScanCmd(cfgPath),
+		repoRemoveCmd(cfgPath),
+		repoListCmd(cfgPath),
+		repoRenameCmd(cfgPath),
+		repoGroupCmd(cfgPath),
+		repoUngroupCmd(cfgPath),
+	)
+
+	return cmd
 }
 
-func repoAddCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      cmdNameAdd,
-		Usage:     "add one or more repositories",
-		ArgsUsage: "<path>...",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "name",
-				Aliases: []string{"n"},
-				Usage:   "explicit name (only valid when adding a single repo)",
-			},
-			&cli.StringFlag{
-				Name:    cmdNameGroup,
-				Aliases: []string{"g"},
-				Usage:   "add the repo(s) to this group",
-			},
-		},
-		ShellComplete: func(_ context.Context, _ *cli.Command) {},
-		Action:        repoAddAction(cfgPath),
+func repoAddCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:               cmdNameAdd + " <path>...",
+		Short:             "add one or more repositories",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: cobra.NoFileCompletions,
+		RunE:              repoAddAction(cfgPath),
 	}
+	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single repo)")
+	cmd.Flags().StringP(cmdNameGroup, "g", "", "add the repo(s) to this group")
+
+	return cmd
 }
 
-func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		if cmd.NArg() == 0 {
+func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
 			return errAtLeastOnePath
 		}
 
-		if cmd.String("name") != "" && cmd.NArg() > 1 {
+		name := flagString(cmd, "name")
+
+		if name != "" && len(args) > 1 {
 			return errNameSingleRepo
 		}
 
@@ -82,10 +77,10 @@ func repoAddAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) er
 			return fmt.Errorf("repo add: %w", err)
 		}
 
-		group := stripGroupPrefix(cmd.String(cmdNameGroup))
+		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
 
-		for _, arg := range cmd.Args().Slice() {
-			if err := addRepo(&cfg, arg, cmd.String("name"), group); err != nil {
+		for _, arg := range args {
+			if err := addRepo(&cfg, arg, name, group); err != nil {
 				return err
 			}
 		}
@@ -135,16 +130,14 @@ func addRepo(cfg *config.Config, path, explicitName, group string) error {
 	return nil
 }
 
-func repoRemoveCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      "rm",
-		Usage:     "remove one or more repositories",
-		ArgsUsage: "<name>...",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			reposOnlyCompleter(cfgPath)(ctx, cmd)
-		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() == 0 {
+func repoRemoveCmd(cfgPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:               "rm <name>...",
+		Short:             "remove one or more repositories",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: reposOnlyCompleter(cfgPath),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
 				return errAtLeastOneName
 			}
 
@@ -153,7 +146,7 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 				return fmt.Errorf("repo rm: %w", err)
 			}
 
-			for _, name := range cmd.Args().Slice() {
+			for _, name := range args {
 				if _, ok := cfg.Repos[name]; !ok {
 					return fmt.Errorf("%w %q", errUnknownRepo, name)
 				}
@@ -167,18 +160,11 @@ func repoRemoveCmd(cfgPath *string) *cli.Command {
 	}
 }
 
-func repoListCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  "ls",
-		Usage: "list tracked repositories",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    cmdNameGroup,
-				Aliases: []string{"g"},
-				Usage:   "filter to repos in a group",
-			},
-		},
-		Action: func(_ context.Context, cmd *cli.Command) error {
+func repoListCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ls",
+		Short: "list tracked repositories",
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
 				return fmt.Errorf("repo ls: %w", err)
@@ -186,7 +172,7 @@ func repoListCmd(cfgPath *string) *cli.Command {
 
 			names := make([]string, 0, len(cfg.Repos))
 
-			if g := stripGroupPrefix(cmd.String("group")); g != "" {
+			if g := stripGroupPrefix(flagString(cmd, "group")); g != "" {
 				grp, ok := cfg.Groups[g]
 				if !ok {
 					return fmt.Errorf("%w %q", errUnknownGroup, g)
@@ -228,6 +214,9 @@ func repoListCmd(cfgPath *string) *cli.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringP(cmdNameGroup, "g", "", "filter to repos in a group")
+
+	return cmd
 }
 
 const (
@@ -240,26 +229,28 @@ const (
 
 // completeFirstArgWithRepos completes the first (and only the first)
 // positional arg with repo names.
-func completeFirstArgWithRepos(cfgPath *string) func(context.Context, *cli.Command) {
-	return func(ctx context.Context, cmd *cli.Command) {
-		if cmd.Args().Len() == 0 {
-			reposOnlyCompleter(cfgPath)(ctx, cmd)
+func completeFirstArgWithRepos(cfgPath *string) cobraCompleter {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return reposOnlyCompleter(cfgPath)(cmd, args, toComplete)
 		}
+
+		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
-func repoRenameCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:          cmdNameRename,
-		Usage:         "rename a repository",
-		ArgsUsage:     "<old-name> <new-name>",
-		ShellComplete: completeFirstArgWithRepos(cfgPath),
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != 2 { //nolint:mnd // expects old and new name
+func repoRenameCmd(cfgPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:               cmdNameRename + " <old-name> <new-name>",
+		Short:             "rename a repository",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeFirstArgWithRepos(cfgPath),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) != 2 { //nolint:mnd // expects old and new name
 				return errRepoRenameUsage
 			}
 
-			oldName, newName := cmd.Args().Get(0), cmd.Args().Get(1)
+			oldName, newName := args[0], args[1]
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
@@ -301,7 +292,7 @@ func displayGroup(name string) string {
 	return name
 }
 
-func repoGroupCmd(cfgPath *string) *cli.Command {
+func repoGroupCmd(cfgPath *string) *cobra.Command {
 	return groupActionCmd(cfgPath, cmdNameGroup, "add a group to a repo", errRepoGroupUsage,
 		func(cfg *config.Config, name, group string) {
 			cfg.AddRepoToGroup(name, group)
@@ -309,7 +300,7 @@ func repoGroupCmd(cfgPath *string) *cli.Command {
 		})
 }
 
-func repoUngroupCmd(cfgPath *string) *cli.Command {
+func repoUngroupCmd(cfgPath *string) *cobra.Command {
 	return groupActionCmd(
 		cfgPath,
 		cmdNameUngroup,
@@ -327,18 +318,18 @@ func groupActionCmd(
 	name, usage string,
 	usageErr error,
 	act func(*config.Config, string, string),
-) *cli.Command {
-	return &cli.Command{
-		Name:          name,
-		Usage:         usage,
-		ArgsUsage:     "<repo> <group>",
-		ShellComplete: completeFirstArgWithRepos(cfgPath),
-		Action: func(_ context.Context, cmd *cli.Command) error {
-			if cmd.NArg() != 2 { //nolint:mnd // expects repo and group name
+) *cobra.Command {
+	return &cobra.Command{
+		Use:               name + " <repo> <group>",
+		Short:             usage,
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeFirstArgWithRepos(cfgPath),
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) != 2 { //nolint:mnd // expects repo and group name
 				return usageErr
 			}
 
-			repoName, group := cmd.Args().Get(0), cmd.Args().Get(1)
+			repoName, group := args[0], args[1]
 
 			cfg, err := config.Load(*cfgPath)
 			if err != nil {
@@ -357,38 +348,40 @@ func groupActionCmd(
 }
 
 // groupCommands returns the `group` subcommand (read-only).
-func groupCommands(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  cmdNameGroup,
-		Usage: "list repo groups",
-		Commands: []*cli.Command{
-			groupListCmd(cfgPath),
-		},
+func groupCommands(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameGroup,
+		Short: "list repo groups",
 	}
+	cmd.AddCommand(groupListCmd(cfgPath))
+
+	return cmd
 }
 
-func groupListCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      "ls",
-		Usage:     "list groups",
-		ArgsUsage: "[name]",
-		ShellComplete: func(ctx context.Context, cmd *cli.Command) {
-			if cmd.Args().Len() == 0 {
-				groupsOnlyCompleter(cfgPath)(ctx, cmd)
+func groupListCmd(cfgPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "ls [name]",
+		Short: "list groups",
+		Args:  cobra.ArbitraryArgs,
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			if len(args) == 0 {
+				return groupsOnlyCompleter(cfgPath)(cmd, args, toComplete)
 			}
+
+			return nil, cobra.ShellCompDirectiveNoFileComp
 		},
-		Action: listGroupsAction(cfgPath),
+		RunE: listGroupsAction(cfgPath),
 	}
 }
 
-func listGroupsAction(cfgPath *string) func(_ context.Context, cmd *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
+func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
+	return func(_ *cobra.Command, args []string) error {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
 			return fmt.Errorf("group ls: %w", err)
 		}
 
-		if name := stripGroupPrefix(cmd.Args().First()); name != "" {
+		if name := stripGroupPrefix(firstArg(args)); name != "" {
 			group, ok := cfg.Groups[name]
 			if !ok {
 				return fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))

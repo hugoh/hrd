@@ -73,16 +73,16 @@ func cfgGitRepoPlusMissing(t *testing.T) string {
 }
 
 // runApp creates a new test app and runs it with the given args, applying
-// the same "--" pre-split and alias registration as production (main.Run).
+// the same alias registration as production (main.Run).
 func runApp(t *testing.T, cfgPath string, args []string) error {
 	t.Helper()
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	app, head := NewAppForArgs(fullArgs)
+	app := NewAppForArgs(fullArgs)
 	bufferWriters(app)
 
-	return app.Run(t.Context(), head) //nolint:wrapcheck
+	return RunApp(t.Context(), app, fullArgs)
 }
 
 // runAppCapture runs the app and returns stdout output.
@@ -91,11 +91,11 @@ func runAppCapture(t *testing.T, cfgPath string, args []string) string {
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)
 
-	app, head := NewAppForArgs(fullArgs)
+	app := NewAppForArgs(fullArgs)
 	bufferWriters(app)
 
 	return capturer.CaptureStdout(func() {
-		err := app.Run(t.Context(), head)
+		err := RunApp(t.Context(), app, fullArgs)
 		// Fake test repos make the underlying VCS command fail; only
 		// repo-level failures are tolerated here, not usage errors.
 		if err != nil {

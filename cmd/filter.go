@@ -7,7 +7,8 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 const (
@@ -16,20 +17,12 @@ const (
 	flagBehind = "behind"
 )
 
-//nolint:gochecknoglobals // CLI flag definitions are package-level by nature
-var statusFilterFlags = []cli.Flag{
-	&cli.BoolFlag{
-		Name:  flagDirty,
-		Usage: "only repos with a dirty working copy",
-	},
-	&cli.BoolFlag{
-		Name:  flagAhead,
-		Usage: "only repos ahead of their remote (or with local-only work)",
-	},
-	&cli.BoolFlag{
-		Name:  flagBehind,
-		Usage: "only repos behind their remote",
-	},
+// addStatusFilterFlags registers the status-filter flags shared by every
+// dispatch-style command onto fs.
+func addStatusFilterFlags(fs *pflag.FlagSet) {
+	fs.Bool(flagDirty, false, "only repos with a dirty working copy")
+	fs.Bool(flagAhead, false, "only repos ahead of their remote (or with local-only work)")
+	fs.Bool(flagBehind, false, "only repos behind their remote")
 }
 
 // statusFilter selects repos by their VCS status. Multiple criteria are a
@@ -40,11 +33,11 @@ type statusFilter struct {
 	behind bool
 }
 
-func statusFilterFromCmd(cmd *cli.Command) statusFilter {
+func statusFilterFromCmd(cmd *cobra.Command) statusFilter {
 	return statusFilter{
-		dirty:  cmd.Bool(flagDirty),
-		ahead:  cmd.Bool(flagAhead),
-		behind: cmd.Bool(flagBehind),
+		dirty:  flagBool(cmd, flagDirty),
+		ahead:  flagBool(cmd, flagAhead),
+		behind: flagBool(cmd, flagBehind),
 	}
 }
 
@@ -81,7 +74,7 @@ func (f statusFilter) matches(st backend.RepoStatus) bool {
 // returned so callers (ls) can render them without a second gather.
 func applyStatusFilter(
 	ctx context.Context,
-	cmd *cli.Command,
+	cmd *cobra.Command,
 	cfg *config.Config,
 	names []string,
 ) ([]string, map[string]runner.StatusResult) {

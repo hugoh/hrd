@@ -86,7 +86,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 
 			stdout := capturer.CaptureStdout(func() {
 				fullArgs := append([]string{"hrd", "--config", cfgPath}, tt.args...)
-				err = app.Run(t.Context(), fullArgs)
+				err = RunApp(t.Context(), app, fullArgs)
 			})
 
 			if tt.wantErr != nil {
