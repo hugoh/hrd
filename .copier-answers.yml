@@ -13,8 +13,7 @@ codecov_ignore:
 - cmd/genreadme/**
 codecov_style: full
 codecov_target: 80%
-cog_omit_type: ''
-coverage_backends_override: true
+cog_omit_types: []
 coverage_total: 90
 dev_watch: false
 dprint_has_excludes: false
@@ -64,4 +63,7 @@ testcoverage_excludes:
 - cmd/genreadme/
 - 'internal/backend/backendtest/ # shared test helpers, exercised only from other
     packages'' tests'
+testcoverage_overrides:
+-   path: backends/
+    threshold: 100
 
