@@ -15,28 +15,28 @@ func TestMainRun(t *testing.T) {
 
 	var stdout, stderr bytes.Buffer
 
-	app.Writer = &stdout
-	app.ErrWriter = &stderr
+	app.SetOut(&stdout)
+	app.SetErr(&stderr)
 
-	err := app.Run(t.Context(), []string{"hrd", "--version"})
+	err := cmd.RunApp(t.Context(), app, []string{"hrd", "--version"})
 	assert.NoError(t, err)
 }
 
 func TestMainRunHelp(t *testing.T) {
 	app := cmd.NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app.SetOut(&bytes.Buffer{})
+	app.SetErr(&bytes.Buffer{})
 
-	err := app.Run(t.Context(), []string{"hrd", "--help"})
+	err := cmd.RunApp(t.Context(), app, []string{"hrd", "--help"})
 	assert.NoError(t, err)
 }
 
 func TestMainRunNoArgs(t *testing.T) {
 	app := cmd.NewApp()
-	app.Writer = &bytes.Buffer{}
-	app.ErrWriter = &bytes.Buffer{}
+	app.SetOut(&bytes.Buffer{})
+	app.SetErr(&bytes.Buffer{})
 
-	err := app.Run(t.Context(), []string{"hrd"})
+	err := cmd.RunApp(t.Context(), app, []string{"hrd"})
 	// Without args, hrd launches the TUI, which requires a real TTY.
 	// In test environments the TTY is unavailable, so verify TUI was invoked.
 	require.ErrorContains(t, err, "TTY", "launched TUI but no TTY available")

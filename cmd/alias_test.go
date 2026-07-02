@@ -23,10 +23,11 @@ func aliasTestConfig(t *testing.T, aliases map[string]string) string {
 func TestAliasInHelp(t *testing.T) {
 	cfgPath := aliasTestConfig(t, map[string]string{"sync": "pull --rebase"})
 
-	app, head := NewAppForArgs([]string{"hrd", "-c", cfgPath, "sync", "--help"})
+	args := []string{"hrd", "-c", cfgPath, "sync", "--help"}
+	app := NewAppForArgs(args)
 	bufferWriters(app)
 
-	require.NoError(t, app.Run(t.Context(), head))
+	require.NoError(t, RunApp(t.Context(), app, args))
 }
 
 func TestAliasShell(t *testing.T) {
@@ -61,18 +62,18 @@ func TestAliasBackendPrefix(t *testing.T) {
 
 	cfgPath := aliasTestConfig(t, map[string]string{"branches": "git branch --list"})
 
-	err := runApp(t, cfgPath, []string{"branches"})
+	err := runHRD(t, cfgPath, []string{"branches"})
 	require.NoError(t, err)
 }
 
 func TestAliasShadowingBuiltinIgnored(t *testing.T) {
 	cfgPath := aliasTestConfig(t, map[string]string{"status": "!echo shadowed"})
 
-	app, _ := NewAppForArgs([]string{"hrd", "-c", cfgPath})
+	app := NewAppForArgs([]string{"hrd", "-c", cfgPath})
 
-	for _, c := range app.Commands {
-		if c.Name == "status" {
-			assert.NotContains(t, c.Usage, "alias", "built-in status must not be replaced")
+	for _, c := range app.Commands() {
+		if c.Name() == "status" {
+			assert.NotContains(t, c.Short, "alias", "built-in status must not be replaced")
 		}
 	}
 }
@@ -120,6 +121,6 @@ func TestAliasInteractiveBare(t *testing.T) {
 
 	cfgPath := aliasTestConfig(t, map[string]string{"last": "log -1 --oneline"})
 
-	err := runApp(t, cfgPath, []string{"last", "-i"})
+	err := runHRD(t, cfgPath, []string{"last", "-i"})
 	require.NoError(t, err)
 }

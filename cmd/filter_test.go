@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/backend/backendtest"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,13 +53,7 @@ func TestStatusFilterMatches(t *testing.T) {
 // true an uncommitted file is left in the working tree.
 func setupRealGitRepo(t *testing.T, dirty bool) string {
 	t.Helper()
-
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
-
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	backendtest.RequireIsolatedGit(t)
 
 	dir := t.TempDir()
 
@@ -84,12 +79,7 @@ func setupRealGitRepo(t *testing.T, dirty bool) string {
 }
 
 func TestLsDirtyFilter(t *testing.T) {
-	backend.ResetDetectCache()
-
-	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-		"cleanrepo": {Path: setupRealGitRepo(t, false)},
-		"dirtyrepo": {Path: setupRealGitRepo(t, true)},
-	}})
+	cfgPath := cfgCleanAndDirtyRepo(t)
 
 	out := runAppCapture(t, cfgPath, []string{"ls", "--dirty", "--names"})
 	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
@@ -110,12 +100,7 @@ func TestLsFilterNoMatch(t *testing.T) {
 // filter active and --names/--dirs not set, ls must render status using the
 // statuses already gathered for filtering, without re-querying the repos.
 func TestLsDirtyFilterRendersStatus(t *testing.T) {
-	backend.ResetDetectCache()
-
-	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-		"cleanrepo": {Path: setupRealGitRepo(t, false)},
-		"dirtyrepo": {Path: setupRealGitRepo(t, true)},
-	}})
+	cfgPath := cfgCleanAndDirtyRepo(t)
 
 	out := runAppCapture(t, cfgPath, []string{"ls", "--dirty"})
 	assert.Contains(t, out, "dirtyrepo")
@@ -123,12 +108,7 @@ func TestLsDirtyFilterRendersStatus(t *testing.T) {
 }
 
 func TestShellDirtyFilter(t *testing.T) {
-	backend.ResetDetectCache()
-
-	cfgPath := setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
-		"cleanrepo": {Path: setupRealGitRepo(t, false)},
-		"dirtyrepo": {Path: setupRealGitRepo(t, true)},
-	}})
+	cfgPath := cfgCleanAndDirtyRepo(t)
 
 	out := runAppCapture(t, cfgPath, []string{"shell", "--dirty", "--", "echo ran"})
 	assert.Contains(t, out, "dirtyrepo")

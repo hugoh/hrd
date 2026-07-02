@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
-	"github.com/urfave/cli/v3"
 )
 
 func TestCompleteRepos(t *testing.T) {
@@ -63,37 +61,31 @@ func TestRepoGroupCompleterWritesReposAndGroups(t *testing.T) {
 		},
 	})
 
-	buf := &bytes.Buffer{}
-	app := &cli.Command{Writer: buf}
 	completer := repoGroupCompleter(&cfgPath)
-	completer(t.Context(), app)
+	got, _ := completer(nil, nil, "")
 
-	output := buf.String()
-	assert.Contains(t, output, "repo-a")
-	assert.Contains(t, output, "repo-b")
-	assert.Contains(t, output, "@work")
-	assert.GreaterOrEqual(t, len(output), len("repo-a\nrepo-b\n@work\n"))
+	assert.Contains(t, got, "repo-a")
+	assert.Contains(t, got, "repo-b")
+	assert.Contains(t, got, "@work")
+	assert.GreaterOrEqual(t, len(got), 3)
 }
 
 func TestRepoGroupCompleterEmptyConfig(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	buf := &bytes.Buffer{}
-	app := &cli.Command{Writer: buf}
 	completer := repoGroupCompleter(&cfgPath)
-	completer(t.Context(), app)
+	got, _ := completer(nil, nil, "")
 
-	assert.Empty(t, buf.String())
+	assert.Empty(t, got)
 }
 
 func TestRepoGroupCompleterBadPath(t *testing.T) {
 	dir := t.TempDir()
 	badPath := dir + "/" // path to a directory, not a file
 
-	app := &cli.Command{Writer: &bytes.Buffer{}}
-	reposOnlyCompleter(&badPath)(t.Context(), app)
-	groupsOnlyCompleter(&badPath)(t.Context(), app)
-	repoGroupCompleter(&badPath)(t.Context(), app)
+	_, _ = reposOnlyCompleter(&badPath)(nil, nil, "")
+	_, _ = groupsOnlyCompleter(&badPath)(nil, nil, "")
+	_, _ = repoGroupCompleter(&badPath)(nil, nil, "")
 }
 
 func TestReposOnlyCompleter(t *testing.T) {
@@ -103,12 +95,10 @@ func TestReposOnlyCompleter(t *testing.T) {
 		},
 	})
 
-	buf := &bytes.Buffer{}
-	app := &cli.Command{Writer: buf}
 	completer := reposOnlyCompleter(&cfgPath)
-	completer(t.Context(), app)
+	got, _ := completer(nil, nil, "")
 
-	assert.Contains(t, buf.String(), "myrepo")
+	assert.Contains(t, got, "myrepo")
 }
 
 func TestGroupsOnlyCompleter(t *testing.T) {
@@ -118,10 +108,8 @@ func TestGroupsOnlyCompleter(t *testing.T) {
 		},
 	})
 
-	buf := &bytes.Buffer{}
-	app := &cli.Command{Writer: buf}
 	completer := groupsOnlyCompleter(&cfgPath)
-	completer(t.Context(), app)
+	got, _ := completer(nil, nil, "")
 
-	assert.Contains(t, buf.String(), "@mygroup")
+	assert.Contains(t, got, "@mygroup")
 }

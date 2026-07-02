@@ -32,9 +32,9 @@ func Run(args []string) int {
 	git.Register()
 	jj.Register()
 
-	app, head := cmd.NewAppForArgs(args)
+	app := cmd.NewAppForArgs(args)
 
-	err := app.Run(context.Background(), head)
+	err := cmd.RunApp(context.Background(), app, args)
 	switch {
 	case err == nil:
 		return exitOK

@@ -1,15 +1,14 @@
-// Package cmd wires together all mgr subcommands into a urfave/cli app.
+// Package cmd wires together all hrd subcommands into a Cobra app.
 package cmd
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/tui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 const cmdNameHRD = "hrd"
@@ -21,98 +20,95 @@ const (
 	flagConfigShort = "c"
 )
 
-// completionFlag is urfave/cli's hidden shell-completion trigger.
-const completionFlag = "--generate-shell-completion"
-
 var version = "dev"
 
 //nolint:gochecknoglobals // swapped in tests to simulate TUI failures
 var runTUI = tui.Run
 
-// SplitDashTail splits raw argv at the first standalone "--": the head is
-// passed to the CLI parser, the tail is delivered verbatim to commands
-// that spawn subprocesses (git, jj, shell). urfave/cli strips the
-// separator during parsing, which would let repo names inside the command
-// be mistaken for scope; splitting before parsing keeps the tail
-// untouched. The tail is nil when there is no separator. Completion
-// invocations (last arg is the hidden completion flag) pass through
-// unchanged so completion after "--" keeps working.
-func SplitDashTail(args []string) ([]string, []string) {
-	if len(args) > 0 && args[len(args)-1] == completionFlag {
-		return args, nil
-	}
-
-	if i := slices.Index(args, "--"); i >= 0 {
-		return args[:i], args[i+1:]
-	}
-
-	return args, nil
-}
-
-func buildCommands(cfgPath *string, dashTail []string, aliases map[string]string) []*cli.Command {
+func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command {
 	n := len(backend.Names())
 
-	cmds := make([]*cli.Command, 0, staticCmdCount+n+len(aliases))
+	cmds := make([]*cobra.Command, 0, staticCmdCount+n+len(aliases))
 
 	cmds = append(cmds,
 		repoCommands(cfgPath),
 		groupCommands(cfgPath),
 
-		lsCmd(cfgPath, dashTail),
-		llCmd(cfgPath, dashTail),
-		statusCmd(cfgPath, dashTail),
-		diffCmd(cfgPath, dashTail),
-		logCmd(cfgPath, dashTail),
-		fetchCmd(cfgPath, dashTail),
-		pullCmd(cfgPath, dashTail),
-		pushCmd(cfgPath, dashTail),
+		lsCmd(cfgPath),
+		llCmd(cfgPath),
+		statusCmd(cfgPath),
+		diffCmd(cfgPath),
+		logCmd(cfgPath),
+		fetchCmd(cfgPath),
+		pullCmd(cfgPath),
+		pushCmd(cfgPath),
 
-		shellCmd(cfgPath, dashTail),
+		shellCmd(cfgPath),
 
 		tuiCmd(cfgPath),
 	)
 
 	for _, name := range backend.Names() {
-		cmds = append(cmds, vcsCmd(cfgPath, name, dashTail))
+		cmds = append(cmds, vcsCmd(cfgPath, name))
 	}
 
 	if len(aliases) > 0 {
-		taken := map[string]bool{"help": true, "h": true, "completion": true}
+		taken := map[string]bool{"help": true, "completion": true}
 		for _, c := range cmds {
-			taken[c.Name] = true
+			taken[c.Name()] = true
 
 			for _, a := range c.Aliases {
 				taken[a] = true
 			}
 		}
 
-		cmds = append(cmds, aliasCommands(cfgPath, aliases, taken, dashTail)...)
+		cmds = append(cmds, aliasCommands(cfgPath, aliases, taken)...)
 	}
 
 	return cmds
 }
 
-// NewApp builds the root CLI application without a "--" tail or config
-// aliases. Callers that execute user argv should use NewAppForArgs.
-func NewApp() *cli.Command {
-	return buildRootCmd(nil, nil)
+// NewApp builds the root CLI application without config aliases. Callers
+// that execute user argv should use NewAppForArgs.
+func NewApp() *cobra.Command {
+	return buildRootCmd(nil)
 }
 
-// NewAppForArgs prepares the app for raw argv: it splits off the verbatim
-// "--" tail (see SplitDashTail) and registers config aliases as top-level
-// commands. The alias load honors -c/--config and is best-effort — config
-// errors are reported later by the command actions. Returns the app and
-// the argv head to pass to Run.
-func NewAppForArgs(args []string) (*cli.Command, []string) {
-	head, tail := SplitDashTail(args)
+// NewAppForArgs prepares the app for raw argv: it registers config aliases
+// as top-level commands before argv is parsed. This ordering matters because
+// alias commands must already exist in the tree for the parser to route to
+// them; parsing itself folds pre- and post-"--" positionals into one args
+// slice per command (see splitScopeArgs for the commands that distinguish
+// the two sides). The alias load honors -c/--config and is best-effort —
+// config errors are reported later by the command actions.
+func NewAppForArgs(args []string) *cobra.Command {
+	return buildRootCmd(loadAliases(configPathFromArgs(args)))
+}
 
-	return buildRootCmd(tail, loadAliases(configPathFromArgs(head))), head
+// RunApp executes app with argv (including the leading program name, as in
+// os.Args) under ctx.
+func RunApp(ctx context.Context, app *cobra.Command, argv []string) error {
+	var args []string
+	if len(argv) > 1 {
+		args = argv[1:]
+	}
+
+	app.SetArgs(args)
+
+	return app.ExecuteContext(ctx) //nolint:wrapcheck
 }
 
 // configPathFromArgs pre-scans argv for -c/--config so aliases can be
-// registered before urfave/cli parses flags.
+// registered before the flag parser runs. The scan stops at the first
+// literal "--": anything after it belongs to a passthrough subprocess
+// command (e.g. "hrd git repo1 -- commit -c user.name=x") and must never
+// be mistaken for hrd's own -c/--config flag.
 func configPathFromArgs(args []string) string {
 	for i, arg := range args {
+		if arg == "--" {
+			break
+		}
+
 		switch {
 		case arg == "--"+flagConfig || arg == "-"+flagConfigShort:
 			if i+1 < len(args) {
@@ -137,38 +133,69 @@ func loadAliases(cfgPath string) map[string]string {
 	return cfg.Aliases
 }
 
-func buildRootCmd(dashTail []string, aliases map[string]string) *cli.Command {
+func buildRootCmd(aliases map[string]string) *cobra.Command {
 	cfgPath := config.DefaultPath()
 
-	return &cli.Command{
-		Name:                  cmdNameHRD,
-		Usage:                 "manage multiple git and jj repositories",
-		Version:               version,
-		EnableShellCompletion: true,
-		ConfigureShellCompletionCommand: func(cmd *cli.Command) {
-			cmd.Hidden = false
-		},
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:        flagConfig,
-				Aliases:     []string{flagConfigShort},
-				Usage:       "path to config file",
-				Value:       cfgPath,
-				Destination: &cfgPath,
-			},
-		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			var args []string
-
-			if a := cmd.Args(); a != nil {
-				args = a.Slice()
-			}
-
-			return runTUI(ctx, tui.Options{
+	root := &cobra.Command{
+		Use:           cmdNameHRD,
+		Short:         "manage multiple git and jj repositories",
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		Args:          cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTUI(cmd.Context(), tui.Options{
 				ConfigPath: cfgPath,
 				Repos:      args,
 			})
 		},
-		Commands: buildCommands(&cfgPath, dashTail, aliases),
 	}
+
+	root.PersistentFlags().
+		StringVarP(&cfgPath, flagConfig, flagConfigShort, cfgPath, "path to config file")
+
+	if len(aliases) > 0 {
+		root.AddGroup(&cobra.Group{ID: "aliases", Title: "Aliases:"})
+	}
+
+	root.AddCommand(buildCommands(&cfgPath, aliases)...)
+
+	return root
+}
+
+// flagString and its siblings below wrap cmd.Flags().Get* and discard the
+// error: every call site passes a compile-time-constant name that's always
+// registered on that exact command (see addDispatchFlags, addLsFlags,
+// addStatusFilterFlags), so a lookup failure would be a programming error,
+// not a runtime condition callers need to handle.
+func flagString(cmd *cobra.Command, name string) string {
+	v, _ := cmd.Flags().GetString(name)
+
+	return v
+}
+
+func flagBool(cmd *cobra.Command, name string) bool {
+	v, _ := cmd.Flags().GetBool(name)
+
+	return v
+}
+
+func flagInt(cmd *cobra.Command, name string) int {
+	v, _ := cmd.Flags().GetInt(name)
+
+	return v
+}
+
+func flagStringSlice(cmd *cobra.Command, name string) []string {
+	v, _ := cmd.Flags().GetStringSlice(name)
+
+	return v
+}
+
+func firstArg(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+
+	return args[0]
 }

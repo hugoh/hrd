@@ -1,42 +1,30 @@
 package cmd
 
 import (
-	"context"
-
 	"github.com/hugoh/hrd/internal/tui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 // tuiCmd returns the `tui` subcommand.
-func tuiCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:    "tui",
+func tuiCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "tui",
 		Aliases: []string{"i"},
-		Usage:   "interactive terminal UI for browsing and running commands across repos",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    cmdNameGroup,
-				Aliases: []string{"g"},
-				Usage:   "initial group filter (e.g. @work)",
-			},
-			&cli.StringSliceFlag{
-				Name:    cmdReposFlag,
-				Aliases: []string{"r"},
-				Usage:   "initial repo selection",
-			},
-		},
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			repos := cmd.StringSlice(cmdReposFlag)
+		Short:   "interactive terminal UI for browsing and running commands across repos",
+		Args:    cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			repos := flagStringSlice(cmd, cmdReposFlag)
+			repos = append(repos, args...)
 
-			if a := cmd.Args(); a != nil {
-				repos = append(repos, a.Slice()...)
-			}
-
-			return tui.Run(ctx, tui.Options{
+			return tui.Run(cmd.Context(), tui.Options{
 				ConfigPath: *cfgPath,
-				Group:      cmd.String("group"),
+				Group:      flagString(cmd, "group"),
 				Repos:      repos,
 			})
 		},
 	}
+	cmd.Flags().StringP(cmdNameGroup, "g", "", "initial group filter (e.g. @work)")
+	cmd.Flags().StringSliceP(cmdReposFlag, "r", nil, "initial repo selection")
+
+	return cmd
 }

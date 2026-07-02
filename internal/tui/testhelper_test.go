@@ -2,12 +2,14 @@ package tui
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/stretchr/testify/require"
 )
 
 func newTestModel(ctx context.Context, tb testing.TB, opts Options) (*model, error) {
@@ -18,6 +20,52 @@ func newTestModel(ctx context.Context, tb testing.TB, opts Options) (*model, err
 	}
 
 	return newModel(ctx, opts)
+}
+
+// newSingleRepoModel builds a real model backed by one real, isolated git
+// repo ("testrepo") and a config.toml pointing at it, with the repo
+// pre-selected — used by tests that need a real (not stubbed) backend.
+func newSingleRepoModel(t *testing.T) *model {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	initGitRepo(t, repoDir)
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.toml")
+	err := os.WriteFile(cfgPath, []byte(
+		`[repos.testrepo]
+path = "`+repoDir+`"
+backends = ["git"]`), 0o644)
+	require.NoError(t, err)
+
+	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})
+	require.NoError(t, err)
+
+	m.selected["testrepo"] = true
+
+	return m
+}
+
+// newAlphaBetaModel builds a real model (via newTestModel, no on-disk repos
+// needed since these tests don't touch a backend) with two repos, "alpha"
+// and "beta", in that order — used by table row-rendering tests.
+func newAlphaBetaModel(t *testing.T) *model {
+	t.Helper()
+
+	m, err := newTestModel(t.Context(), t, Options{})
+	require.NoError(t, err)
+
+	m.cfg = config.Config{
+		Repos: map[string]config.Repo{
+			"alpha": {Path: t.TempDir()},
+			"beta":  {Path: t.TempDir()},
+		},
+		Settings: config.Settings{Concurrency: 4},
+	}
+	m.repoOrder = []string{"alpha", "beta"}
+
+	return m
 }
 
 // baseModel creates a model with core fields and initTable() ready for

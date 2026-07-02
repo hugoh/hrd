@@ -42,13 +42,31 @@ func scanTree(t *testing.T) string {
 	return root
 }
 
+// scanTreeWithTrackedApp builds a scanTree and a config that already tracks
+// its "oss/app" repo (named "app") — used by scan-list tests that assert on
+// tracked/untracked filtering.
+func scanTreeWithTrackedApp(t *testing.T) (string, string) {
+	t.Helper()
+	backend.ResetDetectCache()
+
+	root := scanTree(t)
+	ossApp := filepath.Join(root, "oss", "app")
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"app": {Path: ossApp},
+		},
+	})
+
+	return root, cfgPath
+}
+
 func TestRepoScanAdd(t *testing.T) {
 	backend.ResetDetectCache()
 
 	root := scanTree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	err := runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root})
+	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -65,8 +83,8 @@ func TestRepoScanAddIdempotent(t *testing.T) {
 	root := scanTree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	require.NoError(t, runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
-	require.NoError(t, runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
+	require.NoError(t, runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
+	require.NoError(t, runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
@@ -81,7 +99,7 @@ func TestRepoScanAddGroup(t *testing.T) {
 
 	require.NoError(
 		t,
-		runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "-g", "work", root}),
+		runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "-g", "work", root}),
 	)
 
 	cfg, err := config.Load(cfgPath)
@@ -101,14 +119,14 @@ func TestRepoScanAddDepthLimit(t *testing.T) {
 
 	require.NoError(
 		t,
-		runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--depth", "2", root}),
+		runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--depth", "2", root}),
 	)
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
 	assert.Empty(t, cfg.Repos, "repo below --depth should not be added")
 
-	require.NoError(t, runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
+	require.NoError(t, runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
 
 	cfg, err = config.Load(cfgPath)
 	require.NoError(t, err)
@@ -117,7 +135,7 @@ func TestRepoScanAddDepthLimit(t *testing.T) {
 
 func TestRepoScanAddNoArgs(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
-	err := runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd})
+	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd})
 	require.ErrorIs(t, err, errAtLeastOnePath)
 }
 
@@ -136,7 +154,7 @@ func TestRepoScanAddNameConflictSkipped(t *testing.T) {
 	}
 
 	cfgPath := setupTestConfig(t, config.Config{})
-	require.NoError(t, runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
+	require.NoError(t, runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
@@ -154,7 +172,7 @@ func TestRepoScanAddPattern(t *testing.T) {
 	// "app" matches both repos by basename; filter to confirm both are found
 	require.NoError(
 		t,
-		runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--pattern", "app", root}),
+		runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--pattern", "app", root}),
 	)
 
 	cfg, err := config.Load(cfgPath)
@@ -165,7 +183,7 @@ func TestRepoScanAddPattern(t *testing.T) {
 	cfgPath2 := setupTestConfig(t, config.Config{})
 	require.NoError(
 		t,
-		runApp(
+		runHRD(
 			t,
 			cfgPath2,
 			[]string{"repo", cmdNameScan, cmdNameScanAdd, "--pattern", "nomatch*", root},
@@ -199,7 +217,7 @@ func TestRepoScanAddConfirm(t *testing.T) {
 
 	require.NoError(
 		t,
-		runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--confirm", root}),
+		runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "--confirm", root}),
 	)
 
 	cfg, err := config.Load(cfgPath)
@@ -210,22 +228,12 @@ func TestRepoScanAddConfirm(t *testing.T) {
 
 func TestRepoScanListNoArgs(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
-	err := runApp(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList})
+	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList})
 	require.ErrorIs(t, err, errAtLeastOnePath)
 }
 
 func TestRepoScanList(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-
-	// Pre-populate config with one of the two repos.
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList, root})
 
@@ -236,15 +244,7 @@ func TestRepoScanList(t *testing.T) {
 }
 
 func TestRepoScanListTracked(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(
 		t,
@@ -258,15 +258,7 @@ func TestRepoScanListTracked(t *testing.T) {
 }
 
 func TestRepoScanListUntracked(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(
 		t,
@@ -295,7 +287,7 @@ func TestRepoScanListGroup(t *testing.T) {
 		"repo", cmdNameScan, cmdNameScanList,
 		"-p", "app", "-g", "spoon", "--tracked", root,
 	}
-	require.NoError(t, runApp(t, cfgPath, args))
+	require.NoError(t, runHRD(t, cfgPath, args))
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)
@@ -308,7 +300,7 @@ func TestRepoAddWithGroup(t *testing.T) {
 	repoDir := setupFakeGitRepo(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
-	require.NoError(t, runApp(t, cfgPath, []string{"repo", "add", "-g", "@work", repoDir}))
+	require.NoError(t, runHRD(t, cfgPath, []string{"repo", "add", "-g", "@work", repoDir}))
 
 	cfg, err := config.Load(cfgPath)
 	require.NoError(t, err)

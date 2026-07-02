@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -11,7 +10,7 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/ui"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -24,84 +23,54 @@ const (
 //nolint:gochecknoglobals // package-level variable required for test injection
 var confirmFn func(string) bool = ui.Confirm
 
-func repoScanCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:  cmdNameScan,
-		Usage: "discover repositories under one or more directories",
-		Commands: []*cli.Command{
-			repoScanAddCmd(cfgPath),
-			repoScanListCmd(cfgPath),
-		},
+func repoScanCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameScan,
+		Short: "discover repositories under one or more directories",
 	}
+	cmd.AddCommand(
+		repoScanAddCmd(cfgPath),
+		repoScanListCmd(cfgPath),
+	)
+
+	return cmd
 }
 
-func repoScanAddCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      cmdNameScanAdd,
-		Usage:     "discover and add repositories under one or more directories",
-		ArgsUsage: "<dir>...",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "pattern",
-				Aliases: []string{"p"},
-				Usage:   "glob pattern matched against repo directory name to filter results",
-			},
-			&cli.StringFlag{
-				Name:    cmdNameGroup,
-				Aliases: []string{"g"},
-				Usage:   "add found repos to this group",
-			},
-			&cli.IntFlag{
-				Name:  "depth",
-				Value: defaultScanDepth,
-				Usage: "maximum directory depth to descend",
-			},
-			&cli.BoolFlag{
-				Name:    "confirm",
-				Aliases: []string{"i"},
-				Usage:   "prompt before adding each repo",
-			},
-		},
-		Action: repoScanAddAction(cfgPath),
+func repoScanAddCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameScanAdd + " <dir>...",
+		Short: "discover and add repositories under one or more directories",
+		Args:  cobra.ArbitraryArgs,
+		RunE:  repoScanAddAction(cfgPath),
 	}
+	cmd.Flags().
+		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
+	cmd.Flags().StringP(cmdNameGroup, "g", "", "add found repos to this group")
+	cmd.Flags().Int("depth", defaultScanDepth, "maximum directory depth to descend")
+	cmd.Flags().BoolP("confirm", "i", false, "prompt before adding each repo")
+
+	return cmd
 }
 
-func repoScanListCmd(cfgPath *string) *cli.Command {
-	return &cli.Command{
-		Name:      cmdNameScanList,
-		Usage:     "list repositories discovered under one or more directories",
-		ArgsUsage: "<dir>...",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "pattern",
-				Aliases: []string{"p"},
-				Usage:   "glob pattern matched against repo directory name to filter results",
-			},
-			&cli.IntFlag{
-				Name:  "depth",
-				Value: defaultScanDepth,
-				Usage: "maximum directory depth to descend",
-			},
-			&cli.StringFlag{
-				Name:    cmdNameGroup,
-				Aliases: []string{"g"},
-				Usage:   "assign tracked repos in results to this group",
-			},
-			&cli.BoolFlag{
-				Name:  "tracked",
-				Usage: "show only repos already in config",
-			},
-			&cli.BoolFlag{
-				Name:  "untracked",
-				Usage: "show only repos not yet in config",
-			},
-		},
-		Action: repoScanListAction(cfgPath),
+func repoScanListCmd(cfgPath *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   cmdNameScanList + " <dir>...",
+		Short: "list repositories discovered under one or more directories",
+		Args:  cobra.ArbitraryArgs,
+		RunE:  repoScanListAction(cfgPath),
 	}
+	cmd.Flags().
+		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
+	cmd.Flags().Int("depth", defaultScanDepth, "maximum directory depth to descend")
+	cmd.Flags().StringP(cmdNameGroup, "g", "", "assign tracked repos in results to this group")
+	cmd.Flags().Bool("tracked", false, "show only repos already in config")
+	cmd.Flags().Bool("untracked", false, "show only repos not yet in config")
+
+	return cmd
 }
 
-func loadScanConfig(cfgPath *string, cmd *cli.Command, op string) (config.Config, error) {
-	if cmd.NArg() == 0 {
+func loadScanConfig(cfgPath *string, args []string, op string) (config.Config, error) {
+	if len(args) == 0 {
 		return config.Config{}, errAtLeastOnePath
 	}
 
@@ -133,19 +102,19 @@ func collectRepoPaths(roots []string, depth int) ([]string, error) {
 	return all, nil
 }
 
-func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		cfg, err := loadScanConfig(cfgPath, cmd, "add")
+func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadScanConfig(cfgPath, args, "add")
 		if err != nil {
 			return err
 		}
 
-		group := stripGroupPrefix(cmd.String(cmdNameGroup))
+		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
 		tracked := trackedPaths(&cfg)
-		pattern := cmd.String("pattern")
-		confirm := cmd.Bool("confirm")
+		pattern := flagString(cmd, "pattern")
+		confirm := flagBool(cmd, "confirm")
 
-		repoPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		repoPaths, err := collectRepoPaths(args, flagInt(cmd, "depth"))
 		if err != nil {
 			return err
 		}
@@ -167,20 +136,20 @@ func repoScanAddAction(cfgPath *string) func(context.Context, *cli.Command) erro
 	}
 }
 
-func repoScanListAction(cfgPath *string) func(context.Context, *cli.Command) error {
-	return func(_ context.Context, cmd *cli.Command) error {
-		cfg, err := loadScanConfig(cfgPath, cmd, "list")
+func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		cfg, err := loadScanConfig(cfgPath, args, "list")
 		if err != nil {
 			return err
 		}
 
 		tracked := trackedPaths(&cfg)
-		pattern := cmd.String("pattern")
-		group := stripGroupPrefix(cmd.String(cmdNameGroup))
-		onlyTracked := cmd.Bool("tracked")
-		onlyUntracked := cmd.Bool("untracked")
+		pattern := flagString(cmd, "pattern")
+		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+		onlyTracked := flagBool(cmd, "tracked")
+		onlyUntracked := flagBool(cmd, "untracked")
 
-		allPaths, err := collectRepoPaths(cmd.Args().Slice(), cmd.Int("depth"))
+		allPaths, err := collectRepoPaths(args, flagInt(cmd, "depth"))
 		if err != nil {
 			return err
 		}

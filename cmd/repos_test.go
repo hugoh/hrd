@@ -86,7 +86,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 
 			stdout := capturer.CaptureStdout(func() {
 				fullArgs := append([]string{"hrd", "--config", cfgPath}, tt.args...)
-				err = app.Run(t.Context(), fullArgs)
+				err = RunApp(t.Context(), app, fullArgs)
 			})
 
 			if tt.wantErr != nil {
@@ -120,7 +120,7 @@ func TestRepoGroup(t *testing.T) {
 		},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "group", "repo1", "work"})
+	err := runHRD(t, cfgPath, []string{"repo", "group", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -130,7 +130,7 @@ func TestRepoGroup(t *testing.T) {
 	assert.Equal(t, []string{"repo1"}, cfg.Groups["work"].Repos)
 
 	// Add same group again — should no-op
-	err = runApp(t, cfgPath, []string{"repo", "group", "repo1", "work"})
+	err = runHRD(t, cfgPath, []string{"repo", "group", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err = config.Load(cfgPath)
@@ -143,7 +143,7 @@ func TestRepoGroupUnknownRepo(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "group", "nonexistent", "work"})
+	err := runHRD(t, cfgPath, []string{"repo", "group", "nonexistent", "work"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
 }
@@ -156,7 +156,7 @@ func TestRepoUngroup(t *testing.T) {
 		},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "ungroup", "repo1", "work"})
+	err := runHRD(t, cfgPath, []string{"repo", "ungroup", "repo1", "work"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -165,7 +165,7 @@ func TestRepoUngroup(t *testing.T) {
 	assert.NotContains(t, cfg.Groups["work"].Repos, "repo1")
 
 	// Ungroup non-existent group — should no-op
-	err = runApp(t, cfgPath, []string{"repo", "ungroup", "repo1", "nonexistent"})
+	err = runHRD(t, cfgPath, []string{"repo", "ungroup", "repo1", "nonexistent"})
 	require.NoError(t, err)
 }
 
@@ -174,7 +174,7 @@ func TestRepoUngroupUnknownRepo(t *testing.T) {
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runApp(t, cfgPath, []string{"repo", "ungroup", "nonexistent", "work"})
+	err := runHRD(t, cfgPath, []string{"repo", "ungroup", "nonexistent", "work"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
 }

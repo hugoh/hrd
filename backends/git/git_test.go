@@ -2,7 +2,6 @@ package git
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -16,13 +15,7 @@ import (
 // initGitRepoWithCommit creates a temp git repo with one commit and returns its path.
 func initGitRepoWithCommit(t *testing.T) string {
 	t.Helper()
-
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
-
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	backendtest.RequireIsolatedGit(t)
 
 	dir := t.TempDir()
 	runGitCmd(t, dir, []string{"init"})

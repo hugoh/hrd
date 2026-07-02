@@ -1,13 +1,14 @@
 package cmd
 
 import (
-	"context"
-	"fmt"
 	"slices"
 
 	"github.com/hugoh/hrd/internal/config"
-	"github.com/urfave/cli/v3"
+	"github.com/spf13/cobra"
 )
+
+// cobraCompleter is the shape Cobra's ValidArgsFunction expects.
+type cobraCompleter func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
 func completeRepos(cfg *config.Config) []string {
 	names := make([]string, 0, len(cfg.Repos))
@@ -36,31 +37,31 @@ func completeGroups(cfg *config.Config) []string {
 func makeCompleter(
 	cfgPath *string,
 	getters ...func(*config.Config) []string,
-) func(context.Context, *cli.Command) {
-	return func(_ context.Context, cmd *cli.Command) {
+) cobraCompleter {
+	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		cfg, err := config.Load(*cfgPath)
 		if err != nil {
-			return
+			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
 
-		w := cmd.Root().Writer
+		var out []string
 
 		for _, get := range getters {
-			for _, name := range get(&cfg) {
-				_, _ = fmt.Fprintln(w, name)
-			}
+			out = append(out, get(&cfg)...)
 		}
+
+		return out, cobra.ShellCompDirectiveNoFileComp
 	}
 }
 
-func repoGroupCompleter(cfgPath *string) func(context.Context, *cli.Command) {
+func repoGroupCompleter(cfgPath *string) cobraCompleter {
 	return makeCompleter(cfgPath, completeRepos, completeGroups)
 }
 
-func reposOnlyCompleter(cfgPath *string) func(context.Context, *cli.Command) {
+func reposOnlyCompleter(cfgPath *string) cobraCompleter {
 	return makeCompleter(cfgPath, completeRepos)
 }
 
-func groupsOnlyCompleter(cfgPath *string) func(context.Context, *cli.Command) {
+func groupsOnlyCompleter(cfgPath *string) cobraCompleter {
 	return makeCompleter(cfgPath, completeGroups)
 }

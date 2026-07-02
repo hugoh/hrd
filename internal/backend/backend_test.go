@@ -130,6 +130,25 @@ func withCleanRegistry(t *testing.T, backends ...*mockBackend) {
 	t.Cleanup(func() { registry = orig })
 }
 
+// withMatchingGitDir registers a "git" backend that matches only a fresh
+// temp dir, plus a "jj" backend that never matches, and returns that dir —
+// used by Detect/DetectAll tests asserting a single-backend match.
+func withMatchingGitDir(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+
+	withCleanRegistry(t,
+		&mockBackend{
+			name:   "git",
+			detect: func(path string) (bool, error) { return path == dir, nil },
+		},
+		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
+	)
+
+	return dir
+}
+
 func (*mockBackend) Status(_ context.Context, _ string) (RepoStatus, error) {
 	return RepoStatus{}, nil
 }
@@ -193,15 +212,7 @@ func TestDetectAll_NoMatch(t *testing.T) {
 }
 
 func TestDetect_Match(t *testing.T) {
-	dir := t.TempDir()
-
-	withCleanRegistry(t,
-		&mockBackend{
-			name:   "git",
-			detect: func(path string) (bool, error) { return path == dir, nil },
-		},
-		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
-	)
+	dir := withMatchingGitDir(t)
 
 	b, err := Detect(dir)
 	require.NoError(t, err)
@@ -232,15 +243,7 @@ func TestDetect_ErrorFromDetect(t *testing.T) {
 }
 
 func TestDetectAll_Match(t *testing.T) {
-	dir := t.TempDir()
-
-	withCleanRegistry(t,
-		&mockBackend{
-			name:   "git",
-			detect: func(path string) (bool, error) { return path == dir, nil },
-		},
-		&mockBackend{name: "jj", detect: func(_ string) (bool, error) { return false, nil }},
-	)
+	dir := withMatchingGitDir(t)
 
 	matched, err := DetectAll(dir)
 	require.NoError(t, err)
