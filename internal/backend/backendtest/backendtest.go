@@ -6,6 +6,7 @@ package backendtest
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -15,6 +16,20 @@ import (
 )
 
 const markerDirPerm = 0o750
+
+// RequireIsolatedGit skips the test if git isn't on PATH, then points HOME
+// and GIT_CONFIG_GLOBAL at throwaway locations so a real `git` invocation in
+// the test never reads (or writes) the developer's actual git config.
+func RequireIsolatedGit(t *testing.T) {
+	t.Helper()
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+}
 
 // AssertDetect exercises the common Backend.Detect contract: true when the
 // marker directory (e.g. ".git", ".jj") is present, false when it's absent,

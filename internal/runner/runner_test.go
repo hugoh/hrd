@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/backend/backendtest"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,17 +154,8 @@ func TestVCSSubcmd_RepoNotFound(t *testing.T) {
 }
 
 func TestVCSSubcmd_RunsInRepoDir(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
+	dir := initGitRepoOnMain(t)
 
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-
-	dir := t.TempDir()
-	runGit(t, dir, "init", initMain, branchMain)
-	runGit(t, dir, "config", "user.email", testEmail)
-	runGit(t, dir, "config", "user.name", testName)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "test.txt"), []byte("hello"), 0o644))
 	runGit(t, dir, "add", "test.txt")
 	runGit(t, dir, "commit", "-m", "initial")
@@ -193,6 +185,21 @@ func runGit(t *testing.T, dir string, args ...string) {
 	cmd := exec.CommandContext(t.Context(), "git", args...)
 	cmd.Dir = dir
 	require.NoError(t, cmd.Run())
+}
+
+// initGitRepoOnMain creates an isolated, configured (no commit yet) git repo
+// on branch "main" and returns its dir — used by tests that need a real repo
+// with `git config` already set up, with or without a subsequent commit.
+func initGitRepoOnMain(t *testing.T) string {
+	t.Helper()
+	backendtest.RequireIsolatedGit(t)
+
+	dir := t.TempDir()
+	runGit(t, dir, "init", initMain, branchMain)
+	runGit(t, dir, "config", "user.email", testEmail)
+	runGit(t, dir, "config", "user.name", testName)
+
+	return dir
 }
 
 func TestVCSSubcmd_Ops(t *testing.T) {
@@ -225,17 +232,7 @@ func TestVCSSubcmd_FetchRepoNotFound(t *testing.T) {
 }
 
 func TestVCSSubcmd_FetchRunsInRepoDir(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
-
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
-
-	dir := t.TempDir()
-	runGit(t, dir, "init", initMain, branchMain)
-	runGit(t, dir, "config", "user.email", testEmail)
-	runGit(t, dir, "config", "user.name", testName)
+	dir := initGitRepoOnMain(t)
 
 	repos := map[string]config.Repo{
 		"r1": {Path: dir},

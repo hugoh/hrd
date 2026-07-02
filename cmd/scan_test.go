@@ -42,6 +42,24 @@ func scanTree(t *testing.T) string {
 	return root
 }
 
+// scanTreeWithTrackedApp builds a scanTree and a config that already tracks
+// its "oss/app" repo (named "app") — used by scan-list tests that assert on
+// tracked/untracked filtering.
+func scanTreeWithTrackedApp(t *testing.T) (string, string) {
+	t.Helper()
+	backend.ResetDetectCache()
+
+	root := scanTree(t)
+	ossApp := filepath.Join(root, "oss", "app")
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"app": {Path: ossApp},
+		},
+	})
+
+	return root, cfgPath
+}
+
 func TestRepoScanAdd(t *testing.T) {
 	backend.ResetDetectCache()
 
@@ -215,17 +233,7 @@ func TestRepoScanListNoArgs(t *testing.T) {
 }
 
 func TestRepoScanList(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-
-	// Pre-populate config with one of the two repos.
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList, root})
 
@@ -236,15 +244,7 @@ func TestRepoScanList(t *testing.T) {
 }
 
 func TestRepoScanListTracked(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(
 		t,
@@ -258,15 +258,7 @@ func TestRepoScanListTracked(t *testing.T) {
 }
 
 func TestRepoScanListUntracked(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := scanTree(t)
-	ossApp := filepath.Join(root, "oss", "app")
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"app": {Path: ossApp},
-		},
-	})
+	root, cfgPath := scanTreeWithTrackedApp(t)
 
 	out := runAppCapture(
 		t,

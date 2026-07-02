@@ -78,7 +78,9 @@ func TestViewAlertInline(t *testing.T) {
 	require.NotEmpty(t, m.View().Content)
 }
 
-func TestViewOutputScreen(t *testing.T) {
+// outputScreenModel returns a ready model on screenOutput, sized like
+// testModel's default, for tests that exercise the output screen directly.
+func outputScreenModel() *model {
 	m := &model{
 		screen: screenOutput,
 		width:  80,
@@ -86,18 +88,18 @@ func TestViewOutputScreen(t *testing.T) {
 		output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 	}
 	m.ready = true
+
+	return m
+}
+
+func TestViewOutputScreen(t *testing.T) {
+	m := outputScreenModel()
 
 	require.NotEmpty(t, m.View().Content)
 }
 
 func TestOutputView(t *testing.T) {
-	m := &model{
-		screen: screenOutput,
-		width:  80,
-		height: 30,
-		output: viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
-	}
-	m.ready = true
+	m := outputScreenModel()
 
 	view := m.outputView()
 	require.NotEmpty(t, view)

@@ -16,6 +16,7 @@ import (
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/backend/backendtest"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -39,13 +40,7 @@ func TestMain(m *testing.M) {
 // developer's global git config, and skips the test if git is unavailable.
 func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
-
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
-
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	backendtest.RequireIsolatedGit(t)
 
 	runGitCmd(t, dir, "init")
 	runGitCmd(t, dir, "config", "user.email", "test@test.com")
@@ -65,25 +60,7 @@ func runGitCmd(t *testing.T, dir string, args ...string) {
 }
 
 func TestTableShowsRepoStatus(t *testing.T) {
-	repoDir := t.TempDir()
-	initGitRepo(t, repoDir)
-
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.toml")
-	err := os.WriteFile(cfgPath, []byte(
-		`[repos.testrepo]
-path = "`+repoDir+`"
-backends = ["git"]
-`), 0o644)
-	require.NoError(t, err)
-
-	ctx := t.Context()
-	m, err := newTestModel(ctx, t, Options{
-		ConfigPath: cfgPath,
-	})
-	require.NoError(t, err)
-
-	m.selected["testrepo"] = true
+	m := newSingleRepoModel(t)
 
 	m.statuses["testrepo"] = runner.StatusResult{
 		RepoName: "testrepo",
@@ -199,17 +176,7 @@ func TestRefColumnWidthAfterWindowSize(t *testing.T) {
 }
 
 func TestRowAlignmentNoSelectMode(t *testing.T) {
-	m, err := newTestModel(t.Context(), t, Options{})
-	require.NoError(t, err)
-
-	m.cfg = config.Config{
-		Repos: map[string]config.Repo{
-			"alpha": {Path: t.TempDir()},
-			"beta":  {Path: t.TempDir()},
-		},
-		Settings: config.Settings{Concurrency: 4},
-	}
-	m.repoOrder = []string{"alpha", "beta"}
+	m := newAlphaBetaModel(t)
 
 	m.statuses["alpha"] = runner.StatusResult{
 		RepoName: "alpha",
@@ -302,17 +269,7 @@ func TestCheckboxPlainText(t *testing.T) {
 	// Checkbox values must be plain characters, not ANSI-styled strings,
 	// because the table passes cell values through runewidth.Truncate
 	// which counts ANSI escape bytes as printable characters.
-	m, err := newTestModel(t.Context(), t, Options{})
-	require.NoError(t, err)
-
-	m.cfg = config.Config{
-		Repos: map[string]config.Repo{
-			"alpha": {Path: t.TempDir()},
-			"beta":  {Path: t.TempDir()},
-		},
-		Settings: config.Settings{Concurrency: 4},
-	}
-	m.repoOrder = []string{"alpha", "beta"}
+	m := newAlphaBetaModel(t)
 	m.selected = map[string]bool{"alpha": true, "beta": false}
 	m.mode = modeSelect
 	m.updateTableRows()
@@ -421,72 +378,118 @@ func TestFormatExecOutputEmpty(t *testing.T) {
 	assert.Empty(t, got, "expected empty output for nil results")
 }
 
-func TestFormatStatusLineNoStatus(t *testing.T) {
-	m := &model{statuses: map[string]runner.StatusResult{}}
-
-	line := m.formatStatusLine("nonexistent")
-	assert.NotEmpty(t, line, "expected muted placeholder for missing status")
-}
-
-func TestFormatStatusLineError(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Err: errors.New("something went wrong"),
+//nolint:funlen // table-driven, one case per formatStatusLine branch
+func TestFormatStatusLine(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string // defaults to "repo1" when empty
+		results map[string]runner.StatusResult
+		check   func(t *testing.T, line string)
+	}{
+		{
+			name:    "no status falls back to placeholder",
+			query:   "nonexistent",
+			results: map[string]runner.StatusResult{},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.NotEmpty(t, line, "expected muted placeholder for missing status")
 			},
 		},
-	}
-	line := m.formatStatusLine("repo1")
-
-	assert.Contains(t, line, "something went wrong", "expected error message in output")
-}
-
-func TestFormatStatusLineWithBookmarkAndMsg(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Status: backend.RepoStatus{
-					Bookmarks: []backend.BookmarkStatus{
-						{Name: "main", State: backend.RefStateSynced},
+		{
+			name: "error",
+			results: map[string]runner.StatusResult{
+				"repo1": {Err: errors.New("something went wrong")},
+			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.Contains(t, line, "something went wrong", "expected error message in output")
+			},
+		},
+		{
+			name: "bookmark and commit message",
+			results: map[string]runner.StatusResult{
+				"repo1": {
+					Status: backend.RepoStatus{
+						Bookmarks: []backend.BookmarkStatus{
+							{Name: "main", State: backend.RefStateSynced},
+						},
+						CommitMsg:  "fix bug",
+						CommitTime: "2 hours ago",
 					},
-					CommitMsg:  "fix bug",
-					CommitTime: "2 hours ago",
 				},
 			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.Contains(t, line, "main", "expected bookmark name in output")
+				assert.Contains(t, line, "fix bug", "expected commit msg in output")
+			},
 		},
-	}
-	line := m.formatStatusLine("repo1")
-
-	assert.Contains(t, line, "main", "expected bookmark name in output")
-	assert.Contains(t, line, "fix bug", "expected commit msg in output")
-}
-
-func TestFormatStatusLineRefOnly(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Status: backend.RepoStatus{
-					Ref: "develop",
+		{
+			name: "ref only",
+			results: map[string]runner.StatusResult{
+				"repo1": {Status: backend.RepoStatus{Ref: "develop"}},
+			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.Contains(t, line, "develop", "expected ref in output")
+			},
+		},
+		{
+			name: "empty status",
+			results: map[string]runner.StatusResult{
+				"repo1": {Status: backend.RepoStatus{}},
+			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.Empty(t, line, "expected empty output for empty status")
+			},
+		},
+		{
+			name: "commit time without message",
+			results: map[string]runner.StatusResult{
+				"repo1": {
+					Status: backend.RepoStatus{
+						Bookmarks: []backend.BookmarkStatus{
+							{Name: "main", State: backend.RefStateSynced},
+						},
+						CommitTime: "yesterday",
+					},
 				},
 			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.Contains(t, line, "yesterday", "expected commit time in output")
+			},
 		},
-	}
-	line := m.formatStatusLine("repo1")
-
-	assert.Contains(t, line, "develop", "expected ref in output")
-}
-
-func TestFormatStatusLineEmptyStatus(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Status: backend.RepoStatus{},
+		{
+			name: "ref and symbols only",
+			results: map[string]runner.StatusResult{
+				"repo1": {
+					Status: backend.RepoStatus{
+						Bookmarks: []backend.BookmarkStatus{
+							{Name: "main", State: backend.RefStateAhead, Ahead: 1},
+						},
+					},
+				},
+			},
+			check: func(t *testing.T, line string) {
+				t.Helper()
+				assert.NotEmpty(t, line, "expected non-empty output for ref with symbol")
 			},
 		},
 	}
-	line := m.formatStatusLine("repo1")
 
-	assert.Empty(t, line, "expected empty output for empty status")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			query := tt.query
+			if query == "" {
+				query = "repo1"
+			}
+
+			m := &model{statuses: tt.results}
+			tt.check(t, m.formatStatusLine(query))
+		})
+	}
 }
 
 func TestRenderSymbols(t *testing.T) {
@@ -526,41 +529,6 @@ func TestRenderSymbolsConflict(t *testing.T) {
 
 func testColorFn(colorName, symbol string) string {
 	return fmt.Sprintf("[%s:%s]", colorName, symbol)
-}
-
-func TestFormatStatusLineCommitTimeNoMsg(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Status: backend.RepoStatus{
-					Bookmarks: []backend.BookmarkStatus{
-						{Name: "main", State: backend.RefStateSynced},
-					},
-					CommitTime: "yesterday",
-				},
-			},
-		},
-	}
-	line := m.formatStatusLine("repo1")
-
-	assert.Contains(t, line, "yesterday", "expected commit time in output")
-}
-
-func TestFormatStatusLineRefAndSymsOnly(t *testing.T) {
-	m := &model{
-		statuses: map[string]runner.StatusResult{
-			"repo1": {
-				Status: backend.RepoStatus{
-					Bookmarks: []backend.BookmarkStatus{
-						{Name: "main", State: backend.RefStateAhead, Ahead: 1},
-					},
-				},
-			},
-		},
-	}
-	line := m.formatStatusLine("repo1")
-
-	assert.NotEmpty(t, line, "expected non-empty output for ref with symbol")
 }
 
 func TestHandleKeyMsgQQuit(t *testing.T) {

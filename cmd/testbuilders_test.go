@@ -72,6 +72,19 @@ func cfgGitRepoPlusMissing(t *testing.T) string {
 	}})
 }
 
+// cfgCleanAndDirtyRepo creates a config with two real git repos: "cleanrepo"
+// (no uncommitted changes) and "dirtyrepo" (one uncommitted file) — used by
+// status-filter tests.
+func cfgCleanAndDirtyRepo(t *testing.T) string {
+	t.Helper()
+	backend.ResetDetectCache()
+
+	return setupTestConfig(t, config.Config{Repos: map[string]config.Repo{
+		"cleanrepo": {Path: setupRealGitRepo(t, false)},
+		"dirtyrepo": {Path: setupRealGitRepo(t, true)},
+	}})
+}
+
 // runApp creates a new test app and runs it with the given args, applying
 // the same alias registration as production (main.Run).
 func runApp(t *testing.T, cfgPath string, args []string) error {

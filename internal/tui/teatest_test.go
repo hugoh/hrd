@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,23 +13,7 @@ import (
 func newTeaTestModel(t *testing.T) *teatest.TestModel {
 	t.Helper()
 
-	repoDir := t.TempDir()
-	initGitRepo(t, repoDir)
-
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.toml")
-	err := os.WriteFile(cfgPath, []byte(
-		`[repos.testrepo]
-path = "`+repoDir+`"
-backends = ["git"]`), 0o644)
-	require.NoError(t, err)
-
-	m, err := newTestModel(t.Context(), t, Options{
-		ConfigPath: cfgPath,
-	})
-	require.NoError(t, err)
-
-	m.selected["testrepo"] = true
+	m := newSingleRepoModel(t)
 	m.updateTableRows()
 
 	return teatest.NewTestModel(t, m,
