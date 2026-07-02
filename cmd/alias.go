@@ -45,8 +45,15 @@ func aliasCommands(
 
 func aliasCmd(cfgPath *string, name, expansion string) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     name + " [repo|group...] [-- <extra args>]",
-		Short:   "alias for: " + expansion,
+		Use:   name + " [repo|group...] [-- <extra args>]",
+		Short: "alias for: " + expansion,
+		Long: fmt.Sprintf(`Alias defined in config, expanding to: %s
+
+The expansion is routed the same way as in the TUI: a leading "!" or "sh "/
+"shell " runs it via the shell; a leading backend name (e.g. "git ") runs it
+through that backend directly; otherwise it's treated as a VCS subcommand
+resolved per repo's active backend (like "hrd status"). Extra args after
+"--" are appended to the expansion.`, expansion),
 		GroupID: "aliases",
 		Args:    cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

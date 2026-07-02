@@ -134,29 +134,48 @@ The TUI mirrors the CLI: the same backends, the same parallel execution, the sam
 ## Command reference
 
 ```text
-manage multiple git and jj repositories
+hrd manages a set of git and jj repositories tracked in a config file,
+letting you run status checks and VCS operations across many of them at once.
+
+Run with no subcommand to open the TUI, optionally scoped to specific repos or
+groups. -c/--config applies to every subcommand and defaults to
+$XDG_CONFIG_HOME/hrd/config.toml, falling back to ~/.config/hrd/config.toml.
 
 Usage:
   hrd [flags]
   hrd [command]
 
-Available Commands:
-  completion  Generate the autocompletion script for the specified shell
-  diff        show diff for repos (git diff or jj diff)
-  fetch       fetch from remotes (git fetch or jj git fetch)
-  git         run a git command across repos
+Examples:
+  hrd                    # open the TUI across all tracked repos
+  hrd myrepo             # open the TUI scoped to one repo
+  hrd repo add ~/code/*  # start tracking repos
+  hrd ls                 # show status of all tracked repos
+
+Repository management:
   group       list repo groups
-  help        Help about any command
-  jj          run a jj command across repos
+  repo        manage tracked repositories
+
+Inspect:
+  diff        show diff for repos (git diff or jj diff)
   ll          show status of repos with commit message and time
   log         show log for repos (git log or jj log)
   ls          show status of repos
+  status      show detailed status for repos (git status or jj status)
+
+Remote sync:
+  fetch       fetch from remotes (git fetch or jj git fetch)
   pull        pull from remotes (git pull or jj git pull)
   push        push to remotes (git push or jj git push)
-  repo        manage tracked repositories
+
+Run commands:
+  git         run a git command across repos
+  jj          run a jj command across repos
   shell       run an arbitrary shell command across repos
-  status      show detailed status for repos (git status or jj status)
   tui         interactive terminal UI for browsing and running commands across repos
+
+Additional Commands:
+  completion  Generate the autocompletion script for the specified shell
+  help        Help about any command
 
 Flags:
   -c, --config string   path to config file (default "~/.config/hrd/config.toml")

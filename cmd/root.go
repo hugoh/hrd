@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -25,31 +26,47 @@ var version = "dev"
 //nolint:gochecknoglobals // swapped in tests to simulate TUI failures
 var runTUI = tui.Run
 
+// Command groups shown in `hrd --help`, in display order.
+const (
+	groupRepos  = "repos"
+	groupStatus = "status"
+	groupSync   = "sync"
+	groupExec   = "exec"
+)
+
+//nolint:gochecknoglobals // static help-output metadata, read-only after init
+var commandGroups = []*cobra.Group{
+	{ID: groupRepos, Title: "Repository management:"},
+	{ID: groupStatus, Title: "Inspect:"},
+	{ID: groupSync, Title: "Remote sync:"},
+	{ID: groupExec, Title: "Run commands:"},
+}
+
 func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command {
 	n := len(backend.Names())
 
 	cmds := make([]*cobra.Command, 0, staticCmdCount+n+len(aliases))
 
 	cmds = append(cmds,
-		repoCommands(cfgPath),
-		groupCommands(cfgPath),
+		group(groupRepos, repoCommands(cfgPath)),
+		group(groupRepos, groupCommands(cfgPath)),
 
-		lsCmd(cfgPath),
-		llCmd(cfgPath),
-		statusCmd(cfgPath),
-		diffCmd(cfgPath),
-		logCmd(cfgPath),
-		fetchCmd(cfgPath),
-		pullCmd(cfgPath),
-		pushCmd(cfgPath),
+		group(groupStatus, lsCmd(cfgPath)),
+		group(groupStatus, llCmd(cfgPath)),
+		group(groupStatus, statusCmd(cfgPath)),
+		group(groupStatus, diffCmd(cfgPath)),
+		group(groupStatus, logCmd(cfgPath)),
 
-		shellCmd(cfgPath),
+		group(groupSync, fetchCmd(cfgPath)),
+		group(groupSync, pullCmd(cfgPath)),
+		group(groupSync, pushCmd(cfgPath)),
 
-		tuiCmd(cfgPath),
+		group(groupExec, shellCmd(cfgPath)),
+		group(groupExec, tuiCmd(cfgPath)),
 	)
 
 	for _, name := range backend.Names() {
-		cmds = append(cmds, vcsCmd(cfgPath, name))
+		cmds = append(cmds, group(groupExec, vcsCmd(cfgPath, name)))
 	}
 
 	if len(aliases) > 0 {
@@ -66,6 +83,14 @@ func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command 
 	}
 
 	return cmds
+}
+
+// group assigns cmd to the given help group and returns it, so it can be
+// used inline in buildCommands' append call.
+func group(id string, cmd *cobra.Command) *cobra.Command {
+	cmd.GroupID = id
+
+	return cmd
 }
 
 // NewApp builds the root CLI application without config aliases. Callers
@@ -124,6 +149,18 @@ func configPathFromArgs(args []string) string {
 	return config.DefaultPath()
 }
 
+// loadConfig loads the config at *cfgPath, wrapping any error with label so
+// callers get a consistent "<label>: <cause>" message instead of each
+// reimplementing the same wrap.
+func loadConfig(cfgPath *string, label string) (config.Config, error) {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("%s: %w", label, err)
+	}
+
+	return cfg, nil
+}
+
 func loadAliases(cfgPath string) map[string]string {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -137,8 +174,18 @@ func buildRootCmd(aliases map[string]string) *cobra.Command {
 	cfgPath := config.DefaultPath()
 
 	root := &cobra.Command{
-		Use:           cmdNameHRD,
-		Short:         "manage multiple git and jj repositories",
+		Use:   cmdNameHRD,
+		Short: "manage multiple git and jj repositories",
+		Long: `hrd manages a set of git and jj repositories tracked in a config file,
+letting you run status checks and VCS operations across many of them at once.
+
+Run with no subcommand to open the TUI, optionally scoped to specific repos or
+groups. -c/--config applies to every subcommand and defaults to
+$XDG_CONFIG_HOME/hrd/config.toml, falling back to ~/.config/hrd/config.toml.`,
+		Example: `  hrd                    # open the TUI across all tracked repos
+  hrd myrepo             # open the TUI scoped to one repo
+  hrd repo add ~/code/*  # start tracking repos
+  hrd ls                 # show status of all tracked repos`,
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -153,6 +200,8 @@ func buildRootCmd(aliases map[string]string) *cobra.Command {
 
 	root.PersistentFlags().
 		StringVarP(&cfgPath, flagConfig, flagConfigShort, cfgPath, "path to config file")
+
+	root.AddGroup(commandGroups...)
 
 	if len(aliases) > 0 {
 		root.AddGroup(&cobra.Group{ID: "aliases", Title: "Aliases:"})

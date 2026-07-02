@@ -40,8 +40,16 @@ func repoScanAddCmd(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameScanAdd + " <dir>...",
 		Short: "discover and add repositories under one or more directories",
-		Args:  cobra.ArbitraryArgs,
-		RunE:  repoScanAddAction(cfgPath),
+		Long: `Walks each given directory (up to --depth levels deep) looking for git and
+jj repositories, and adds every match to the config under its directory name.
+Use --pattern to filter by name and -g/--group to assign found repos to a
+group. -i/--confirm prompts before adding each repo instead of adding all
+matches unconditionally.`,
+		Example: `  hrd repo scan add ~/code
+  hrd repo scan add ~/code --depth 2 --pattern 'api-*' -g backend
+  hrd repo scan add ~/code -i`,
+		Args: cobra.ArbitraryArgs,
+		RunE: repoScanAddAction(cfgPath),
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
@@ -56,8 +64,15 @@ func repoScanListCmd(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameScanList + " <dir>...",
 		Short: "list repositories discovered under one or more directories",
-		Args:  cobra.ArbitraryArgs,
-		RunE:  repoScanListAction(cfgPath),
+		Long: `Walks each given directory (up to --depth levels deep) looking for git and
+jj repositories and prints what it finds, without modifying the config. Use
+--tracked/--untracked to filter by whether a match is already in the config,
+and -g/--group to preview what a subsequent "repo scan add -g" would assign.`,
+		Example: `  hrd repo scan list ~/code
+  hrd repo scan list ~/code --untracked
+  hrd repo scan list ~/code --depth 2 --pattern 'api-*'`,
+		Args: cobra.ArbitraryArgs,
+		RunE: repoScanListAction(cfgPath),
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
@@ -74,9 +89,9 @@ func loadScanConfig(cfgPath *string, args []string, op string) (config.Config, e
 		return config.Config{}, errAtLeastOnePath
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := loadConfig(cfgPath, "repo scan "+op)
 	if err != nil {
-		return config.Config{}, fmt.Errorf("repo scan %s: %w", op, err)
+		return config.Config{}, err
 	}
 
 	return cfg, nil

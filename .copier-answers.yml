@@ -42,7 +42,8 @@ golangci_test_exclude_linters:
 - varnamelen
 - goconst
 - gosec
-goreleaser_before_hooks: []
+goreleaser_before_hooks:
+- go run ./cmd/genman
 goreleaser_version_pkg: github.com/hugoh/hrd/cmd
 has_fuzz: false
 has_gen: true
@@ -52,7 +53,9 @@ has_test_int: false
 hk_has_golangci_step: false
 hk_has_goreleaser_step: true
 hk_prepush_with_go_ci: true
-nfpm_extra_contents: []
+nfpm_extra_contents:
+-   dst: /usr/share/man/man1
+    src: man/*.1
 project_description: Multi-repo manager for git and jj with parallel execution and
     live status
 project_name: hrd
