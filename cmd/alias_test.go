@@ -62,7 +62,7 @@ func TestAliasBackendPrefix(t *testing.T) {
 
 	cfgPath := aliasTestConfig(t, map[string]string{"branches": "git branch --list"})
 
-	err := runApp(t, cfgPath, []string{"branches"})
+	err := runHRD(t, cfgPath, []string{"branches"})
 	require.NoError(t, err)
 }
 
@@ -121,6 +121,6 @@ func TestAliasInteractiveBare(t *testing.T) {
 
 	cfgPath := aliasTestConfig(t, map[string]string{"last": "log -1 --oneline"})
 
-	err := runApp(t, cfgPath, []string{"last", "-i"})
+	err := runHRD(t, cfgPath, []string{"last", "-i"})
 	require.NoError(t, err)
 }

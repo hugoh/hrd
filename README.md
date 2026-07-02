@@ -134,37 +134,36 @@ The TUI mirrors the CLI: the same backends, the same parallel execution, the sam
 ## Command reference
 
 ```text
-NAME:
-   hrd - manage multiple git and jj repositories
+manage multiple git and jj repositories
 
-USAGE:
-   hrd [global options] [command [command options]]
+Usage:
+  hrd [flags]
+  hrd [command]
 
-VERSION:
-   dev
+Available Commands:
+  completion  Generate the autocompletion script for the specified shell
+  diff        show diff for repos (git diff or jj diff)
+  fetch       fetch from remotes (git fetch or jj git fetch)
+  git         run a git command across repos
+  group       list repo groups
+  help        Help about any command
+  jj          run a jj command across repos
+  ll          show status of repos with commit message and time
+  log         show log for repos (git log or jj log)
+  ls          show status of repos
+  pull        pull from remotes (git pull or jj git pull)
+  push        push to remotes (git push or jj git push)
+  repo        manage tracked repositories
+  shell       run an arbitrary shell command across repos
+  status      show detailed status for repos (git status or jj status)
+  tui         interactive terminal UI for browsing and running commands across repos
 
-COMMANDS:
-   repo        manage tracked repositories
-   group       list repo groups
-   ls          show status of repos
-   ll          show status of repos with commit message and time
-   status, st  show detailed status for repos (git status or jj status)
-   diff        show diff for repos (git diff or jj diff)
-   log         show log for repos (git log or jj log)
-   fetch       fetch from remotes (git fetch or jj git fetch)
-   pull        pull from remotes (git pull or jj git pull)
-   push        push to remotes (git push or jj git push)
-   shell       run an arbitrary shell command across repos
-   tui, i      interactive terminal UI for browsing and running commands across repos
-   jj          run a jj command across repos
-   git         run a git command across repos
-   help, h     Shows a list of commands or help for one command
-   completion  Output shell completion script for bash, zsh, fish, or Powershell
+Flags:
+  -c, --config string   path to config file (default "~/.config/hrd/config.toml")
+  -h, --help            help for hrd
+  -v, --version         version for hrd
 
-GLOBAL OPTIONS:
-   --config string, -c string  path to config file (default: "~/.config/hrd/config.toml")
-   --help, -h                  show help
-   --version, -v               print the version
+Use "hrd [command] --help" for more information about a command.
 ```
 
 ### Scoping and `--`

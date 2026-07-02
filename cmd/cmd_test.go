@@ -259,7 +259,7 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath, args := tt.setup(t)
 
-			err := runApp(t, cfgPath, args)
+			err := runHRD(t, cfgPath, args)
 			if tt.wantErr != nil {
 				require.ErrorIs(t, err, tt.wantErr)
 			} else {
@@ -317,7 +317,7 @@ func TestRepoRemove(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := setupTestConfig(t, tt.cfg)
 
-			err := runApp(t, cfgPath, tt.args)
+			err := runHRD(t, cfgPath, tt.args)
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 
@@ -386,7 +386,7 @@ func TestRepoRename(t *testing.T) { //nolint:funlen
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := setupTestConfig(t, tt.cfg)
 			for _, args := range tt.argGroups {
-				err := runApp(t, cfgPath, args)
+				err := runHRD(t, cfgPath, args)
 				if tt.wantErr != nil {
 					require.ErrorIs(t, err, tt.wantErr)
 				} else {

@@ -85,9 +85,9 @@ func cfgCleanAndDirtyRepo(t *testing.T) string {
 	}})
 }
 
-// runApp creates a new test app and runs it with the given args, applying
+// runHRD creates a new test app and runs it with the given args, applying
 // the same alias registration as production (main.Run).
-func runApp(t *testing.T, cfgPath string, args []string) error {
+func runHRD(t *testing.T, cfgPath string, args []string) error {
 	t.Helper()
 
 	fullArgs := append([]string{"hrd", "--config", cfgPath}, args...)

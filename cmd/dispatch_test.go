@@ -187,7 +187,7 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfgPath := tt.setup(t)
-			err := runApp(t, cfgPath, tt.args)
+			err := runHRD(t, cfgPath, tt.args)
 
 			switch {
 			case tt.expectErrorIs != nil:
@@ -441,10 +441,10 @@ func TestLsCmdUnknownScope(t *testing.T) {
 		"repo1": {Path: "/tmp/repo1"},
 	}})
 
-	err := runApp(t, cfgPath, []string{"ls", "@nonexistent"})
+	err := runHRD(t, cfgPath, []string{"ls", "@nonexistent"})
 	require.ErrorIs(t, err, errUnknownScope)
 
-	err = runApp(t, cfgPath, []string{"status", "@nonexistent"})
+	err = runHRD(t, cfgPath, []string{"status", "@nonexistent"})
 	require.ErrorIs(t, err, errUnknownScope)
 }
 
@@ -459,7 +459,7 @@ func TestSubcmdUnknownRepoName(t *testing.T) {
 		{"fetch", "rpeo1"},
 		{"ls", "rpeo1"},
 	} {
-		err := runApp(t, cfgPath, args)
+		err := runHRD(t, cfgPath, args)
 		require.ErrorIs(t, err, errUnknownScope, "args: %v", args)
 	}
 }
@@ -513,7 +513,7 @@ func TestShellCmdInteractiveFailure(t *testing.T) {
 		"repo1": {Path: t.TempDir()},
 	}})
 
-	err := runApp(t, cfgPath, []string{"shell", "-i", "--", "exit 1"})
+	err := runHRD(t, cfgPath, []string{"shell", "-i", "--", "exit 1"})
 	require.Error(t, err)
 }
 
@@ -627,7 +627,7 @@ func TestDispatchCommandsBadConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := runApp(t, badPath, tt.args)
+			err := runHRD(t, badPath, tt.args)
 			assert.Error(t, err)
 		})
 	}
