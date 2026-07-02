@@ -220,7 +220,21 @@ func vcsCmd(cfgPath *string, name string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   name + " [repo|group...] -- <args>",
 		Short: fmt.Sprintf("run a %s command across repos", name),
-		Args:  cobra.ArbitraryArgs,
+		Long: fmt.Sprintf(
+			`Runs "%s <args>" in each scoped repo. Everything before "--" selects the
+scope (repo/group names, or -r/--repos); everything after "--" is passed to
+%s verbatim. With no scope, all tracked repos are used. Only repos using the
+%s backend are affected; others are skipped. Use -i/--interactive to run
+sequentially with a real terminal instead of in parallel.`,
+			name, name, name,
+		),
+		Example: fmt.Sprintf(
+			"  hrd %s -- status\n  hrd %s myrepo otherrepo -- log -n5\n  hrd %s @backend -- fetch --all",
+			name,
+			name,
+			name,
+		),
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDispatch(cmd.Context(), cmd, args, cfgPath, name)
 		},
@@ -321,7 +335,16 @@ func shellCmd(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameShell + " [repo|group...] -- <shell command>",
 		Short: "run an arbitrary shell command across repos",
-		Args:  cobra.ArbitraryArgs,
+		Long: `Runs a command via "sh -c" in each scoped repo's directory. Everything
+before "--" selects the scope (repo/group names, or -r/--repos); everything
+after "--" is the command. Pass it as one quoted string to keep shell syntax
+like pipes and redirection working, or as separate words to have them
+rejoined with automatic quoting. Use -i/--interactive to run sequentially
+with a real terminal instead of in parallel.`,
+		Example: `  hrd shell -- "go test ./..."
+  hrd shell myrepo otherrepo -- "git status --short"
+  hrd shell @backend -i -- "npm install"`,
+		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return shellCmdAction(cmd, args, cfgPath)
 		},

@@ -174,8 +174,18 @@ func buildRootCmd(aliases map[string]string) *cobra.Command {
 	cfgPath := config.DefaultPath()
 
 	root := &cobra.Command{
-		Use:           cmdNameHRD,
-		Short:         "manage multiple git and jj repositories",
+		Use:   cmdNameHRD,
+		Short: "manage multiple git and jj repositories",
+		Long: `hrd manages a set of git and jj repositories tracked in a config file,
+letting you run status checks and VCS operations across many of them at once.
+
+Run with no subcommand to open the TUI, optionally scoped to specific repos or
+groups. -c/--config applies to every subcommand and defaults to
+` + cfgPath + `.`,
+		Example: `  hrd                    # open the TUI across all tracked repos
+  hrd myrepo             # open the TUI scoped to one repo
+  hrd repo add ~/code/*  # start tracking repos
+  hrd ls                 # show status of all tracked repos`,
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
