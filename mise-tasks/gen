@@ -3,5 +3,8 @@
 #MISE sources=["README.md.tpl", "cmd/**/*.go"]
 #MISE outputs=["README.md"]
 set -e
+# go generate also runs cmd/genman, which writes gitignored man/*.1 for local
+# preview; those are regenerated at release time, not committed (see
+# .goreleaser.yml's before.hooks).
 go generate ./...
 dprint fmt README.md

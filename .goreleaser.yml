@@ -41,6 +41,9 @@ nfpms:
       - deb
       - rpm
     bindir: /usr/bin
+    contents:
+      - src: man/*.1
+        dst: /usr/share/man/man1
 
 homebrew_casks:
   - name: hrd

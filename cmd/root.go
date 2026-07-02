@@ -181,7 +181,7 @@ letting you run status checks and VCS operations across many of them at once.
 
 Run with no subcommand to open the TUI, optionally scoped to specific repos or
 groups. -c/--config applies to every subcommand and defaults to
-` + cfgPath + `.`,
+$XDG_CONFIG_HOME/hrd/config.toml, falling back to ~/.config/hrd/config.toml.`,
 		Example: `  hrd                    # open the TUI across all tracked repos
   hrd myrepo             # open the TUI scoped to one repo
   hrd repo add ~/code/*  # start tracking repos
