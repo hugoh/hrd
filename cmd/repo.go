@@ -72,9 +72,9 @@ func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) erro
 			return errNameSingleRepo
 		}
 
-		cfg, err := config.Load(*cfgPath)
+		cfg, err := loadConfig(cfgPath, "repo add")
 		if err != nil {
-			return fmt.Errorf("repo add: %w", err)
+			return err
 		}
 
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
@@ -141,9 +141,9 @@ func repoRemoveCmd(cfgPath *string) *cobra.Command {
 				return errAtLeastOneName
 			}
 
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadConfig(cfgPath, "repo rm")
 			if err != nil {
-				return fmt.Errorf("repo rm: %w", err)
+				return err
 			}
 
 			for _, name := range args {
@@ -165,9 +165,9 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 		Use:   "ls",
 		Short: "list tracked repositories",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadConfig(cfgPath, "repo ls")
 			if err != nil {
-				return fmt.Errorf("repo ls: %w", err)
+				return err
 			}
 
 			names := make([]string, 0, len(cfg.Repos))
@@ -252,9 +252,9 @@ func repoRenameCmd(cfgPath *string) *cobra.Command {
 
 			oldName, newName := args[0], args[1]
 
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadConfig(cfgPath, "repo rename")
 			if err != nil {
-				return fmt.Errorf("repo rename: %w", err)
+				return err
 			}
 
 			repo, ok := cfg.Repos[oldName]
@@ -331,9 +331,9 @@ func groupActionCmd(
 
 			repoName, group := args[0], args[1]
 
-			cfg, err := config.Load(*cfgPath)
+			cfg, err := loadConfig(cfgPath, name)
 			if err != nil {
-				return fmt.Errorf("%s: %w", name, err)
+				return err
 			}
 
 			if _, ok := cfg.Repos[repoName]; !ok {
@@ -376,9 +376,9 @@ func groupListCmd(cfgPath *string) *cobra.Command {
 
 func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
 	return func(_ *cobra.Command, args []string) error {
-		cfg, err := config.Load(*cfgPath)
+		cfg, err := loadConfig(cfgPath, "group ls")
 		if err != nil {
-			return fmt.Errorf("group ls: %w", err)
+			return err
 		}
 
 		if name := stripGroupPrefix(firstArg(args)); name != "" {

@@ -57,9 +57,9 @@ func loadAndResolve(
 	cmd *cobra.Command,
 	args []string,
 ) (config.Config, []string, error) {
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := loadConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, fmt.Errorf("dispatch: %w", err)
+		return config.Config{}, nil, err
 	}
 
 	names, err := resolveScope(cmd, args, &cfg)
@@ -122,9 +122,9 @@ func loadAndSplit(
 	cmd *cobra.Command,
 	args []string,
 ) (config.Config, []string, []string, error) {
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := loadConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, nil, fmt.Errorf("dispatch: %w", err)
+		return config.Config{}, nil, nil, err
 	}
 
 	scope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)

@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -122,6 +123,18 @@ func configPathFromArgs(args []string) string {
 	}
 
 	return config.DefaultPath()
+}
+
+// loadConfig loads the config at *cfgPath, wrapping any error with label so
+// callers get a consistent "<label>: <cause>" message instead of each
+// reimplementing the same wrap.
+func loadConfig(cfgPath *string, label string) (config.Config, error) {
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("%s: %w", label, err)
+	}
+
+	return cfg, nil
 }
 
 func loadAliases(cfgPath string) map[string]string {

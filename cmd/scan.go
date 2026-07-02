@@ -74,9 +74,9 @@ func loadScanConfig(cfgPath *string, args []string, op string) (config.Config, e
 		return config.Config{}, errAtLeastOnePath
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	cfg, err := loadConfig(cfgPath, "repo scan "+op)
 	if err != nil {
-		return config.Config{}, fmt.Errorf("repo scan %s: %w", op, err)
+		return config.Config{}, err
 	}
 
 	return cfg, nil
