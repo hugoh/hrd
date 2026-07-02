@@ -26,31 +26,47 @@ var version = "dev"
 //nolint:gochecknoglobals // swapped in tests to simulate TUI failures
 var runTUI = tui.Run
 
+// Command groups shown in `hrd --help`, in display order.
+const (
+	groupRepos  = "repos"
+	groupStatus = "status"
+	groupSync   = "sync"
+	groupExec   = "exec"
+)
+
+//nolint:gochecknoglobals // static help-output metadata, read-only after init
+var commandGroups = []*cobra.Group{
+	{ID: groupRepos, Title: "Repository management:"},
+	{ID: groupStatus, Title: "Inspect:"},
+	{ID: groupSync, Title: "Remote sync:"},
+	{ID: groupExec, Title: "Run commands:"},
+}
+
 func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command {
 	n := len(backend.Names())
 
 	cmds := make([]*cobra.Command, 0, staticCmdCount+n+len(aliases))
 
 	cmds = append(cmds,
-		repoCommands(cfgPath),
-		groupCommands(cfgPath),
+		group(groupRepos, repoCommands(cfgPath)),
+		group(groupRepos, groupCommands(cfgPath)),
 
-		lsCmd(cfgPath),
-		llCmd(cfgPath),
-		statusCmd(cfgPath),
-		diffCmd(cfgPath),
-		logCmd(cfgPath),
-		fetchCmd(cfgPath),
-		pullCmd(cfgPath),
-		pushCmd(cfgPath),
+		group(groupStatus, lsCmd(cfgPath)),
+		group(groupStatus, llCmd(cfgPath)),
+		group(groupStatus, statusCmd(cfgPath)),
+		group(groupStatus, diffCmd(cfgPath)),
+		group(groupStatus, logCmd(cfgPath)),
 
-		shellCmd(cfgPath),
+		group(groupSync, fetchCmd(cfgPath)),
+		group(groupSync, pullCmd(cfgPath)),
+		group(groupSync, pushCmd(cfgPath)),
 
-		tuiCmd(cfgPath),
+		group(groupExec, shellCmd(cfgPath)),
+		group(groupExec, tuiCmd(cfgPath)),
 	)
 
 	for _, name := range backend.Names() {
-		cmds = append(cmds, vcsCmd(cfgPath, name))
+		cmds = append(cmds, group(groupExec, vcsCmd(cfgPath, name)))
 	}
 
 	if len(aliases) > 0 {
@@ -67,6 +83,14 @@ func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command 
 	}
 
 	return cmds
+}
+
+// group assigns cmd to the given help group and returns it, so it can be
+// used inline in buildCommands' append call.
+func group(id string, cmd *cobra.Command) *cobra.Command {
+	cmd.GroupID = id
+
+	return cmd
 }
 
 // NewApp builds the root CLI application without config aliases. Callers
@@ -166,6 +190,8 @@ func buildRootCmd(aliases map[string]string) *cobra.Command {
 
 	root.PersistentFlags().
 		StringVarP(&cfgPath, flagConfig, flagConfigShort, cfgPath, "path to config file")
+
+	root.AddGroup(commandGroups...)
 
 	if len(aliases) > 0 {
 		root.AddGroup(&cobra.Group{ID: "aliases", Title: "Aliases:"})
