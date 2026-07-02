@@ -3,6 +3,7 @@ package jj
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -90,6 +91,18 @@ func isolateJJConfig(t *testing.T) {
 		"[user]\nname = \"Test\"\nemail = \"test@test.com\"\n",
 	), 0o644))
 	t.Setenv("JJ_CONFIG", cfgPath)
+}
+
+// stubJJOnPath writes a fake "jj" executable that prints stderrMsg to stderr
+// and stdout to stdout, then exits 0, and prepends its directory to PATH so
+// exec.CommandContext("jj", ...) resolves to it instead of the real jj.
+func stubJJOnPath(t *testing.T, stderrMsg, stdout string) {
+	t.Helper()
+
+	binDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s' %q >&2\nprintf '%%s' %q\n", stderrMsg, stdout)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "jj"), []byte(script), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // initJJRepo initializes a real jj repository and skips the test if jj is not available.
@@ -693,9 +706,20 @@ func TestBackend_Status_JjLogFailure(t *testing.T) {
 	assert.Contains(t, err.Error(), "jj log")
 }
 
+func TestDefaultRunJJ_StderrDoesNotCorruptStdout(t *testing.T) {
+	// Regression test: defaultRunJJ used to write stdout and stderr into the
+	// same buffer, so a warning jj prints to stderr while re-snapshotting the
+	// working copy (exit code 0) would corrupt the JSON read from stdout.
+	stubJJOnPath(t, "Warning: something jj printed to stderr\n", `{"changeId":"abc"}`)
+
+	out, err := defaultRunJJ(t.Context(), t.TempDir(), []string{"log"})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"changeId":"abc"}`, out)
+}
+
 func TestBackend_Status_MalformedWorkingCopyOutput(t *testing.T) {
-	// jj merges stdout and stderr (defaultRunJJ), so a stray warning line
-	// can corrupt the JSON even though the process exits 0. Status must
+	// A stray warning line in runJJFn's output (e.g. from a jj version that
+	// still emits one on stdout) must corrupt the JSON. Status must
 	// surface this as an error, not silently return a zeroed status.
 	b := &Backend{}
 	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
