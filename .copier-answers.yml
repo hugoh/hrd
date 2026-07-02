@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: 7e56587
+_commit: b341f90
 _src_path: gh:hugoh/go-tools
 codecov_components:
 -   id: backends_git
@@ -42,6 +42,7 @@ golangci_test_exclude_linters:
 - varnamelen
 - goconst
 - gosec
+goreleaser_before_hooks: []
 goreleaser_version_pkg: github.com/hugoh/hrd/cmd
 has_fuzz: false
 has_gen: true
@@ -51,6 +52,7 @@ has_test_int: false
 hk_has_golangci_step: false
 hk_has_goreleaser_step: true
 hk_prepush_with_go_ci: true
+nfpm_extra_contents: []
 project_description: Multi-repo manager for git and jj with parallel execution and
     live status
 project_name: hrd
