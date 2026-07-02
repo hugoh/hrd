@@ -2,7 +2,7 @@ coverage:
   status:
     project:
       default:
-        target: 80% # set lower than ./.testcoverage/coverage.txt because of different reporting
+        target: 80%
 
 component_management:
   individual_components:
