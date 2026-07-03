@@ -95,9 +95,9 @@ hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ## Status dashboard
 
 ```text
-NAME        VCS STATUS
-myproject   git main ↑2*  feat: add new feature (2 hours ago)
-dotfiles    jj  main ✓∅⇡5  config: update zshrc (1 day ago)
+NAME        VCS STATUS                                                   
+myproject   git main ↑2*  feat: add new feature (2 hours ago)            
+dotfiles    jj  main ✓∅⇡5  config: update zshrc (1 day ago)              
 infra       git feat/rework ↑1↓3  refactor: networking layer (3 days ago)
 old-service jj  legacy ✗✓!‼  fix: critical bug (1 week ago)
 ```
