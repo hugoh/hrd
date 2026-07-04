@@ -268,3 +268,48 @@ path = "`+t.TempDir()+`"
 		"vanished repo must not be resurrected by a stale mutation",
 	)
 }
+
+// assertMutateConfigFails calls mutateConfig with a trivial mutation and
+// asserts it fails without touching m.cfg. The caller is responsible for
+// having already broken the load or save path on cfgPath/its directory.
+func assertMutateConfigFails(t *testing.T, m *model) {
+	t.Helper()
+
+	err := m.mutateConfig(func(cfg *config.Config) {
+		cfg.AddRepoToGroup("alpha", "work")
+	})
+
+	require.Error(t, err)
+	assert.NotContains(t, m.cfg.Repos["alpha"].Groups, "work",
+		"m.cfg must be untouched when mutateConfig fails")
+}
+
+func TestMutateConfigReturnsLoadError(t *testing.T) {
+	m, cfgPath := newAlphaModel(t)
+
+	writeConfigFile(t, cfgPath, `not valid toml [[[`)
+
+	assertMutateConfigFails(t, m)
+}
+
+func TestMutateConfigReturnsSaveError(t *testing.T) {
+	m, cfgPath := newAlphaModel(t)
+
+	makeDirReadOnly(t, filepath.Dir(cfgPath))
+
+	assertMutateConfigFails(t, m)
+}
+
+func TestAddSelectedToGroupSkipsVanishedRepo(t *testing.T) {
+	m, cfgPath := newAlphaModel(t)
+	m.selected["alpha"] = true
+
+	// Concurrent CLI removal of "alpha" before the group-add lands.
+	writeConfigFile(t, cfgPath, `[repos.gamma]
+path = "`+t.TempDir()+`"
+`)
+
+	require.NoError(t, m.addSelectedToGroup("work"))
+	assert.NotContains(t, m.cfg.Repos, "alpha",
+		"vanished repo must not be resurrected by addSelectedToGroup")
+}

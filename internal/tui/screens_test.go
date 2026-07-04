@@ -492,6 +492,35 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 	assert.Len(t, m.cfg.Groups["work"].Repos, 2, "expected 2 repos in work group")
 }
 
+func TestHandleGroupEnterAddModeSaveFailure(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	initialCfg := config.Config{
+		Repos:  map[string]config.Repo{"repo1": {}},
+		Groups: map[string]config.Group{"work": {}},
+	}
+	require.NoError(t, config.Save(cfgPath, initialCfg))
+	makeDirReadOnly(t, filepath.Dir(cfgPath))
+
+	m := &model{
+		ctx:       t.Context(),
+		cfg:       initialCfg,
+		opts:      Options{ConfigPath: cfgPath},
+		repoOrder: []string{"repo1"},
+		selected:  map[string]bool{"repo1": true},
+		groupMode: groupAddMode,
+	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
+
+	_, cmd := m.handleGroupEnter()
+
+	assert.Nil(t, cmd, "expected nil cmd on save failure")
+	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert on save failure")
+	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set on save failure")
+}
+
 func TestHandleGroupEnterAddModeNew(t *testing.T) {
 	m := &model{
 		cfg: config.Config{
@@ -540,6 +569,33 @@ func TestHandleGroupNewInputEnter(t *testing.T) {
 	assert.False(t, m.groupNewInput, "groupNewInput should be false after Enter")
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.Contains(t, m.cfg.Groups, "my-group", "my-group should exist in config after creation")
+}
+
+func TestHandleGroupNewInputEnterSaveFailure(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	initialCfg := config.Config{
+		Repos: map[string]config.Repo{"repo1": {}},
+	}
+	require.NoError(t, config.Save(cfgPath, initialCfg))
+	makeDirReadOnly(t, filepath.Dir(cfgPath))
+
+	m := &model{
+		cfg:           initialCfg,
+		opts:          Options{ConfigPath: cfgPath},
+		repoOrder:     []string{"repo1"},
+		selected:      map[string]bool{"repo1": true},
+		groupNewInput: true,
+		screen:        screenGroup,
+	}
+	m.initInput()
+	m.input.SetValue("my-group")
+
+	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Nil(t, cmd, "expected nil cmd on save failure")
+	assert.True(t, m.groupNewInput, "groupNewInput should remain true on save failure")
+	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert on save failure")
+	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set on save failure")
 }
 
 func TestHandleGroupNewInputEmpty(t *testing.T) {
