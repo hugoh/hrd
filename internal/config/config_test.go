@@ -359,6 +359,20 @@ func TestSaveMkdirError(t *testing.T) {
 	assert.Contains(t, err.Error(), "creating config dir")
 }
 
+func TestSaveWriteError(t *testing.T) {
+	dir := t.TempDir()
+	chmodErr := os.Chmod(dir, 0o500) // #nosec G302 -- dir needs the execute bit to stay traversable
+	require.NoError(t, chmodErr)
+
+	t.Cleanup(func() {
+		_ = os.Chmod(dir, 0o700) // #nosec G302 -- restoring the test dir's normal mode
+	})
+
+	err := Save(filepath.Join(dir, "config.toml"), Config{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "writing config")
+}
+
 func TestRebuildsGroupsCache(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{

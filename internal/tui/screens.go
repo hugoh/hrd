@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/hugoh/hrd/internal/config"
 )
 
 func (m *model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -86,11 +85,10 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	for _, repoName := range m.selectedNames() {
-		m.cfg.AddRepoToGroup(repoName, selected)
-	}
+	if err := m.addSelectedToGroup(selected); err != nil {
+		m.modal = modalAlert
+		m.alertMsg = "save failed: " + err.Error()
 
-	if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
 		return m, nil
 	}
 
@@ -111,11 +109,10 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		for _, repoName := range m.selectedNames() {
-			m.cfg.AddRepoToGroup(repoName, name)
-		}
+		if err := m.addSelectedToGroup(name); err != nil {
+			m.modal = modalAlert
+			m.alertMsg = "save failed: " + err.Error()
 
-		if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
 			return m, nil
 		}
 

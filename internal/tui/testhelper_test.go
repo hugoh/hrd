@@ -12,6 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// makeDirReadOnly removes write permission from dir for the duration of the
+// test, to force a config.Save call targeting it to fail.
+func makeDirReadOnly(t *testing.T, dir string) {
+	t.Helper()
+
+	chmodErr := os.Chmod(dir, 0o500) // #nosec G302 -- dir needs the execute bit to stay traversable
+	require.NoError(t, chmodErr)
+
+	t.Cleanup(func() {
+		_ = os.Chmod(dir, 0o700) // #nosec G302 -- restoring the test dir's normal mode
+	})
+}
+
 func newTestModel(ctx context.Context, tb testing.TB, opts Options) (*model, error) {
 	tb.Helper()
 

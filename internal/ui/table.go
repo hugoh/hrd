@@ -52,9 +52,12 @@ func EffectiveWidths(header []string, rows [][]string, maxWidths []int) []int {
 	return eff
 }
 
+//nolint:gochecknoglobals // package-level style, consistent with ui.go's Style helpers
+var headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipglossColor("cyan"))
+
 func writeHeader(buf *strings.Builder, cells []string, widths []int) {
 	writeCells(buf, cells, widths, func(cell string) string {
-		return "\x1b[1;96m" + cell + "\x1b[0m"
+		return headerStyle.Render(cell)
 	})
 }
 
