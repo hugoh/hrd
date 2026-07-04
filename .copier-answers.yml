@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.0.0
+_commit: v1.1.0
 _src_path: gh:hugoh/go-tools
 codecov_components:
 -   id: backends_git
@@ -66,3 +66,4 @@ testcoverage_excludes:
 testcoverage_overrides:
 -   path: backends/
     threshold: 100
+
