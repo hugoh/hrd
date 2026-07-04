@@ -86,11 +86,20 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	for _, repoName := range m.selectedNames() {
-		m.cfg.AddRepoToGroup(repoName, selected)
-	}
+	names := m.selectedNames()
 
-	if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
+	if err := m.mutateConfig(func(cfg *config.Config) {
+		for _, repoName := range names {
+			if _, ok := cfg.Repos[repoName]; !ok {
+				continue
+			}
+
+			cfg.AddRepoToGroup(repoName, selected)
+		}
+	}); err != nil {
+		m.modal = modalAlert
+		m.alertMsg = "save failed: " + err.Error()
+
 		return m, nil
 	}
 
@@ -111,11 +120,20 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		for _, repoName := range m.selectedNames() {
-			m.cfg.AddRepoToGroup(repoName, name)
-		}
+		names := m.selectedNames()
 
-		if err := config.Save(m.opts.ConfigPath, m.cfg); err != nil {
+		if err := m.mutateConfig(func(cfg *config.Config) {
+			for _, repoName := range names {
+				if _, ok := cfg.Repos[repoName]; !ok {
+					continue
+				}
+
+				cfg.AddRepoToGroup(repoName, name)
+			}
+		}); err != nil {
+			m.modal = modalAlert
+			m.alertMsg = "save failed: " + err.Error()
+
 			return m, nil
 		}
 

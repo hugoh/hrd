@@ -452,16 +452,18 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 
 func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	initialCfg := config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Groups: []string{"work"}},
+			"repo2": {},
+		},
+		Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},
+	}
+	require.NoError(t, config.Save(cfgPath, initialCfg))
 
 	m := &model{
-		ctx: t.Context(),
-		cfg: config.Config{
-			Repos: map[string]config.Repo{
-				"repo1": {Groups: []string{"work"}},
-				"repo2": {},
-			},
-			Groups: map[string]config.Group{"work": {Repos: []string{"repo1"}}},
-		},
+		ctx:       t.Context(),
+		cfg:       initialCfg,
 		opts:      Options{ConfigPath: cfgPath},
 		repoOrder: []string{"repo1", "repo2"},
 		selected:  map[string]bool{"repo2": true},
@@ -501,15 +503,17 @@ func TestHandleGroupEnterAddModeNew(t *testing.T) {
 
 func TestHandleGroupNewInputEnter(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	initialCfg := config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {},
+			"repo2": {},
+		},
+		Groups: map[string]config.Group{},
+	}
+	require.NoError(t, config.Save(cfgPath, initialCfg))
 
 	m := &model{
-		cfg: config.Config{
-			Repos: map[string]config.Repo{
-				"repo1": {},
-				"repo2": {},
-			},
-			Groups: map[string]config.Group{},
-		},
+		cfg:           initialCfg,
 		opts:          Options{ConfigPath: cfgPath},
 		repoOrder:     []string{"repo1", "repo2"},
 		selected:      map[string]bool{"repo2": true},
