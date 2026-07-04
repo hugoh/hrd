@@ -16,7 +16,12 @@ func writeConfigFile(t *testing.T, path, toml string) {
 	require.NoError(t, os.WriteFile(path, []byte(toml), 0o600))
 }
 
-func TestReloadConfigPicksUpNewRepo(t *testing.T) {
+// newAlphaModel creates a model backed by a config file with a single repo
+// "alpha", returning the model and the config path so tests can rewrite it
+// to simulate a concurrent external change.
+func newAlphaModel(t *testing.T) (*model, string) {
+	t.Helper()
+
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.toml")
 	writeConfigFile(t, cfgPath, `[repos.alpha]
@@ -25,6 +30,12 @@ path = "`+t.TempDir()+`"
 
 	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})
 	require.NoError(t, err)
+
+	return m, cfgPath
+}
+
+func TestReloadConfigPicksUpNewRepo(t *testing.T) {
+	m, cfgPath := newAlphaModel(t)
 	assert.Equal(t, []string{"alpha"}, m.repoOrder, "repoOrder before reload")
 
 	// Simulate a concurrent CLI invocation adding a repo.
@@ -183,31 +194,17 @@ path = "`+t.TempDir()+`"
 }
 
 func TestReloadConfigLeavesStateUntouchedOnError(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.toml")
-	writeConfigFile(t, cfgPath, `[repos.alpha]
-path = "`+t.TempDir()+`"
-`)
-
-	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})
-	require.NoError(t, err)
+	m, cfgPath := newAlphaModel(t)
 
 	writeConfigFile(t, cfgPath, `not valid toml [[[`)
 
-	err = m.reloadConfig()
+	err := m.reloadConfig()
 	require.Error(t, err)
 	assert.Equal(t, []string{"alpha"}, m.repoOrder, "repoOrder should be untouched on reload error")
 }
 
 func TestMutateConfigDoesNotClobberConcurrentChange(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.toml")
-	writeConfigFile(t, cfgPath, `[repos.alpha]
-path = "`+t.TempDir()+`"
-`)
-
-	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})
-	require.NoError(t, err)
+	m, cfgPath := newAlphaModel(t)
 
 	// Simulate a concurrent CLI `hrd repo add` while the TUI is open: it
 	// writes a new repo directly to disk, bypassing m.cfg entirely.
@@ -218,7 +215,7 @@ path = "`+t.TempDir()+`"
 path = "`+t.TempDir()+`"
 `)
 
-	err = m.mutateConfig(func(cfg *config.Config) {
+	err := m.mutateConfig(func(cfg *config.Config) {
 		cfg.AddRepoToGroup("alpha", "work")
 	})
 	require.NoError(t, err)
@@ -248,21 +245,14 @@ path = "`+t.TempDir()+`"
 }
 
 func TestMutateConfigSkipsVanishedRepo(t *testing.T) {
-	tmp := t.TempDir()
-	cfgPath := filepath.Join(tmp, "config.toml")
-	writeConfigFile(t, cfgPath, `[repos.alpha]
-path = "`+t.TempDir()+`"
-`)
-
-	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})
-	require.NoError(t, err)
+	m, cfgPath := newAlphaModel(t)
 
 	// Concurrent CLI removal of "alpha" before the TUI's mutation lands.
 	writeConfigFile(t, cfgPath, `[repos.gamma]
 path = "`+t.TempDir()+`"
 `)
 
-	err = m.mutateConfig(func(cfg *config.Config) {
+	err := m.mutateConfig(func(cfg *config.Config) {
 		if _, ok := cfg.Repos["alpha"]; !ok {
 			return
 		}

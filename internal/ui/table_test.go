@@ -69,7 +69,7 @@ func TestRenderHeader(t *testing.T) {
 	widths := []int{10, 5}
 
 	out := ui.RenderHeader(cells, widths)
-	assert.Equal(t, "\x1b[1;96mNAME      \x1b[0m \x1b[1;96mVCS  \x1b[0m", out)
+	assert.Equal(t, "\x1b[1;96mNAME      \x1b[m \x1b[1;96mVCS  \x1b[m", out)
 }
 
 func TestRenderHeader_Truncates(t *testing.T) {
@@ -77,7 +77,7 @@ func TestRenderHeader_Truncates(t *testing.T) {
 	widths := []int{5}
 
 	out := ui.RenderHeader(cells, widths)
-	assert.Equal(t, "\x1b[1;96mLONG \x1b[0m", out)
+	assert.Equal(t, "\x1b[1;96mLONG \x1b[m", out)
 }
 
 func TestRenderTable_TruncatesHeader(t *testing.T) {

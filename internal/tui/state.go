@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/google/renameio/v2"
 )
 
 const currentStateVersion = 3
@@ -104,7 +106,7 @@ func saveState(path string, state PersistentState) error {
 		return fmt.Errorf("creating state dir: %w", err)
 	}
 
-	if err := os.WriteFile(path, raw, stateFilePerm); err != nil {
+	if err := renameio.WriteFile(path, raw, stateFilePerm); err != nil {
 		return fmt.Errorf("writing tui state: %w", err)
 	}
 

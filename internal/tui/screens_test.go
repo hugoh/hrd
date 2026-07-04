@@ -39,7 +39,12 @@ func TestHandleModalKeyAlertAt(t *testing.T) {
 	assert.Nil(t, cmd, "expected nil cmd after closing alert")
 }
 
-func TestHandleGroupKeyEnterNonAll(t *testing.T) {
+// newGroupFilterPopupModel builds a model with one repo ("r1") in a "work"
+// group, with the group-filter popup already open, ready for the caller to
+// select an item and press enter.
+func newGroupFilterPopupModel(t *testing.T) *model {
+	t.Helper()
+
 	m := &model{
 		ctx: t.Context(),
 		cfg: config.Config{
@@ -52,6 +57,12 @@ func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 	m.initTable()
 	m.initGroupList()
 	openGroupPopup(m, groupFilterMode)
+
+	return m
+}
+
+func TestHandleGroupKeyEnterNonAll(t *testing.T) {
+	m := newGroupFilterPopupModel(t)
 	m.groupList.Select(1)
 
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -606,18 +617,7 @@ func TestOpenGroupPopupAddMode(t *testing.T) {
 }
 
 func TestHandleGroupKeyEnterOnAllFilterMode(t *testing.T) {
-	m := &model{
-		ctx: t.Context(),
-		cfg: config.Config{
-			Repos:  map[string]config.Repo{"r1": {}},
-			Groups: map[string]config.Group{"work": {Repos: []string{"r1"}}},
-		},
-		repoOrder: []string{"r1"},
-		selected:  map[string]bool{},
-	}
-	m.initTable()
-	m.initGroupList()
-	openGroupPopup(m, groupFilterMode)
+	m := newGroupFilterPopupModel(t)
 	m.groupList.Select(0)
 
 	_, cmd := m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
