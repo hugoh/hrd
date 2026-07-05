@@ -1,8 +1,12 @@
 {
-  "json": {},
-  "markdown": {},
-  "toml": {},
-  "yaml": {},
+  "json": {
+  },
+  "markdown": {
+  },
+  "toml": {
+  },
+  "yaml": {
+  },
   "excludes": [
     ".copier-answers.yml",
     "mise.toml"
