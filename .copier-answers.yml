@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.2.2
+_commit: v1.3.0
 _src_path: gh:hugoh/go-tools
 codecov_components:
 -   id: backends_git
@@ -16,7 +16,6 @@ codecov_target: 80%
 cog_omit_types: []
 coverage_total: 90
 dev_watch: false
-dprint_has_excludes: false
 gen_check_cmd: git diff --exit-code README.md
 gen_cmd:
 - go generate ./...
@@ -34,7 +33,9 @@ golangci_extra_disable:
 - testpackage
 - varnamelen
 golangci_extra_exclusions: []
-golangci_revive_overrides: true
+golangci_settings: "revive:\n  rules:\n    - name: redefines-builtin-id\n      disabled:\
+    \ true\n    - name: exported\n      disabled: true\n    - name: unused-parameter\n\
+    \    - name: unused-receiver\n"
 golangci_test_exclude_linters:
 - err113
 - noctx
