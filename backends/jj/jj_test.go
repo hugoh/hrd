@@ -492,7 +492,13 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 }
 
 func TestRegister_JJ(t *testing.T) {
+	backend.ClearRegisteredBackends()
+
 	assert.NotPanics(t, func() {
+		Register()
+	})
+
+	assert.Panics(t, func() {
 		Register()
 	})
 }
@@ -954,10 +960,6 @@ func TestParseJjCmdListDeduplicates(t *testing.T) {
 
 	got := parseJjCmdList(input)
 	assert.Len(t, got, 2)
-}
-
-func TestRegister_DuplicatePanics(t *testing.T) {
-	assert.Panics(t, func() { Register() })
 }
 
 func TestParseJjCmdListSorted(t *testing.T) {
