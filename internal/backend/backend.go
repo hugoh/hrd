@@ -259,6 +259,12 @@ func Register(backend Backend) error {
 	return nil
 }
 
+// ClearRegisteredBackends removes all registered backends.
+// Used by tests that need a clean registry.
+func ClearRegisteredBackends() {
+	registry = nil
+}
+
 // Names returns all registered backend names, in priority order.
 func Names() []string {
 	names := make([]string, len(registry))
