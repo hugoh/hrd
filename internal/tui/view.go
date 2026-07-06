@@ -117,6 +117,10 @@ func (m *model) renderHeader() string {
 		left += ui.WarnStyle().Render(" /" + m.nameFilter)
 	}
 
+	if m.attentionFilter {
+		left += ui.WarnStyle().Render(" *attention")
+	}
+
 	switch m.mode {
 	case modeSelect:
 		left += ui.WarnStyle().Render(" x:select")

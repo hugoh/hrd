@@ -170,6 +170,20 @@ var mainBindings = []binding{
 
 		return m, nil
 	}, label: "find", desc: "Filter repos by name", hrd: true, section: secGeneral, order: 15},
+	{
+		key: "*",
+		handler: func(m *model) (tea.Model, tea.Cmd) {
+			m.attentionFilter = !m.attentionFilter
+			m.updateTableRows()
+
+			return m, nil
+		},
+		label:   "attention",
+		desc:    "Toggle needs-attention filter (dirty / out of sync)",
+		hrd:     true,
+		section: secGeneral,
+		order:   17,
+	},
 	{key: "?", handler: func(m *model) (tea.Model, tea.Cmd) {
 		m.helpViewport.SetContent(m.helpContent())
 		m.helpViewport.GotoTop()

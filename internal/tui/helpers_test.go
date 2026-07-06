@@ -3,7 +3,9 @@ package tui
 import (
 	"testing"
 
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/runner"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -96,6 +98,46 @@ func TestActiveRepoOrder(t *testing.T) {
 			},
 		}
 		assert.Equal(t, []string{"b", "c"}, m.activeRepoOrder())
+	})
+}
+
+func TestActiveRepoOrder_AttentionFilter(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b", "c"},
+		cfg: config.Config{
+			Groups: map[string]config.Group{"work": {Repos: []string{"a", "b"}}},
+		},
+		statuses: map[string]runner.StatusResult{
+			"a": {Status: backend.RepoStatus{Dirty: true}},
+			"b": {Status: backend.RepoStatus{}},
+			"c": {Err: assert.AnError},
+		},
+	}
+
+	t.Run("narrows to repos needing attention", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = true
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+	})
+
+	t.Run("composes with group filter", func(t *testing.T) {
+		m.groupFilter = "work"
+		m.attentionFilter = true
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+	})
+
+	t.Run("composes with name filter", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = true
+		m.nameFilter = "a"
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+		m.nameFilter = ""
+	})
+
+	t.Run("off returns unfiltered", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = false
+		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
 	})
 }
 

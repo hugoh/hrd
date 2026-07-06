@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/runner"
 	"github.com/sahilm/fuzzy"
 )
 
@@ -144,11 +145,30 @@ func (m *model) activeRepoOrder() []string {
 		}
 	}
 
+	if m.attentionFilter {
+		base = filterByAttention(base, m.statuses)
+	}
+
 	if m.nameFilter == "" {
 		return base
 	}
 
 	return fuzzyFilter(base, m.nameFilter)
+}
+
+// filterByAttention narrows names to repos needing attention (dirty or out
+// of sync with their remote). Repos with no loaded status yet, or whose last
+// status fetch errored, are excluded.
+func filterByAttention(names []string, statuses map[string]runner.StatusResult) []string {
+	out := make([]string, 0, len(names))
+
+	for _, n := range names {
+		if res, ok := statuses[n]; ok && res.Err == nil && res.Status.NeedsAttention() {
+			out = append(out, n)
+		}
+	}
+
+	return out
 }
 
 // fuzzyFilter returns the names fuzzy-matching pattern, preserving the

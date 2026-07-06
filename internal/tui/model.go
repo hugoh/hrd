@@ -156,6 +156,11 @@ type model struct {
 	filterOpen  bool
 	filterInput textinput.Model
 
+	// attentionFilter narrows the visible repos to those needing attention
+	// (dirty or out of sync with their remote), toggled with "*". It layers
+	// on top of groupFilter/nameFilter rather than replacing them.
+	attentionFilter bool
+
 	selectSaved map[string]bool
 
 	repoOrder []string

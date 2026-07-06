@@ -51,47 +51,57 @@ func addDispatchFlags(fs *pflag.FlagSet) {
 // scope too — parsing already folds both sides of "--" into one args slice
 // (see splitScopeArgs for the commands that do distinguish the two sides).
 // The loaded config is returned alongside errNoReposMatched so callers can
-// inspect it (e.g. for the ls onboarding hint).
+// inspect it (e.g. for the ls onboarding hint). The returned bool reports
+// whether the raw scope included the "@@attention" pseudo-group, so callers
+// can force the status filter on even without --dirty/--ahead/--behind.
 func loadAndResolve(
 	cfgPath *string,
 	cmd *cobra.Command,
 	args []string,
-) (config.Config, []string, error) {
+) (config.Config, []string, bool, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, err
+		return config.Config{}, nil, false, err
 	}
 
-	names, err := resolveScope(cmd, args, &cfg)
+	names, forceAttention, err := resolveScope(cmd, args, &cfg)
 	if err != nil {
-		return config.Config{}, nil, err
+		return config.Config{}, nil, false, err
 	}
 
 	if len(names) == 0 {
-		return cfg, nil, errNoReposMatched
+		return cfg, nil, forceAttention, errNoReposMatched
 	}
 
-	return cfg, names, nil
+	return cfg, names, forceAttention, nil
 }
 
-func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]string, error) {
+// hasAttentionScope reports whether names contains the "@@attention"
+// reserved pseudo-group token, prior to it being expanded by ResolveScope.
+func hasAttentionScope(names []string) bool {
+	return slices.Contains(names, config.ReservedAttention)
+}
+
+func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]string, bool, error) {
 	names := slices.Clone(flagStringSlice(cmd, cmdReposFlag))
 
 	for _, arg := range args {
 		name, ok := scopeName(arg, cfg)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
+			return nil, false, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 
 		names = append(names, name)
 	}
 
+	forceAttention := hasAttentionScope(names)
+
 	names, err := cfg.ResolveScope(names)
 	if err != nil {
-		return nil, fmt.Errorf("resolving scope: %w", err)
+		return nil, false, fmt.Errorf("resolving scope: %w", err)
 	}
 
-	return names, nil
+	return names, forceAttention, nil
 }
 
 // scopeName reports whether arg names a known repo, group, or reserved
@@ -99,7 +109,7 @@ func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]stri
 // a reserved "@@" token is returned unchanged).
 func scopeName(arg string, cfg *config.Config) (string, bool) {
 	if config.IsReservedGroupName(arg) {
-		return arg, arg == config.ReservedNone
+		return arg, arg == config.ReservedNone || arg == config.ReservedAttention
 	}
 
 	if _, ok := cfg.Repos[arg]; ok {
@@ -126,29 +136,30 @@ func loadAndSplit(
 	cfgPath *string,
 	cmd *cobra.Command,
 	args []string,
-) (config.Config, []string, []string, error) {
+) (config.Config, []string, []string, bool, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, nil, err
+		return config.Config{}, nil, nil, false, err
 	}
 
 	scope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
 	if err != nil {
-		return config.Config{}, nil, nil, err
+		return config.Config{}, nil, nil, false, err
 	}
 
 	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), scope)
+	forceAttention := hasAttentionScope(names)
 
 	resolved, err := cfg.ResolveScope(names)
 	if err != nil {
-		return config.Config{}, nil, nil, fmt.Errorf("resolving scope: %w", err)
+		return config.Config{}, nil, nil, false, fmt.Errorf("resolving scope: %w", err)
 	}
 
 	if len(resolved) == 0 {
-		return cfg, nil, nil, errNoReposMatched
+		return cfg, nil, nil, forceAttention, errNoReposMatched
 	}
 
-	return cfg, resolved, cmdArgs, nil
+	return cfg, resolved, cmdArgs, forceAttention, nil
 }
 
 // splitScopeArgs splits positional args into repo/group scope and
@@ -301,12 +312,12 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			cfg, names, err := loadAndResolve(cfgPath, cmd, args)
+			cfg, names, forceAttention, err := loadAndResolve(cfgPath, cmd, args)
 			if err != nil {
 				return err
 			}
 
-			names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+			names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
 			if len(names) == 0 {
 				return nil
 			}
@@ -367,7 +378,7 @@ func shellCmdAction(
 ) error {
 	ctx := cmd.Context()
 
-	cfg, names, shellArgs, err := loadAndSplit(cfgPath, cmd, args)
+	cfg, names, shellArgs, forceAttention, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -376,7 +387,7 @@ func shellCmdAction(
 		return errNoShellCommand
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
 	if len(names) == 0 {
 		return nil
 	}
@@ -504,7 +515,7 @@ func lsAction(
 	return func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		cfg, names, err := loadAndResolve(cfgPath, cmd, args)
+		cfg, names, forceAttention, err := loadAndResolve(cfgPath, cmd, args)
 		if errors.Is(err, errNoReposMatched) {
 			if len(cfg.Repos) == 0 {
 				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)
@@ -519,7 +530,7 @@ func lsAction(
 			return err
 		}
 
-		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names)
+		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
 		if len(names) == 0 {
 			return nil
 		}
@@ -591,7 +602,7 @@ func runDispatch(
 	cfgPath *string,
 	backendName string,
 ) error {
-	cfg, names, cmdArgs, err := loadAndSplit(cfgPath, cmd, args)
+	cfg, names, cmdArgs, forceAttention, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -600,7 +611,7 @@ func runDispatch(
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
 	if len(names) == 0 {
 		return nil
 	}

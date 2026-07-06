@@ -78,12 +78,12 @@ func runAlias(
 ) error {
 	ctx := cmd.Context()
 
-	cfg, names, extraArgs, err := loadAndSplit(cfgPath, cmd, args)
+	cfg, names, extraArgs, forceAttention, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
 	if len(names) == 0 {
 		return nil
 	}

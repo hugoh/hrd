@@ -168,6 +168,14 @@ func stripGroupPrefix(name string) string {
 // user-created group.
 const ReservedNone = "@@none"
 
+// ReservedAttention is the pseudo-group matching repos that need attention:
+// a dirty working copy, or a branch out of sync with its remote (ahead,
+// behind, diverged, or gone). Unlike ReservedNone, this can't be resolved
+// from static config alone — GroupRepos expands it to every repo, and the
+// actual attention filtering happens later, once live status has been
+// gathered (see cmd.applyStatusFilter and backend.RepoStatus.NeedsAttention).
+const ReservedAttention = "@@attention"
+
 const reservedGroupPrefix = "@@"
 
 // IsReservedGroupName reports whether name is in the reserved "@@" pseudo-
@@ -323,10 +331,14 @@ func (c *Config) UngroupedRepos() []string {
 }
 
 // GroupRepos resolves name to a repo list: a real group (with or without
-// its "@" prefix), or the reserved ReservedNone pseudo-group.
+// its "@" prefix), or a reserved pseudo-group (ReservedNone, ReservedAttention).
 func (c *Config) GroupRepos(name string) ([]string, bool) {
 	if name == ReservedNone {
 		return c.UngroupedRepos(), true
+	}
+
+	if name == ReservedAttention {
+		return c.allRepos(), true
 	}
 
 	if g, ok := c.Groups[name]; ok {

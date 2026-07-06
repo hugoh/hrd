@@ -57,6 +57,48 @@ func TestComputeBookmarkState(t *testing.T) {
 	}
 }
 
+func TestRepoStatus_NeedsAttention(t *testing.T) {
+	tests := []struct {
+		name string
+		st   RepoStatus
+		want bool
+	}{
+		{"dirty", RepoStatus{Dirty: true}, true},
+		{"local ahead (jj working copy)", RepoStatus{LocalAhead: 1}, true},
+		{
+			"bookmark ahead",
+			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Ahead: 1}}},
+			true,
+		},
+		{
+			"bookmark behind",
+			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Behind: 1}}},
+			true,
+		},
+		{
+			"diverged (ahead and behind)",
+			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Ahead: 2, Behind: 1}}},
+			true,
+		},
+		{
+			"no remote, clean",
+			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Remote: ""}}},
+			false,
+		},
+		{
+			"clean and synced",
+			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Remote: "origin"}}},
+			false,
+		},
+		{"zero value", RepoStatus{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.st.NeedsAttention())
+		})
+	}
+}
+
 func TestWorstState(t *testing.T) {
 	tests := []struct {
 		name        string

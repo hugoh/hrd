@@ -93,6 +93,31 @@ func TestLsReservedNone(t *testing.T) {
 	assert.Equal(t, "ungrouped", strings.TrimSpace(out))
 }
 
+func TestLsAttentionFilter(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"ls", "@@attention", "--names"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+// TestLsAttentionFilterCombinesWithExplicitFlag verifies that scoping to
+// @@attention still applies when an explicit --dirty flag is also passed
+// (redundant, but must not double-count or error).
+func TestLsAttentionFilterCombinesWithExplicitFlag(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"ls", "@@attention", "--dirty", "--names"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+func TestShellAttentionFilter(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"shell", "@@attention", "--", "echo ran"})
+	assert.Contains(t, out, "dirtyrepo")
+	assert.NotContains(t, out, "cleanrepo")
+}
+
 func TestRepoRootAddRejectsReservedGroup(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupTestConfig(t, config.Config{})

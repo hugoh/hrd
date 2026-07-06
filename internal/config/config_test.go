@@ -266,6 +266,20 @@ func TestGroupRepos_ReservedNone(t *testing.T) {
 	assert.Equal(t, []string{"ungrouped"}, repos)
 }
 
+func TestGroupRepos_ReservedAttention(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"grouped":   {Path: "/g", Groups: []string{"work"}},
+			"ungrouped": {Path: "/u"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	repos, ok := cfg.GroupRepos(ReservedAttention)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"grouped", "ungrouped"}, repos)
+}
+
 func TestGroupRepos_RealGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
