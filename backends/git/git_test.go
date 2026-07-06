@@ -324,7 +324,13 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
+	backend.ClearRegisteredBackends()
+
 	assert.NotPanics(t, func() {
+		Register()
+	})
+
+	assert.Panics(t, func() {
 		Register()
 	})
 }
@@ -403,10 +409,6 @@ func TestBackend_Run_NonExecutablePath(t *testing.T) {
 	b := &Backend{}
 	_, err := b.Run(t.Context(), dir, []string{"status"}, false)
 	assert.Error(t, err)
-}
-
-func TestRegister_DuplicatePanics(t *testing.T) {
-	assert.Panics(t, func() { Register() })
 }
 
 func runGitCmd(t *testing.T, dir string, args []string) {
