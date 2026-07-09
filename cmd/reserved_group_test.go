@@ -6,6 +6,7 @@ import (
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/discover/discovertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -49,7 +50,7 @@ func TestRepoGroupStripsAtPrefix(t *testing.T) {
 func TestRepoScanAddRejectsReservedGroup(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, "-g", "@@none", root})
