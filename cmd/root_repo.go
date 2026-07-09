@@ -94,7 +94,12 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
 
 		var groups []string
+
 		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+
 			groups = []string{group}
 		}
 

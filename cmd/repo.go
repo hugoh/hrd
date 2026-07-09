@@ -79,6 +79,11 @@ func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) erro
 		}
 
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+		}
 
 		for _, arg := range args {
 			if err := addRepo(&cfg, arg, name, group); err != nil {
@@ -173,13 +178,13 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 
 			names := make([]string, 0, len(cfg.Repos))
 
-			if g := stripGroupPrefix(flagString(cmd, "group")); g != "" {
-				grp, ok := cfg.Groups[g]
+			if raw := flagString(cmd, "group"); raw != "" {
+				grp, ok := cfg.GroupRepos(groupQuery(raw))
 				if !ok {
-					return fmt.Errorf("%w %q", errUnknownGroup, g)
+					return fmt.Errorf("%w %q", errUnknownGroup, raw)
 				}
 
-				names = grp.Repos
+				names = grp
 			} else {
 				for name := range cfg.Repos {
 					names = append(names, name)
@@ -283,6 +288,18 @@ func stripGroupPrefix(name string) string {
 	return strings.TrimPrefix(name, "@")
 }
 
+// groupQuery normalizes a raw group-lookup argument for cfg.GroupRepos: a
+// reserved "@@"-prefixed token (e.g. "@@none") is passed through unchanged,
+// since stripping a single '@' would mangle it; anything else gets the
+// normal single-'@' strip.
+func groupQuery(raw string) string {
+	if config.IsReservedGroupName(raw) {
+		return raw
+	}
+
+	return stripGroupPrefix(raw)
+}
+
 // displayGroup adds a '@' prefix for display purposes so group names
 // are visually distinguishable from repo names in output.
 func displayGroup(name string) string {
@@ -294,7 +311,7 @@ func displayGroup(name string) string {
 }
 
 func repoGroupCmd(cfgPath *string) *cobra.Command {
-	return groupActionCmd(cfgPath, cmdNameGroup, "add a group to a repo", errRepoGroupUsage,
+	return groupActionCmd(cfgPath, cmdNameGroup, "add a group to a repo", errRepoGroupUsage, true,
 		func(cfg *config.Config, name, group string) {
 			cfg.AddRepoToGroup(name, group)
 			ui.Success("added %q to group %q", name, group)
@@ -307,6 +324,7 @@ func repoUngroupCmd(cfgPath *string) *cobra.Command {
 		cmdNameUngroup,
 		"remove a group from a repo",
 		errRepoUngroupUsage,
+		false,
 		func(cfg *config.Config, name, group string) {
 			cfg.RemoveRepoFromGroup(name, group)
 			ui.Success("removed %q from group %q", name, group)
@@ -318,6 +336,7 @@ func groupActionCmd(
 	cfgPath *string,
 	name, usage string,
 	usageErr error,
+	validateGroup bool,
 	act func(*config.Config, string, string),
 ) *cobra.Command {
 	return &cobra.Command{
@@ -330,7 +349,13 @@ func groupActionCmd(
 				return usageErr
 			}
 
-			repoName, group := args[0], args[1]
+			repoName, group := args[0], stripGroupPrefix(args[1])
+
+			if validateGroup {
+				if err := config.ValidGroupName(group); err != nil {
+					return err //nolint:wrapcheck // config error already has context
+				}
+			}
 
 			cfg, err := loadConfig(cfgPath, name)
 			if err != nil {
@@ -382,13 +407,15 @@ func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 			return err
 		}
 
-		if name := stripGroupPrefix(firstArg(args)); name != "" {
-			group, ok := cfg.Groups[name]
+		if raw := firstArg(args); raw != "" {
+			name := groupQuery(raw)
+
+			repos, ok := cfg.GroupRepos(name)
 			if !ok {
 				return fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))
 			}
 
-			for _, repo := range group.Repos {
+			for _, repo := range repos {
 				ui.Out(repo)
 			}
 

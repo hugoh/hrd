@@ -63,11 +63,22 @@ func newGroupFilterPopupModel(t *testing.T) *model {
 
 func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 	m := newGroupFilterPopupModel(t)
-	m.groupList.Select(1)
+	m.groupList.Select(2)
 
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	assert.Equal(t, "work", m.groupFilter, "groupFilter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.True(t, m.loading, "loading should be true after group selection")
+}
+
+func TestHandleGroupKeyEnterUngrouped(t *testing.T) {
+	m := newGroupFilterPopupModel(t)
+	m.groupList.Select(1)
+
+	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Equal(t, config.ReservedNone, m.groupFilter, "groupFilter")
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.True(t, m.loading, "loading should be true after group selection")
 }
@@ -139,8 +150,8 @@ func TestOpenGroupPopup(t *testing.T) {
 	openGroupPopup(m, groupFilterMode)
 
 	assert.Equal(t, screenGroup, m.screen, "screen")
-	assert.Len(t, m.groupList.Items(), 3, "expected 3 popup items")
-	assert.Equal(t, 2, m.groupList.Index(), "cursor should point to work")
+	assert.Len(t, m.groupList.Items(), 4, "expected 4 popup items ([all], [ungrouped], 2 groups)")
+	assert.Equal(t, 3, m.groupList.Index(), "cursor should point to work")
 }
 
 func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
@@ -156,8 +167,42 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 	openGroupPopup(m, groupFilterMode)
 
 	assert.Equal(t, screenGroup, m.screen, "screen")
-	assert.Len(t, m.groupList.Items(), 2, "expected 2 popup items")
+	assert.Len(t, m.groupList.Items(), 3, "expected 3 popup items ([all], [ungrouped], 1 group)")
 	assert.Equal(t, 0, m.groupList.Index(), "cursor should be at [all]")
+}
+
+func TestOpenGroupPopupIncludesUngrouped(t *testing.T) {
+	m := &model{
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"a": {Groups: []string{"work"}},
+				"b": {},
+			},
+			Groups: map[string]config.Group{"work": {Repos: []string{"a"}}},
+		},
+	}
+	m.initGroupList()
+
+	openGroupPopup(m, groupFilterMode)
+
+	items := m.groupList.Items()
+	require.Len(t, items, 3)
+
+	gi, ok := items[1].(groupItem)
+	require.True(t, ok)
+	assert.Equal(t, labelUngrouped, gi.name)
+}
+
+func TestOpenGroupPopupCursorAtUngrouped(t *testing.T) {
+	m := &model{
+		cfg:         config.Config{Groups: map[string]config.Group{"work": {}}},
+		groupFilter: config.ReservedNone,
+	}
+	m.initGroupList()
+
+	openGroupPopup(m, groupFilterMode)
+
+	assert.Equal(t, 1, m.groupList.Index(), "cursor should point to [ungrouped]")
 }
 
 func TestHandleOutputKeyEsc(t *testing.T) {
@@ -569,6 +614,32 @@ func TestHandleGroupNewInputEnter(t *testing.T) {
 	assert.False(t, m.groupNewInput, "groupNewInput should be false after Enter")
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.Contains(t, m.cfg.Groups, "my-group", "my-group should exist in config after creation")
+}
+
+func TestHandleGroupNewInputRejectsReservedName(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	initialCfg := config.Config{
+		Repos: map[string]config.Repo{"repo1": {}},
+	}
+	require.NoError(t, config.Save(cfgPath, initialCfg))
+
+	m := &model{
+		cfg:           initialCfg,
+		opts:          Options{ConfigPath: cfgPath},
+		repoOrder:     []string{"repo1"},
+		selected:      map[string]bool{"repo1": true},
+		groupNewInput: true,
+		screen:        screenGroup,
+	}
+	m.initInput()
+	m.input.SetValue("@@none")
+
+	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Nil(t, cmd, "expected nil cmd on rejected group name")
+	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert on rejected group name")
+	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set on rejected group name")
+	assert.NotContains(t, m.cfg.Groups, "@none")
 }
 
 func TestHandleGroupNewInputEnterSaveFailure(t *testing.T) {

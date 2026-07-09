@@ -94,9 +94,14 @@ func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]stri
 	return names, nil
 }
 
-// scopeName reports whether arg names a known repo or group, returning the
-// canonical name (group "@" prefix stripped).
+// scopeName reports whether arg names a known repo, group, or reserved
+// pseudo-group, returning the canonical name (group "@" prefix stripped;
+// a reserved "@@" token is returned unchanged).
 func scopeName(arg string, cfg *config.Config) (string, bool) {
+	if config.IsReservedGroupName(arg) {
+		return arg, arg == config.ReservedNone
+	}
+
 	if _, ok := cfg.Repos[arg]; ok {
 		return arg, true
 	}

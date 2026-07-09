@@ -123,6 +123,12 @@ func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 		}
 
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+		}
+
 		tracked := trackedPaths(&cfg)
 		pattern := flagString(cmd, "pattern")
 		confirm := flagBool(cmd, "confirm")
@@ -159,6 +165,13 @@ func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string)
 		tracked := trackedPaths(&cfg)
 		pattern := flagString(cmd, "pattern")
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+
+		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+		}
+
 		onlyTracked := flagBool(cmd, "tracked")
 		onlyUntracked := flagBool(cmd, "untracked")
 

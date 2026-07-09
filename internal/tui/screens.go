@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/hugoh/hrd/internal/config"
 )
 
 func (m *model) handleHelpKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -57,9 +58,12 @@ func (m *model) handleGroupEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
-	if selected == labelAllRepos {
+	switch selected {
+	case labelAllRepos:
 		m.groupFilter = ""
-	} else {
+	case labelUngrouped:
+		m.groupFilter = config.ReservedNone
+	default:
 		m.groupFilter = selected
 	}
 
@@ -104,8 +108,15 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case keyEnter:
-		name := strings.TrimSpace(m.input.Value())
+		name := stripGroupPrefix(strings.TrimSpace(m.input.Value()))
 		if name == "" {
+			return m, nil
+		}
+
+		if err := config.ValidGroupName(name); err != nil {
+			m.modal = modalAlert
+			m.alertMsg = err.Error()
+
 			return m, nil
 		}
 
@@ -214,10 +225,12 @@ func openGroupPopup(m *model, mode groupMode) {
 
 	var options []string
 
+	const builtinFilterOptions = 2 // [all], [ungrouped]
+
 	switch mode {
 	case groupFilterMode:
-		options = make([]string, 0, 1+len(groupNames))
-		options = append(options, labelAllRepos)
+		options = make([]string, 0, builtinFilterOptions+len(groupNames))
+		options = append(options, labelAllRepos, labelUngrouped)
 		options = append(options, groupNames...)
 	case groupAddMode:
 		options = make([]string, 0, len(groupNames)+1)
@@ -229,14 +242,15 @@ func openGroupPopup(m *model, mode groupMode) {
 	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
-	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos))
+	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos), len(m.cfg.UngroupedRepos()))
 	m.groupList.SetItems(items)
 
 	cursor := 0
 
 	if m.groupFilter != "" && mode == groupFilterMode {
 		for i, opt := range options {
-			if opt == m.groupFilter || opt == "@"+m.groupFilter {
+			if opt == m.groupFilter || opt == "@"+m.groupFilter ||
+				(opt == labelUngrouped && m.groupFilter == config.ReservedNone) {
 				cursor = i
 
 				break

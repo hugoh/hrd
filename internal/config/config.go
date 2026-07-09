@@ -161,6 +161,35 @@ func stripGroupPrefix(name string) string {
 	return strings.TrimPrefix(name, "@")
 }
 
+// ReservedNone is the pseudo-group matching repos with no group. Reserved
+// group tokens start with "@@" (two ats), distinguishing them from real
+// group names (which always use a single "@" and can never start with two,
+// see ValidGroupName) so this namespace can never collide with a
+// user-created group.
+const ReservedNone = "@@none"
+
+const reservedGroupPrefix = "@@"
+
+// IsReservedGroupName reports whether name is in the reserved "@@" pseudo-
+// group namespace.
+func IsReservedGroupName(name string) bool {
+	return strings.HasPrefix(name, reservedGroupPrefix)
+}
+
+var errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
+
+// ValidGroupName rejects any group name starting with "@" — real group
+// names are stored bare (the CLI's leading "@" is display/input sugar,
+// stripped before storage) — so the "@@" pseudo-group namespace can never
+// collide with a stored group.
+func ValidGroupName(name string) error {
+	if strings.HasPrefix(name, "@") {
+		return fmt.Errorf("%w: %q", errReservedGroupName, name)
+	}
+
+	return nil
+}
+
 // ResolveScope resolves explicit CLI names/groups into repo names.
 // Each name may be a repo or a group (with or without the "@" prefix);
 // groups are expanded inline. Duplicates are removed, preserving the
@@ -182,7 +211,7 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 	}
 
 	for _, name := range names {
-		if repos, ok := c.groupRepos(name); ok {
+		if repos, ok := c.GroupRepos(name); ok {
 			for _, r := range repos {
 				add(r)
 			}
@@ -278,6 +307,42 @@ func (c *Config) RemoveRepoFromGroup(name, group string) {
 	}
 }
 
+// UngroupedRepos returns the names of repos with no group, sorted.
+func (c *Config) UngroupedRepos() []string {
+	out := make([]string, 0, len(c.Repos))
+
+	for name, repo := range c.Repos {
+		if len(repo.Groups) == 0 {
+			out = append(out, name)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// GroupRepos resolves name to a repo list: a real group (with or without
+// its "@" prefix), or the reserved ReservedNone pseudo-group.
+func (c *Config) GroupRepos(name string) ([]string, bool) {
+	if name == ReservedNone {
+		return c.UngroupedRepos(), true
+	}
+
+	if g, ok := c.Groups[name]; ok {
+		return g.Repos, true
+	}
+
+	stripped := stripGroupPrefix(name)
+	if stripped != name {
+		if g, ok := c.Groups[stripped]; ok {
+			return g.Repos, true
+		}
+	}
+
+	return nil, false
+}
+
 func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
@@ -304,19 +369,4 @@ func (c *Config) allRepos() []string {
 	slices.Sort(out)
 
 	return out
-}
-
-func (c *Config) groupRepos(name string) ([]string, bool) {
-	if g, ok := c.Groups[name]; ok {
-		return g.Repos, true
-	}
-
-	stripped := stripGroupPrefix(name)
-	if stripped != name {
-		if g, ok := c.Groups[stripped]; ok {
-			return g.Repos, true
-		}
-	}
-
-	return nil, false
 }

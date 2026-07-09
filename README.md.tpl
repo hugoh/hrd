@@ -94,7 +94,7 @@ hrd jj dotfiles log
 hrd shell -- 'echo $(basename $PWD): $(git rev-parse --short HEAD)'
 ```
 
-**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd ls @work` and `hrd ls work` both work.
+**Tip**: Group names are displayed with an `@` prefix (e.g., `@work`, `@oss`) to distinguish them from repo names. The `@` is optional on input — `hrd ls @work` and `hrd ls work` both work. `@@none` is a reserved pseudo-group matching repos with no group at all (e.g. `hrd ls @@none`) — the double `@` keeps it from ever colliding with a real group name, which you also can't create (group names can't start with `@`).
 
 ## Status dashboard
 
@@ -111,7 +111,7 @@ Status symbols at a glance:
 Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
-- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`.
+- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`. `[ungrouped]` (alongside `[all]`) filters to repos in no group at all.
 - Type-to-filter with `/` — fuzzy-match repos by name as you type; `Enter` keeps the filter, `Esc` clears it.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.
@@ -252,7 +252,7 @@ gpf = "git push --force-with-lease"  # always that backend
 mkclean = "!make clean"         # "!" or "sh " prefix = shell command
 ```
 
-**Note**: Groups are derived from the `groups` field on each repo, plus the `groups` field on any `[roots.*]` entry (inherited by every repo discovered under it). Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.
+**Note**: Groups are derived from the `groups` field on each repo, plus the `groups` field on any `[roots.*]` entry (inherited by every repo discovered under it). Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. Group names can never start with `@` (so `hrd repo group myrepo @work` stores `work`, not `@work`) — this reserves the `@@` namespace (e.g. `@@none`, see the Quick start tip) for built-in pseudo-groups, which can never collide with anything you create.
 
 ---
 
