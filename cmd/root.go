@@ -9,6 +9,7 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/tui"
+	"github.com/hugoh/hrd/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -156,6 +157,24 @@ func loadConfig(cfgPath *string, label string) (config.Config, error) {
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return config.Config{}, fmt.Errorf("%s: %w", label, err)
+	}
+
+	return cfg, nil
+}
+
+// loadResolvedConfig is loadConfig plus a live merge of repos discovered
+// under the config's Roots. Use it for read-only commands (dispatch, repo
+// ls) so newly appeared repos show up without a `repo scan add` rerun.
+// Callers that Save the config back must use loadConfig instead — saving a
+// resolved config would materialize discovered repos into the file.
+func loadResolvedConfig(cfgPath *string, label string) (config.Config, error) {
+	cfg, warnings, err := config.LoadResolved(*cfgPath)
+	if err != nil {
+		return config.Config{}, fmt.Errorf("%s: %w", label, err)
+	}
+
+	for _, w := range warnings {
+		ui.Warnf("%v", w)
 	}
 
 	return cfg, nil

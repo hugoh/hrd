@@ -15,6 +15,7 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 - **Live status dashboard** — `hrd ls` shows a color-coded table of every repo's ref, remote sync state, dirty flag, and per-bookmark/branch badges, updating in real time.
 - **Interactive TUI** — `hrd` (or `hrd tui`) opens a full-screen terminal UI for browsing repos, filtering by group or name, and dispatching commands across multiple repos with live streaming output.
 - **Repo groups** — group repos for easier filtering.
+- **Live-resolved directory roots** — track a directory once and new repos added under it show up automatically, with nothing written to config for the discovered repos.
 - **Three dispatch commands** — `git`, `jj`, and `shell`.
 - **Shell completion** — bash, zsh, and fish, with dynamic completion of repo and group names from your live config.
 - **Extensible backend system** — new VCS backends implement a single interface and self-register.
@@ -67,8 +68,11 @@ hrd repo add ~/dev/myproject ~/dev/infra
 hrd repo add -n dotfiles ~/.local/share/chezmoi
 
 # Or discover everything under a directory at once
-hrd repo scan ~/dev
-hrd repo scan -g work ~/work     # ...and group what it finds
+hrd repo scan add ~/dev
+hrd repo scan add -g work ~/work     # ...and group what it finds
+
+# Or keep a directory always in sync — new repos show up with no re-scan
+hrd repo root add ~/my-repos -g personal
 
 # Start the TUI
 hrd
@@ -104,19 +108,20 @@ old-service jj  legacy ✗✓!‼  fix: critical bug (1 week ago)
 
 Status symbols at a glance:
 
-| Symbol | Meaning                                |
-| ------ | -------------------------------------- |
-| `✓`    | Synced with remote                     |
-| `↑N`   | N commits ahead of remote              |
-| `↓N`   | N commits behind remote                |
-| `⇡N`   | Working copy ahead of bookmark (local) |
-| `↑N↓N` | Diverged (ahead and behind)            |
-| `∅`    | Local only, no remote                  |
-| `‼`    | Unresolved conflict                    |
-| `!`    | Bookmark conflict (jj)                 |
-| `✗`    | Remote was deleted                     |
-| `*`    | Dirty working copy                     |
-| `?`    | Unknown remote state                   |
+| Symbol | Meaning |
+| ------ | ------- |
+| `✓` | Synced with remote |
+| `↑N` | N commits ahead of remote |
+| `↓N` | N commits behind remote |
+| `⇡N` | Working copy ahead of bookmark (local) |
+| `↑N↓N` | Diverged (ahead and behind) |
+| `∅` | Local only, no remote |
+| `‼` | Unresolved conflict |
+| `!` | Bookmark conflict (jj) |
+| `✗` | Remote was deleted |
+| `*` | Dirty working copy |
+| `?` | Unknown remote state |
+
 
 ## Interactive TUI
 
@@ -203,13 +208,33 @@ log` works, but flags like `--oneline` need the `--` form).
 
 ### Repo discovery
 
-`hrd repo scan <dir>...` walks each directory (default depth 5, tune with
-`--depth`) and tracks every git/jj repo it finds. Detected repos are not
-descended into, so vendored or nested checkouts stay untracked; hidden
-directories are skipped. `--dry-run` previews without saving, `--group`
-assigns everything found to a group. Name collisions fall back to
-`<parent>-<dir>`; already-tracked paths are left alone, so re-scanning is
-safe.
+`hrd repo scan add <dir>...` walks each directory (default depth 5, tune
+with `--depth`) and tracks every git/jj repo it finds as its own entry in
+the config. Detected repos are not descended into, so vendored or nested
+checkouts stay untracked; hidden directories are skipped. `hrd repo scan
+list <dir>...` previews the same walk without saving, with `--tracked` /
+`--untracked` to filter by whether a match is already in the config.
+`-g/--group` assigns everything found to a group. Name collisions fall back
+to `<parent>-<dir>`; already-tracked paths are left alone, so re-running
+`scan add` is safe.
+
+```sh
+hrd repo scan add ~/dev --depth 2 --pattern 'api-*' -g backend
+hrd repo scan list ~/dev --untracked
+```
+
+For a directory you want to stay in sync automatically, use `hrd repo root
+add <dir>` instead: it's a standing declaration, walked live on every `hrd`
+invocation, so repos added under it later show up with no re-scan and
+nothing is written to the config for the discovered repos themselves —
+only the root is persisted. `--depth` (default 1) caps how deep it walks
+and `-g/--group` tags every repo found under it.
+
+```sh
+hrd repo root add ~/my-repos --depth 2 -g personal
+hrd repo root ls
+hrd repo root rm my-repos
+```
 
 ### Status filters
 
@@ -224,11 +249,11 @@ hrd ls --dirty --names    # script-friendly list of dirty repos
 hrd shell --dirty -- git stash list
 ```
 
-| Flag       | Matches repos that…                                |
-| ---------- | -------------------------------------------------- |
-| `--dirty`  | have uncommitted changes in the working copy       |
+| Flag       | Matches repos that…                              |
+| ---------- | ------------------------------------------------ |
+| `--dirty`  | have uncommitted changes in the working copy     |
 | `--ahead`  | are ahead of their remote, or have local-only work |
-| `--behind` | are behind their remote                            |
+| `--behind` | are behind their remote                          |
 
 ### Aliases
 
@@ -256,11 +281,11 @@ ignored with a warning.
 
 ### Exit codes
 
-| Code | Meaning                                         |
-| ---- | ----------------------------------------------- |
-| 0    | All repos succeeded                             |
-| 1    | The command ran but failed in at least one repo |
-| 2    | Usage or config error (unknown repo, bad flags) |
+| Code | Meaning                                          |
+| ---- | ------------------------------------------------ |
+| 0    | All repos succeeded                              |
+| 1    | The command ran but failed in at least one repo  |
+| 2    | Usage or config error (unknown repo, bad flags)  |
 
 ## Configuration
 
@@ -278,16 +303,21 @@ groups = ["work"]
 path = "/home/alice/dev/infra"
 groups = ["work"]
 
+[roots.personal]
+path = "/home/alice/my-repos"
+depth = 1
+groups = ["personal"]
+
 [settings]
 concurrency = 8
 
 [aliases]
-sync = "pull --rebase" # per-repo routing (git pull / jj git pull)
-gpf = "git push --force-with-lease" # always that backend
-mkclean = "!make clean" # "!" or "sh " prefix = shell command
+sync = "pull --rebase"          # per-repo routing (git pull / jj git pull)
+gpf = "git push --force-with-lease"  # always that backend
+mkclean = "!make clean"         # "!" or "sh " prefix = shell command
 ```
 
-**Note**: Groups are derived from the `groups` field on each repo. Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.
+**Note**: Groups are derived from the `groups` field on each repo, plus the `groups` field on any `[roots.*]` entry (inherited by every repo discovered under it). Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically.
 
 ---
 

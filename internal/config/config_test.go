@@ -235,6 +235,28 @@ func TestAddRepo(t *testing.T) {
 	assert.Equal(t, "/p", cfg.Repos["myproject"].Path)
 }
 
+func TestAddRoot(t *testing.T) {
+	cfg := &Config{Roots: map[string]Root{}}
+	cfg.AddRoot("myroots", Root{Path: "/r", Depth: 2, Groups: []string{"work"}})
+	assert.Contains(t, cfg.Roots, "myroots")
+	assert.Equal(t, "/r", cfg.Roots["myroots"].Path)
+	assert.Equal(t, 2, cfg.Roots["myroots"].Depth)
+	assert.Equal(t, []string{"work"}, cfg.Roots["myroots"].Groups)
+}
+
+func TestRemoveRoot(t *testing.T) {
+	cfg := &Config{
+		Roots: map[string]Root{
+			"r1": {Path: "/1"},
+			"r2": {Path: "/2"},
+		},
+	}
+
+	cfg.RemoveRoot("r1")
+	assert.NotContains(t, cfg.Roots, "r1")
+	assert.Contains(t, cfg.Roots, "r2")
+}
+
 func TestRemoveRepo(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{

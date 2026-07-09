@@ -41,6 +41,16 @@ func (r Repo) ActiveBackend() string {
 	return b.Name()
 }
 
+// Root represents a directory that is walked live on every invocation for
+// repos to track, rather than being materialized into individual Repos
+// entries.
+type Root struct {
+	// Path is the absolute path to the directory to walk.
+	Path   string   `toml:"path"`
+	Depth  int      `toml:"depth"`
+	Groups []string `toml:"groups"`
+}
+
 type Group struct {
 	Repos []string `toml:"repos"`
 }
@@ -53,6 +63,7 @@ type Settings struct {
 // Config is the top-level config structure that maps directly to the TOML file.
 type Config struct {
 	Repos  map[string]Repo  `toml:"repos"`
+	Roots  map[string]Root  `toml:"roots"`
 	Groups map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
 
 	// Aliases maps user-defined command names to their expansion in the
@@ -68,6 +79,7 @@ type Config struct {
 func defaultConfig() Config {
 	return Config{
 		Repos:  make(map[string]Repo),
+		Roots:  make(map[string]Root),
 		Groups: make(map[string]Group),
 		Settings: Settings{
 			Concurrency: defaultConcurrency,
@@ -109,6 +121,10 @@ func Load(path string) (Config, error) {
 
 	if cfg.Groups == nil {
 		cfg.Groups = make(map[string]Group)
+	}
+
+	if cfg.Roots == nil {
+		cfg.Roots = make(map[string]Root)
 	}
 
 	if cfg.Settings.Concurrency < 1 {
@@ -189,6 +205,16 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 // conflict, in which case the caller should provide an explicit name.
 func (c *Config) AddRepo(name string, repo Repo) {
 	c.Repos[name] = repo
+}
+
+// AddRoot registers a directory to be walked live on every invocation.
+func (c *Config) AddRoot(name string, root Root) {
+	c.Roots[name] = root
+}
+
+// RemoveRoot stops tracking name as a live-resolved directory root.
+func (c *Config) RemoveRoot(name string) {
+	delete(c.Roots, name)
 }
 
 // RemoveRepo scrubs a repo from the config and all groups.

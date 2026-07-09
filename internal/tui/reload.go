@@ -12,7 +12,7 @@ import (
 // expand a curated selection. On a read error, m and its derived state are
 // left untouched.
 func (m *model) reloadConfig() error {
-	fresh, err := config.Load(m.opts.ConfigPath)
+	fresh, _, err := config.LoadResolved(m.opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("reloading config: %w", err)
 	}

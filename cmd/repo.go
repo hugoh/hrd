@@ -36,6 +36,7 @@ func repoCommands(cfgPath *string) *cobra.Command {
 	cmd.AddCommand(
 		repoAddCmd(cfgPath),
 		repoScanCmd(cfgPath),
+		repoRootCmd(cfgPath),
 		repoRemoveCmd(cfgPath),
 		repoListCmd(cfgPath),
 		repoRenameCmd(cfgPath),
@@ -165,7 +166,7 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 		Use:   "ls",
 		Short: "list tracked repositories",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cfg, err := loadConfig(cfgPath, "repo ls")
+			cfg, err := loadResolvedConfig(cfgPath, "repo ls")
 			if err != nil {
 				return err
 			}
@@ -205,7 +206,7 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 			}
 
 			widths := []int{nameWidth, vcsWidth, pathWidth}
-			header := []string{NameLabel, "VCS", "PATH"}
+			header := []string{NameLabel, VCSLabel, PathLabel}
 
 			_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
 				header, rows, ui.EffectiveWidths(header, rows, widths),
@@ -376,7 +377,7 @@ func groupListCmd(cfgPath *string) *cobra.Command {
 
 func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
 	return func(_ *cobra.Command, args []string) error {
-		cfg, err := loadConfig(cfgPath, "group ls")
+		cfg, err := loadResolvedConfig(cfgPath, "group ls")
 		if err != nil {
 			return err
 		}

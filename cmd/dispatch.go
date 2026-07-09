@@ -57,7 +57,7 @@ func loadAndResolve(
 	cmd *cobra.Command,
 	args []string,
 ) (config.Config, []string, error) {
-	cfg, err := loadConfig(cfgPath, "dispatch")
+	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
 		return config.Config{}, nil, err
 	}
@@ -122,7 +122,7 @@ func loadAndSplit(
 	cmd *cobra.Command,
 	args []string,
 ) (config.Config, []string, []string, error) {
-	cfg, err := loadConfig(cfgPath, "dispatch")
+	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
 		return config.Config{}, nil, nil, err
 	}
