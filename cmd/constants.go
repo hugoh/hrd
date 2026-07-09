@@ -2,6 +2,7 @@ package cmd
 
 const (
 	NameLabel   = "NAME"
+	PathLabel   = "PATH"
 	VCSLabel    = "VCS"
 	RefLabel    = "REF"
 	MSGLabel    = "MSG"

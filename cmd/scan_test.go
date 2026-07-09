@@ -7,49 +7,19 @@ import (
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/discover/discovertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// fakeGitDirAt creates a minimal .git layout under dir so backend.Detect
-// recognizes it.
-func fakeGitDirAt(t *testing.T, dir string) {
-	t.Helper()
-
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, ".git"), 0o750))
-}
-
-// scanTree builds a directory tree for scan tests:
-//
-//	root/work/app        repo
-//	root/work/app/vendor/dep  nested repo (must be skipped)
-//	root/oss/app         repo (name conflicts with work/app)
-//	root/.archive/old    repo in hidden dir (must be skipped)
-//	root/plain           not a repo
-func scanTree(t *testing.T) string {
-	t.Helper()
-
-	root := t.TempDir()
-
-	for _, p := range []string{"work/app", "work/app/vendor/dep", "oss/app", ".archive/old"} {
-		dir := filepath.Join(root, p)
-		require.NoError(t, os.MkdirAll(dir, 0o750))
-		fakeGitDirAt(t, dir)
-	}
-
-	require.NoError(t, os.MkdirAll(filepath.Join(root, "plain"), 0o750))
-
-	return root
-}
-
-// scanTreeWithTrackedApp builds a scanTree and a config that already tracks
-// its "oss/app" repo (named "app") — used by scan-list tests that assert on
-// tracked/untracked filtering.
+// scanTreeWithTrackedApp builds a discovertest.Tree and a config that
+// already tracks its "oss/app" repo (named "app") — used by scan-list tests
+// that assert on tracked/untracked filtering.
 func scanTreeWithTrackedApp(t *testing.T) (string, string) {
 	t.Helper()
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	ossApp := filepath.Join(root, "oss", "app")
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
@@ -63,7 +33,7 @@ func scanTreeWithTrackedApp(t *testing.T) (string, string) {
 func TestRepoScanAdd(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root})
@@ -80,7 +50,7 @@ func TestRepoScanAdd(t *testing.T) {
 func TestRepoScanAddIdempotent(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	require.NoError(t, runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanAdd, root}))
@@ -94,7 +64,7 @@ func TestRepoScanAddIdempotent(t *testing.T) {
 func TestRepoScanAddGroup(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	require.NoError(
@@ -113,7 +83,7 @@ func TestRepoScanAddDepthLimit(t *testing.T) {
 	root := t.TempDir()
 	deep := filepath.Join(root, "a", "b", "c", "repo")
 	require.NoError(t, os.MkdirAll(deep, 0o750))
-	fakeGitDirAt(t, deep)
+	discovertest.FakeGitDirAt(t, deep)
 
 	cfgPath := setupTestConfig(t, config.Config{})
 
@@ -150,7 +120,7 @@ func TestRepoScanAddNameConflictSkipped(t *testing.T) {
 	for _, p := range []string{"a/x/app", "b/x/app", "c/x/app"} {
 		dir := filepath.Join(root, p)
 		require.NoError(t, os.MkdirAll(dir, 0o750))
-		fakeGitDirAt(t, dir)
+		discovertest.FakeGitDirAt(t, dir)
 	}
 
 	cfgPath := setupTestConfig(t, config.Config{})
@@ -166,7 +136,7 @@ func TestRepoScanAddNameConflictSkipped(t *testing.T) {
 func TestRepoScanAddPattern(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	// "app" matches both repos by basename; filter to confirm both are found
@@ -198,7 +168,7 @@ func TestRepoScanAddPattern(t *testing.T) {
 func TestRepoScanAddConfirm(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	cfgPath := setupTestConfig(t, config.Config{})
 
 	// WalkDir visits oss/app before work/app (lexicographic order).
@@ -273,7 +243,7 @@ func TestRepoScanListUntracked(t *testing.T) {
 func TestRepoScanListGroup(t *testing.T) {
 	backend.ResetDetectCache()
 
-	root := scanTree(t)
+	root := discovertest.Tree(t)
 	ossApp := filepath.Join(root, "oss", "app")
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{

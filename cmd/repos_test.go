@@ -64,6 +64,12 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 			wantErr: errUnknownGroup,
 		},
 		{
+			name:       "TestGroupListReservedNone",
+			cfg:        groupListConfig(),
+			args:       []string{"group", "ls", "@@none"},
+			wantOutput: "repo3\n",
+		},
+		{
 			name: "TestGroupListUnknownAtName",
 			cfg: config.Config{
 				Repos: map[string]config.Repo{

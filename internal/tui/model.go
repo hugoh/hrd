@@ -205,7 +205,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 		statePath = defaultStatePath()
 	}
 
-	cfg, err := config.Load(opts.ConfigPath)
+	cfg, _, err := config.LoadResolved(opts.ConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}

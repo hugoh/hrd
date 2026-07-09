@@ -41,6 +41,16 @@ func (r Repo) ActiveBackend() string {
 	return b.Name()
 }
 
+// Root represents a directory that is walked live on every invocation for
+// repos to track, rather than being materialized into individual Repos
+// entries.
+type Root struct {
+	// Path is the absolute path to the directory to walk.
+	Path   string   `toml:"path"`
+	Depth  int      `toml:"depth"`
+	Groups []string `toml:"groups"`
+}
+
 type Group struct {
 	Repos []string `toml:"repos"`
 }
@@ -53,6 +63,7 @@ type Settings struct {
 // Config is the top-level config structure that maps directly to the TOML file.
 type Config struct {
 	Repos  map[string]Repo  `toml:"repos"`
+	Roots  map[string]Root  `toml:"roots"`
 	Groups map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
 
 	// Aliases maps user-defined command names to their expansion in the
@@ -68,6 +79,7 @@ type Config struct {
 func defaultConfig() Config {
 	return Config{
 		Repos:  make(map[string]Repo),
+		Roots:  make(map[string]Root),
 		Groups: make(map[string]Group),
 		Settings: Settings{
 			Concurrency: defaultConcurrency,
@@ -111,6 +123,10 @@ func Load(path string) (Config, error) {
 		cfg.Groups = make(map[string]Group)
 	}
 
+	if cfg.Roots == nil {
+		cfg.Roots = make(map[string]Root)
+	}
+
 	if cfg.Settings.Concurrency < 1 {
 		cfg.Settings.Concurrency = defaultConcurrency
 	}
@@ -145,6 +161,35 @@ func stripGroupPrefix(name string) string {
 	return strings.TrimPrefix(name, "@")
 }
 
+// ReservedNone is the pseudo-group matching repos with no group. Reserved
+// group tokens start with "@@" (two ats), distinguishing them from real
+// group names (which always use a single "@" and can never start with two,
+// see ValidGroupName) so this namespace can never collide with a
+// user-created group.
+const ReservedNone = "@@none"
+
+const reservedGroupPrefix = "@@"
+
+// IsReservedGroupName reports whether name is in the reserved "@@" pseudo-
+// group namespace.
+func IsReservedGroupName(name string) bool {
+	return strings.HasPrefix(name, reservedGroupPrefix)
+}
+
+var errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
+
+// ValidGroupName rejects any group name starting with "@" — real group
+// names are stored bare (the CLI's leading "@" is display/input sugar,
+// stripped before storage) — so the "@@" pseudo-group namespace can never
+// collide with a stored group.
+func ValidGroupName(name string) error {
+	if strings.HasPrefix(name, "@") {
+		return fmt.Errorf("%w: %q", errReservedGroupName, name)
+	}
+
+	return nil
+}
+
 // ResolveScope resolves explicit CLI names/groups into repo names.
 // Each name may be a repo or a group (with or without the "@" prefix);
 // groups are expanded inline. Duplicates are removed, preserving the
@@ -166,7 +211,7 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 	}
 
 	for _, name := range names {
-		if repos, ok := c.groupRepos(name); ok {
+		if repos, ok := c.GroupRepos(name); ok {
 			for _, r := range repos {
 				add(r)
 			}
@@ -189,6 +234,16 @@ func (c *Config) ResolveScope(names []string) ([]string, error) {
 // conflict, in which case the caller should provide an explicit name.
 func (c *Config) AddRepo(name string, repo Repo) {
 	c.Repos[name] = repo
+}
+
+// AddRoot registers a directory to be walked live on every invocation.
+func (c *Config) AddRoot(name string, root Root) {
+	c.Roots[name] = root
+}
+
+// RemoveRoot stops tracking name as a live-resolved directory root.
+func (c *Config) RemoveRoot(name string) {
+	delete(c.Roots, name)
 }
 
 // RemoveRepo scrubs a repo from the config and all groups.
@@ -252,6 +307,42 @@ func (c *Config) RemoveRepoFromGroup(name, group string) {
 	}
 }
 
+// UngroupedRepos returns the names of repos with no group, sorted.
+func (c *Config) UngroupedRepos() []string {
+	out := make([]string, 0, len(c.Repos))
+
+	for name, repo := range c.Repos {
+		if len(repo.Groups) == 0 {
+			out = append(out, name)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
+}
+
+// GroupRepos resolves name to a repo list: a real group (with or without
+// its "@" prefix), or the reserved ReservedNone pseudo-group.
+func (c *Config) GroupRepos(name string) ([]string, bool) {
+	if name == ReservedNone {
+		return c.UngroupedRepos(), true
+	}
+
+	if g, ok := c.Groups[name]; ok {
+		return g.Repos, true
+	}
+
+	stripped := stripGroupPrefix(name)
+	if stripped != name {
+		if g, ok := c.Groups[stripped]; ok {
+			return g.Repos, true
+		}
+	}
+
+	return nil, false
+}
+
 func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
@@ -278,19 +369,4 @@ func (c *Config) allRepos() []string {
 	slices.Sort(out)
 
 	return out
-}
-
-func (c *Config) groupRepos(name string) ([]string, bool) {
-	if g, ok := c.Groups[name]; ok {
-		return g.Repos, true
-	}
-
-	stripped := stripGroupPrefix(name)
-	if stripped != name {
-		if g, ok := c.Groups[stripped]; ok {
-			return g.Repos, true
-		}
-	}
-
-	return nil, false
 }

@@ -12,7 +12,10 @@ import (
 
 var errUnknownGroup = errors.New("unknown group")
 
-const labelAllRepos = "[all]"
+const (
+	labelAllRepos  = "[all]"
+	labelUngrouped = "[ungrouped]"
+)
 
 func matchingGroups(
 	repos []string,
@@ -106,12 +109,21 @@ func setDifference(repos []string, covered map[string]struct{}) []string {
 	return diff
 }
 
-func (m *model) groupLabel() string {
-	if m.groupFilter != "" {
-		return "@" + m.groupFilter
-	}
+// stripGroupPrefix removes a leading '@' from a group name if present,
+// letting the group-add text input accept @work or work interchangeably.
+func stripGroupPrefix(name string) string {
+	return strings.TrimPrefix(name, "@")
+}
 
-	return labelAll
+func (m *model) groupLabel() string {
+	switch {
+	case m.groupFilter == config.ReservedNone:
+		return "ungrouped"
+	case m.groupFilter != "":
+		return "@" + m.groupFilter
+	default:
+		return labelAll
+	}
 }
 
 // activeRepoOrder returns the repos in scope: the filtered group's repos
@@ -123,7 +135,10 @@ func (m *model) groupLabel() string {
 func (m *model) activeRepoOrder() []string {
 	base := m.repoOrder
 
-	if m.groupFilter != "" {
+	switch {
+	case m.groupFilter == config.ReservedNone:
+		base = m.cfg.UngroupedRepos()
+	case m.groupFilter != "":
 		if g, ok := m.cfg.Groups[m.groupFilter]; ok {
 			base = g.Repos
 		}

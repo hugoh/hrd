@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/discover"
 	"github.com/hugoh/hrd/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -125,6 +123,12 @@ func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 		}
 
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+		}
+
 		tracked := trackedPaths(&cfg)
 		pattern := flagString(cmd, "pattern")
 		confirm := flagBool(cmd, "confirm")
@@ -161,6 +165,13 @@ func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string)
 		tracked := trackedPaths(&cfg)
 		pattern := flagString(cmd, "pattern")
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+
+		if group != "" {
+			if err := config.ValidGroupName(group); err != nil {
+				return err //nolint:wrapcheck // config error already has context
+			}
+		}
+
 		onlyTracked := flagBool(cmd, "tracked")
 		onlyUntracked := flagBool(cmd, "untracked")
 
@@ -178,7 +189,7 @@ func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string)
 
 		pathWidth := ui.GetTermWidth() - nameWidth - statusWidth - gap
 
-		header := []string{"NAME", "PATH", "STATUS"}
+		header := []string{NameLabel, PathLabel, StatusLabel}
 		maxWidths := []int{nameWidth, pathWidth, statusWidth}
 
 		rows := buildScanListRows(filtered, tracked, &cfg, onlyTracked, onlyUntracked)
@@ -355,50 +366,16 @@ func filterByPattern(paths []string, pattern string) ([]string, error) {
 // directories are skipped. Unreadable directories are warned about and
 // skipped rather than aborting the scan.
 func scanForRepos(root string, maxDepth int) ([]string, error) {
-	var found []string
+	found, warnings, err := discover.Repos(root, maxDepth)
+	if err != nil {
+		return nil, err //nolint:wrapcheck // discover.Repos already wraps with context
+	}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			ui.Warnf("scan: %v", err)
-
-			return nil
-		}
-
-		if !d.IsDir() {
-			return nil
-		}
-
-		if path != root && strings.HasPrefix(d.Name(), ".") {
-			return fs.SkipDir
-		}
-
-		if scanDepth(root, path) > maxDepth {
-			return fs.SkipDir
-		}
-
-		if _, derr := backend.Detect(path); derr == nil {
-			found = append(found, path)
-
-			return fs.SkipDir
-		}
-
-		return nil
-	})
-	if err != nil { // coverage-ignore — WalkDir errors are handled in the callback
-		return nil, fmt.Errorf("walking %q: %w", root, err)
+	for _, w := range warnings {
+		ui.Warnf("scan: %v", w.Err)
 	}
 
 	return found, nil
-}
-
-// scanDepth returns how many levels below root the path sits (root = 0).
-func scanDepth(root, path string) int {
-	rel, err := filepath.Rel(root, path)
-	if err != nil || rel == "." {
-		return 0
-	}
-
-	return strings.Count(rel, string(filepath.Separator)) + 1
 }
 
 // scanRepoName picks a config name for a discovered repo: the directory

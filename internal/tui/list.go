@@ -78,7 +78,9 @@ func (i groupItem) Title() string       { return i.name }
 func (i groupItem) Description() string { return i.desc }
 func (i groupItem) FilterValue() string { return i.name }
 
-func buildGroupItems(names []string, groups map[string]config.Group, totalRepos int) []list.Item {
+func buildGroupItems(
+	names []string, groups map[string]config.Group, totalRepos, ungroupedCount int,
+) []list.Item {
 	items := make([]list.Item, 0, len(names))
 	for _, name := range names {
 		var desc string
@@ -86,6 +88,8 @@ func buildGroupItems(names []string, groups map[string]config.Group, totalRepos 
 		switch name {
 		case labelAllRepos:
 			desc = fmt.Sprintf("all %d repos", totalRepos)
+		case labelUngrouped:
+			desc = repoCountLabel(ungroupedCount)
 		case labelNew:
 			desc = "create a new group"
 		default:

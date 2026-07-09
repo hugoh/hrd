@@ -228,11 +228,120 @@ func TestResolveScope_UnknownRepo(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown repo")
 }
 
+func TestUngroupedRepos(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"grouped":   {Path: "/g", Groups: []string{"work"}},
+			"ungrouped": {Path: "/u"},
+			"also":      {Path: "/a"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	assert.Equal(t, []string{"also", "ungrouped"}, cfg.UngroupedRepos())
+}
+
+func TestUngroupedRepos_NoneUngrouped(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1", Groups: []string{"work"}},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	assert.Empty(t, cfg.UngroupedRepos())
+}
+
+func TestGroupRepos_ReservedNone(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"grouped":   {Path: "/g", Groups: []string{"work"}},
+			"ungrouped": {Path: "/u"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	repos, ok := cfg.GroupRepos(ReservedNone)
+	require.True(t, ok)
+	assert.Equal(t, []string{"ungrouped"}, repos)
+}
+
+func TestGroupRepos_RealGroup(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1", Groups: []string{"work"}},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	repos, ok := cfg.GroupRepos("work")
+	require.True(t, ok)
+	assert.Equal(t, []string{"r1"}, repos)
+}
+
+func TestGroupRepos_Unknown(t *testing.T) {
+	cfg := &Config{Repos: map[string]Repo{}}
+	cfg.rebuildGroupsCache()
+
+	_, ok := cfg.GroupRepos("nonexistent")
+	assert.False(t, ok)
+}
+
+func TestResolveScope_ReservedNone(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"grouped":   {Path: "/g", Groups: []string{"work"}},
+			"ungrouped": {Path: "/u"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	names, err := cfg.ResolveScope([]string{ReservedNone})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ungrouped"}, names)
+}
+
+func TestIsReservedGroupName(t *testing.T) {
+	assert.True(t, IsReservedGroupName("@@none"))
+	assert.True(t, IsReservedGroupName("@@anything"))
+	assert.False(t, IsReservedGroupName("@work"))
+	assert.False(t, IsReservedGroupName("work"))
+}
+
+func TestValidGroupName(t *testing.T) {
+	require.NoError(t, ValidGroupName("work"))
+	require.Error(t, ValidGroupName("@work"))
+	require.Error(t, ValidGroupName("@@none"))
+	require.Error(t, ValidGroupName("@@foo"))
+}
+
 func TestAddRepo(t *testing.T) {
 	cfg := &Config{Repos: map[string]Repo{}}
 	cfg.AddRepo("myproject", Repo{Path: "/p"})
 	assert.Contains(t, cfg.Repos, "myproject")
 	assert.Equal(t, "/p", cfg.Repos["myproject"].Path)
+}
+
+func TestAddRoot(t *testing.T) {
+	cfg := &Config{Roots: map[string]Root{}}
+	cfg.AddRoot("myroots", Root{Path: "/r", Depth: 2, Groups: []string{"work"}})
+	assert.Contains(t, cfg.Roots, "myroots")
+	assert.Equal(t, "/r", cfg.Roots["myroots"].Path)
+	assert.Equal(t, 2, cfg.Roots["myroots"].Depth)
+	assert.Equal(t, []string{"work"}, cfg.Roots["myroots"].Groups)
+}
+
+func TestRemoveRoot(t *testing.T) {
+	cfg := &Config{
+		Roots: map[string]Root{
+			"r1": {Path: "/1"},
+			"r2": {Path: "/2"},
+		},
+	}
+
+	cfg.RemoveRoot("r1")
+	assert.NotContains(t, cfg.Roots, "r1")
+	assert.Contains(t, cfg.Roots, "r2")
 }
 
 func TestRemoveRepo(t *testing.T) {

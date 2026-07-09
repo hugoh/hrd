@@ -48,6 +48,11 @@ func TestGroupLabel(t *testing.T) {
 		m.groupFilter = ""
 		assert.Equal(t, "all", m.groupLabel())
 	})
+
+	t.Run("ungrouped filter", func(t *testing.T) {
+		m.groupFilter = config.ReservedNone
+		assert.Equal(t, "ungrouped", m.groupLabel())
+	})
 }
 
 func TestActiveRepoOrder(t *testing.T) {
@@ -79,6 +84,18 @@ func TestActiveRepoOrder(t *testing.T) {
 		m.groupFilter = ""
 		m.cfg.Groups = map[string]config.Group{}
 		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
+	})
+
+	t.Run("reserved none filter uses ungrouped repos", func(t *testing.T) {
+		m.groupFilter = config.ReservedNone
+		m.cfg = config.Config{
+			Repos: map[string]config.Repo{
+				"a": {Groups: []string{"work"}},
+				"b": {},
+				"c": {},
+			},
+		}
+		assert.Equal(t, []string{"b", "c"}, m.activeRepoOrder())
 	})
 }
 
