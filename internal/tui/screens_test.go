@@ -63,7 +63,7 @@ func newGroupFilterPopupModel(t *testing.T) *model {
 
 func TestHandleGroupKeyEnterNonAll(t *testing.T) {
 	m := newGroupFilterPopupModel(t)
-	m.groupList.Select(2)
+	m.groupList.Select(3)
 
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
@@ -79,6 +79,17 @@ func TestHandleGroupKeyEnterUngrouped(t *testing.T) {
 	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	assert.Equal(t, config.ReservedNone, m.groupFilter, "groupFilter")
+	assert.Equal(t, screenMain, m.screen, "screen")
+	assert.True(t, m.loading, "loading should be true after group selection")
+}
+
+func TestHandleGroupKeyEnterAttention(t *testing.T) {
+	m := newGroupFilterPopupModel(t)
+	m.groupList.Select(2)
+
+	_, _ = m.handleGroupKey(tea.KeyPressMsg{Code: tea.KeyEnter})
+
+	assert.Equal(t, config.ReservedAttention, m.groupFilter, "groupFilter")
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.True(t, m.loading, "loading should be true after group selection")
 }
@@ -150,8 +161,13 @@ func TestOpenGroupPopup(t *testing.T) {
 	openGroupPopup(m, groupFilterMode)
 
 	assert.Equal(t, screenGroup, m.screen, "screen")
-	assert.Len(t, m.groupList.Items(), 4, "expected 4 popup items ([all], [ungrouped], 2 groups)")
-	assert.Equal(t, 3, m.groupList.Index(), "cursor should point to work")
+	assert.Len(
+		t,
+		m.groupList.Items(),
+		5,
+		"expected 5 popup items ([all], [ungrouped], [attention], 2 groups)",
+	)
+	assert.Equal(t, 4, m.groupList.Index(), "cursor should point to work")
 }
 
 func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
@@ -167,7 +183,12 @@ func TestOpenGroupPopupNoGroupFilter(t *testing.T) {
 	openGroupPopup(m, groupFilterMode)
 
 	assert.Equal(t, screenGroup, m.screen, "screen")
-	assert.Len(t, m.groupList.Items(), 3, "expected 3 popup items ([all], [ungrouped], 1 group)")
+	assert.Len(
+		t,
+		m.groupList.Items(),
+		4,
+		"expected 4 popup items ([all], [ungrouped], [attention], 1 group)",
+	)
 	assert.Equal(t, 0, m.groupList.Index(), "cursor should be at [all]")
 }
 
@@ -186,11 +207,15 @@ func TestOpenGroupPopupIncludesUngrouped(t *testing.T) {
 	openGroupPopup(m, groupFilterMode)
 
 	items := m.groupList.Items()
-	require.Len(t, items, 3)
+	require.Len(t, items, 4)
 
 	gi, ok := items[1].(groupItem)
 	require.True(t, ok)
 	assert.Equal(t, labelUngrouped, gi.name)
+
+	ai, ok := items[2].(groupItem)
+	require.True(t, ok)
+	assert.Equal(t, labelAttention, ai.name)
 }
 
 func TestOpenGroupPopupCursorAtUngrouped(t *testing.T) {

@@ -79,7 +79,7 @@ func (i groupItem) Description() string { return i.desc }
 func (i groupItem) FilterValue() string { return i.name }
 
 func buildGroupItems(
-	names []string, groups map[string]config.Group, totalRepos, ungroupedCount int,
+	names []string, groups map[string]config.Group, totalRepos, ungroupedCount, attentionCount int,
 ) []list.Item {
 	items := make([]list.Item, 0, len(names))
 	for _, name := range names {
@@ -90,6 +90,8 @@ func buildGroupItems(
 			desc = fmt.Sprintf("all %d repos", totalRepos)
 		case labelUngrouped:
 			desc = repoCountLabel(ungroupedCount)
+		case labelAttention:
+			desc = repoCountLabel(attentionCount)
 		case labelNew:
 			desc = "create a new group"
 		default:

@@ -55,6 +55,11 @@ func TestGroupLabel(t *testing.T) {
 		m.groupFilter = config.ReservedNone
 		assert.Equal(t, "ungrouped", m.groupLabel())
 	})
+
+	t.Run("attention filter", func(t *testing.T) {
+		m.groupFilter = config.ReservedAttention
+		assert.Equal(t, "attention", m.groupLabel())
+	})
 }
 
 func TestActiveRepoOrder(t *testing.T) {
@@ -98,6 +103,19 @@ func TestActiveRepoOrder(t *testing.T) {
 			},
 		}
 		assert.Equal(t, []string{"b", "c"}, m.activeRepoOrder())
+	})
+
+	t.Run("reserved attention filter uses repos needing attention", func(t *testing.T) {
+		m.groupFilter = config.ReservedAttention
+		m.cfg = config.Config{}
+		m.repoOrder = []string{"a", "b", "c"}
+		m.statuses = map[string]runner.StatusResult{
+			"a": {Status: backend.RepoStatus{Dirty: true}},
+			"b": {Status: backend.RepoStatus{}},
+			"c": {Status: backend.RepoStatus{}},
+		}
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+		m.repoOrder = []string{"a", "b", "c"}
 	})
 }
 

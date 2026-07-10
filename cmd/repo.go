@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
 	"github.com/spf13/cobra"
 )
@@ -373,19 +375,30 @@ func groupActionCmd(
 	}
 }
 
-// groupCommands returns the `group` subcommand (read-only).
+// groupCommands returns the `group` subcommand (read-only). It also accepts
+// its own --list-reserved flag (printing what the "@@" reserved pseudo-
+// groups mean) since that's a fast, static lookup unrelated to any specific
+// group listing.
 func groupCommands(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameGroup,
 		Short: "list repo groups",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if flagBool(cmd, "list-reserved") {
+				return renderReservedGroupMeanings()
+			}
+
+			return cmd.Help()
+		},
 	}
+	cmd.Flags().Bool("list-reserved", false, `list reserved "@@" pseudo-groups and what they mean`)
 	cmd.AddCommand(groupListCmd(cfgPath))
 
 	return cmd
 }
 
 func groupListCmd(cfgPath *string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "ls [name]",
 		Short: "list groups",
 		Args:  cobra.ArbitraryArgs,
@@ -398,10 +411,16 @@ func groupListCmd(cfgPath *string) *cobra.Command {
 		},
 		RunE: listGroupsAction(cfgPath),
 	}
+	cmd.Flags().Bool(
+		"live", false,
+		`also compute repo membership for reserved groups that require live git/jj status (e.g. @@attention)`,
+	)
+
+	return cmd
 }
 
 func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
-	return func(_ *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadResolvedConfig(cfgPath, "group ls")
 		if err != nil {
 			return err
@@ -415,6 +434,10 @@ func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 				return fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))
 			}
 
+			if name == config.ReservedAttention {
+				repos = attentionRepos(cmd.Context(), cfg, repos)
+			}
+
 			for _, repo := range repos {
 				ui.Out(repo)
 			}
@@ -424,11 +447,11 @@ func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 
 		if len(cfg.Groups) == 0 {
 			ui.Out("no groups defined")
-
-			return nil
+		} else if err := renderGroupTable(cfg); err != nil {
+			return err
 		}
 
-		return renderGroupTable(cfg)
+		return renderReservedGroupMemberships(cmd.Context(), cfg, flagBool(cmd, "live"))
 	}
 }
 
@@ -437,6 +460,89 @@ func renderGroupTable(cfg config.Config) error {
 		ui.Out(displayGroup(name))
 		ui.Out("  " + strings.Join(group.Repos, ", "))
 	}
+
+	return nil
+}
+
+// renderReservedGroupMemberships prints each reserved "@@" pseudo-group
+// alongside the repos it currently contains, in the same visual format as
+// renderGroupTable, so they read as "more groups in the list" rather than a
+// separate concept. Live groups (e.g. @@attention) only have their
+// membership computed when live is true; otherwise a hint is printed
+// instead, keeping the default "hrd group ls" a fast, config-only read.
+func renderReservedGroupMemberships(ctx context.Context, cfg config.Config, live bool) error {
+	for _, rg := range config.ReservedGroups {
+		if rg.Live && !live {
+			ui.Out(rg.Name + "  (pass --live to compute)")
+
+			continue
+		}
+
+		repos, ok := cfg.GroupRepos(rg.Name)
+		if !ok {
+			continue
+		}
+
+		if rg.Name == config.ReservedAttention {
+			repos = attentionRepos(ctx, cfg, repos)
+		}
+
+		ui.Out(rg.Name)
+
+		if len(repos) == 0 {
+			ui.Out("  (none)")
+		} else {
+			ui.Out("  " + strings.Join(repos, ", "))
+		}
+	}
+
+	return nil
+}
+
+// attentionRepos narrows candidates down to repos currently needing
+// attention (dirty, or ahead/behind/diverged/gone vs. their remote),
+// gathering live status in parallel. Repos whose status can't be read are
+// excluded with a warning, matching applyStatusFilter's behavior.
+func attentionRepos(ctx context.Context, cfg config.Config, candidates []string) []string {
+	statuses := make(map[string]runner.StatusResult, len(candidates))
+
+	ch := runner.GatherStatus(ctx, cfg.Repos, candidates, cfg.Settings.Concurrency)
+	for res := range ch {
+		statuses[res.RepoName] = res
+	}
+
+	var matched []string
+
+	for _, name := range candidates {
+		res := statuses[name]
+		if res.Err != nil {
+			ui.Warnf("%s: %v", name, res.Err)
+
+			continue
+		}
+
+		if res.Status.NeedsAttention() {
+			matched = append(matched, name)
+		}
+	}
+
+	return matched
+}
+
+// renderReservedGroupMeanings prints the "@@" pseudo-groups and what they
+// mean, for "hrd group --list-reserved".
+func renderReservedGroupMeanings() error {
+	rows := make([][]string, 0, len(config.ReservedGroups))
+	for _, rg := range config.ReservedGroups {
+		rows = append(rows, []string{rg.Name, rg.Desc})
+	}
+
+	const nameWidth = len("@@attention") + 2
+
+	header := []string{"GROUP", "MEANING"}
+	widths := ui.EffectiveWidths(header, rows, []int{nameWidth, ui.GetTermWidth()})
+
+	_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(header, rows, widths))
 
 	return nil
 }

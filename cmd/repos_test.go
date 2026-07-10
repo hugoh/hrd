@@ -42,6 +42,38 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 			wantContent: "no groups defined",
 		},
 		{
+			name:        "TestGroupListShowsReservedGroups",
+			cfg:         groupListConfig(),
+			args:        []string{"group", "ls"},
+			wantContent: "@@none",
+		},
+		{
+			// Without --live, @@attention shows a hint instead of computing
+			// live status, keeping the default listing a fast config-only read.
+			name:        "TestGroupListShowsAttentionHintWithoutLive",
+			cfg:         groupListConfig(),
+			args:        []string{"group", "ls"},
+			wantContent: "@@attention  (pass --live to compute)",
+		},
+		{
+			name:        "TestGroupListNoGroupsStillShowsReservedGroups",
+			cfg:         config.Config{Repos: map[string]config.Repo{}},
+			args:        []string{"group", "ls"},
+			wantContent: "@@none",
+		},
+		{
+			// Every repo is grouped, so @@none's membership is empty and
+			// must be shown explicitly, not as a blank/missing line.
+			name: "TestGroupListReservedNoneShowsNoneWhenEmpty",
+			cfg: config.Config{
+				Repos: map[string]config.Repo{
+					"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
+				},
+			},
+			args:        []string{"group", "ls"},
+			wantContent: "@@none\n  (none)",
+		},
+		{
 			name:       "TestGroupListWithName",
 			cfg:        groupListConfig(),
 			args:       []string{"group", "ls", "work"},

@@ -118,6 +118,72 @@ func TestShellAttentionFilter(t *testing.T) {
 	assert.NotContains(t, out, "cleanrepo")
 }
 
+// TestGroupLsAttentionSingleName is a regression test: Config.GroupRepos
+// intentionally returns every repo for @@attention (correct for CLI-dispatch
+// scope resolution), but "hrd group ls @@attention" printed that unfiltered
+// result directly — showing all repos, not just the ones needing attention.
+func TestGroupLsAttentionSingleName(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls", "@@attention"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+func TestGroupLsWithoutLiveShowsAttentionHint(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls"})
+	assert.Contains(t, out, "@@attention  (pass --live to compute)")
+}
+
+func TestGroupLsLiveComputesAttentionMembership(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls", "--live"})
+	assert.Contains(t, out, "@@attention")
+	assert.Contains(t, out, "dirtyrepo")
+
+	lines := strings.Split(out, "\n")
+
+	var attentionLine string
+
+	for i, line := range lines {
+		if line == "@@attention" && i+1 < len(lines) {
+			attentionLine = lines[i+1]
+		}
+	}
+
+	assert.Equal(
+		t,
+		"  dirtyrepo",
+		attentionLine,
+		"only dirtyrepo should be listed under @@attention",
+	)
+}
+
+func TestGroupListReservedFlag(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	out := runAppCapture(t, cfgPath, []string{"group", "--list-reserved"})
+	assert.Contains(t, out, "@@none")
+	assert.Contains(t, out, "@@attention")
+	assert.Contains(t, out, "repos with no group")
+}
+
+// TestGroupBareShowsHelp verifies "hrd group" (no subcommand, no flag)
+// doesn't error — it falls back to cobra's default help behavior. Cobra
+// writes help to the command's Out writer, which the test harness redirects
+// to an internal buffer (see bufferWriters), not stdout, so this only
+// asserts on the error, not captured content.
+func TestGroupBareShowsHelp(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	app := newTestApp()
+
+	err := RunApp(t.Context(), app, []string{"hrd", "--config", cfgPath, "group"})
+	require.NoError(t, err)
+}
+
 func TestRepoRootAddRejectsReservedGroup(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := setupTestConfig(t, config.Config{})

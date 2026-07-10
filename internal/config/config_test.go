@@ -322,6 +322,25 @@ func TestIsReservedGroupName(t *testing.T) {
 	assert.False(t, IsReservedGroupName("work"))
 }
 
+// TestReservedGroups guards the CLI/TUI "@@ keyword -> meaning" registry
+// against drift: every reserved pseudo-group must be listed here exactly
+// once, with a non-empty description.
+func TestReservedGroups(t *testing.T) {
+	names := make([]string, 0, len(ReservedGroups))
+	live := make(map[string]bool, len(ReservedGroups))
+
+	for _, rg := range ReservedGroups {
+		names = append(names, rg.Name)
+		live[rg.Name] = rg.Live
+		assert.True(t, IsReservedGroupName(rg.Name))
+		assert.NotEmpty(t, rg.Desc)
+	}
+
+	assert.ElementsMatch(t, []string{ReservedNone, ReservedAttention}, names)
+	assert.False(t, live[ReservedNone], "ReservedNone should be a free, static lookup")
+	assert.True(t, live[ReservedAttention], "ReservedAttention requires live status")
+}
+
 func TestValidGroupName(t *testing.T) {
 	require.NoError(t, ValidGroupName("work"))
 	require.Error(t, ValidGroupName("@work"))

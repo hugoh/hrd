@@ -176,6 +176,33 @@ const ReservedNone = "@@none"
 // gathered (see cmd.applyStatusFilter and backend.RepoStatus.NeedsAttention).
 const ReservedAttention = "@@attention"
 
+// ReservedGroupInfo pairs a reserved "@@" pseudo-group token with a
+// one-line explanation, for CLI/TUI surfaces that list available reserved
+// groups (see cmd's "hrd group" and the TUI's "@" popup).
+type ReservedGroupInfo struct {
+	Name string
+	Desc string
+
+	// Live is true when computing this group's repo membership requires
+	// gathering live git/jj status (e.g. ReservedAttention), as opposed to
+	// a free, static lookup from config alone (e.g. ReservedNone).
+	Live bool
+}
+
+// ReservedGroups lists all reserved pseudo-groups in a stable, deliberate
+// order (map iteration order is not used) so "hrd group ls" and the TUI
+// popup show them consistently.
+//
+//nolint:gochecknoglobals // read-only registry, not mutated at runtime
+var ReservedGroups = []ReservedGroupInfo{
+	{Name: ReservedNone, Desc: "repos with no group", Live: false},
+	{
+		Name: ReservedAttention,
+		Desc: "repos needing attention (dirty, or ahead/behind/diverged/gone vs. remote)",
+		Live: true,
+	},
+}
+
 const reservedGroupPrefix = "@@"
 
 // IsReservedGroupName reports whether name is in the reserved "@@" pseudo-
