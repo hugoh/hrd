@@ -322,6 +322,16 @@ func TestIsReservedGroupName(t *testing.T) {
 	assert.False(t, IsReservedGroupName("work"))
 }
 
+// TestIsKnownReservedGroup guards scope-validation code (cmd.scopeName)
+// against drift from ReservedGroups: "@@"-shaped but undefined tokens must
+// be rejected, while every defined reserved group must be accepted.
+func TestIsKnownReservedGroup(t *testing.T) {
+	assert.True(t, IsKnownReservedGroup(ReservedNone))
+	assert.True(t, IsKnownReservedGroup(ReservedAttention))
+	assert.False(t, IsKnownReservedGroup("@@bogus"))
+	assert.False(t, IsKnownReservedGroup("work"))
+}
+
 // TestReservedGroups guards the CLI/TUI "@@ keyword -> meaning" registry
 // against drift: every reserved pseudo-group must be listed here exactly
 // once, with a non-empty description.

@@ -42,15 +42,23 @@ func addDispatchFlags(fs *pflag.FlagSet) {
 
 // resolvedScope bundles what loadAndResolve/loadAndSplit produce for a
 // command's repo scope: the loaded config, the expanded repo names, and
-// whether the raw scope included the "@@attention" reserved pseudo-group
-// (forceAttention) — which forces applyStatusFilter's status filter on even
-// without --dirty/--ahead/--behind. Keeping these together as one value
-// stops each new cross-cutting scope concern from growing every function
-// signature along the loadAndResolve/loadAndSplit → applyStatusFilter chain.
+// whether the raw scope explicitly named the "@@attention" reserved
+// pseudo-group (attentionRequested) — which forces applyStatusFilter's
+// status filter on even without --dirty/--ahead/--behind. Keeping these
+// together as one value stops each new cross-cutting scope concern from
+// growing every function signature along the loadAndResolve/loadAndSplit →
+// applyStatusFilter chain.
+//
+// attentionRequested is intentionally specific to @@attention, not a
+// generic "this scope needs live status" flag: the filter it forces
+// (dirty/ahead/behind=true) is exactly @@attention's definition
+// (backend.RepoStatus.NeedsAttention()). A future second reserved group
+// requiring live status but with different filter semantics would need its
+// own mechanism here, not a rename of this one.
 type resolvedScope struct {
-	cfg            config.Config
-	names          []string
-	forceAttention bool
+	cfg                config.Config
+	names              []string
+	attentionRequested bool
 }
 
 // loadAndResolve loads the config and resolves the CLI scope (positional
@@ -69,12 +77,12 @@ func loadAndResolve(
 		return resolvedScope{}, err
 	}
 
-	names, forceAttention, err := resolveScope(args, &cfg)
+	names, attentionRequested, err := resolveScope(args, &cfg)
 	if err != nil {
 		return resolvedScope{}, err
 	}
 
-	scope := resolvedScope{cfg: cfg, names: names, forceAttention: forceAttention}
+	scope := resolvedScope{cfg: cfg, names: names, attentionRequested: attentionRequested}
 	if len(names) == 0 {
 		return scope, errNoReposMatched
 	}
@@ -100,14 +108,14 @@ func resolveScope(args []string, cfg *config.Config) ([]string, bool, error) {
 		names = append(names, name)
 	}
 
-	forceAttention := hasAttentionScope(names)
+	attentionRequested := hasAttentionScope(names)
 
 	names, err := cfg.ResolveScope(names)
 	if err != nil {
 		return nil, false, fmt.Errorf("resolving scope: %w", err)
 	}
 
-	return names, forceAttention, nil
+	return names, attentionRequested, nil
 }
 
 // scopeName reports whether arg names a known repo, group, or reserved
@@ -115,7 +123,7 @@ func resolveScope(args []string, cfg *config.Config) ([]string, bool, error) {
 // a reserved "@@" token is returned unchanged).
 func scopeName(arg string, cfg *config.Config) (string, bool) {
 	if config.IsReservedGroupName(arg) {
-		return arg, arg == config.ReservedNone || arg == config.ReservedAttention
+		return arg, config.IsKnownReservedGroup(arg)
 	}
 
 	if _, ok := cfg.Repos[arg]; ok {
@@ -153,14 +161,14 @@ func loadAndSplit(
 		return resolvedScope{}, nil, err
 	}
 
-	forceAttention := hasAttentionScope(rawScope)
+	attentionRequested := hasAttentionScope(rawScope)
 
 	resolved, err := cfg.ResolveScope(rawScope)
 	if err != nil {
 		return resolvedScope{}, nil, fmt.Errorf("resolving scope: %w", err)
 	}
 
-	scope := resolvedScope{cfg: cfg, names: resolved, forceAttention: forceAttention}
+	scope := resolvedScope{cfg: cfg, names: resolved, attentionRequested: attentionRequested}
 	if len(resolved) == 0 {
 		return scope, nil, errNoReposMatched
 	}

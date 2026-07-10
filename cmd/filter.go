@@ -68,20 +68,20 @@ func (f statusFilter) matches(st backend.RepoStatus) bool {
 
 // applyStatusFilter narrows scope.names down to repos matching the status
 // filter flags on cmd, gathering statuses in parallel. With no filter flags
-// set and scope.forceAttention false, it returns the input unchanged and a
-// nil status map. forceAttention is set when the caller's scope included the
-// "@@attention" reserved pseudo-group, which requires the same
-// dirty/ahead/behind union as backend.RepoStatus.NeedsAttention even without
-// explicit filter flags. Repos whose status cannot be read are excluded with
-// a warning. The gathered statuses are returned so callers (ls) can render
-// them without a second gather.
+// set and scope.attentionRequested false, it returns the input unchanged and
+// a nil status map. attentionRequested is set when the caller's scope
+// explicitly named the "@@attention" reserved pseudo-group, which requires
+// the same dirty/ahead/behind union as backend.RepoStatus.NeedsAttention
+// even without explicit filter flags. Repos whose status cannot be read are
+// excluded with a warning. The gathered statuses are returned so callers
+// (ls) can render them without a second gather.
 func applyStatusFilter(
 	ctx context.Context,
 	cmd *cobra.Command,
 	scope resolvedScope,
 ) ([]string, map[string]runner.StatusResult) {
 	filter := statusFilterFromCmd(cmd)
-	if scope.forceAttention {
+	if scope.attentionRequested {
 		filter.dirty, filter.ahead, filter.behind = true, true, true
 	}
 

@@ -211,6 +211,17 @@ func IsReservedGroupName(name string) bool {
 	return strings.HasPrefix(name, reservedGroupPrefix)
 }
 
+// IsKnownReservedGroup reports whether name is one of the tokens listed in
+// ReservedGroups — as opposed to merely having the "@@" prefix (which
+// IsReservedGroupName checks). Scope-validation code should use this so a
+// new entry added to ReservedGroups is automatically accepted, instead of
+// requiring a separate hardcoded name check to be kept in sync.
+func IsKnownReservedGroup(name string) bool {
+	return slices.ContainsFunc(ReservedGroups, func(rg ReservedGroupInfo) bool {
+		return rg.Name == name
+	})
+}
+
 var errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
 
 // ValidGroupName rejects any group name starting with "@" — real group
