@@ -6,17 +6,24 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        type: choice
+        description: "Version bump type"
+        default: auto
+        options: [auto, patch, minor, major]
 
 permissions: {}
 
 jobs:
   hk:
-    uses: hugoh/go-tools/.github/workflows/go-hk.yml@6f474d4b70ee5897a1bf3c250331ea680f85788a
+    uses: hugoh/go-tools/.github/workflows/go-hk.yml@d3a8aedea8534f61a419f2cd76fc4001ac044a9e
     permissions:
       contents: read
 
   goci:
-    uses: hugoh/go-tools/.github/workflows/go-ci.yml@6f474d4b70ee5897a1bf3c250331ea680f85788a
+    uses: hugoh/go-tools/.github/workflows/go-ci.yml@d3a8aedea8534f61a419f2cd76fc4001ac044a9e
     permissions:
       contents: read
     secrets:
@@ -24,9 +31,11 @@ jobs:
 
   release:
     needs: [hk, goci]
-    uses: hugoh/go-tools/.github/workflows/go-release.yml@6f474d4b70ee5897a1bf3c250331ea680f85788a
+    uses: hugoh/go-tools/.github/workflows/go-release.yml@d3a8aedea8534f61a419f2cd76fc4001ac044a9e
     permissions:
       contents: write
+    with:
+      bump_type: ${{ inputs.bump_type || 'auto' }}
     secrets:
       gh_token: ${{ secrets.GITHUB_TOKEN }}
       tap_github_token: ${{ secrets.TAP_GITHUB_TOKEN }}
