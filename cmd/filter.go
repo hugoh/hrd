@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/hugoh/hrd/internal/backend"
-	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
 	"github.com/spf13/cobra"
@@ -67,41 +66,39 @@ func (f statusFilter) matches(st backend.RepoStatus) bool {
 	return false
 }
 
-// applyStatusFilter narrows names down to repos matching the status filter
-// flags on cmd, gathering statuses in parallel. With no filter flags set and
-// forceAttention false, it returns the input unchanged and a nil status map.
-// forceAttention is set when the caller's scope included the "@@attention"
-// reserved pseudo-group, which requires the same dirty/ahead/behind union as
-// backend.RepoStatus.NeedsAttention even without explicit filter flags.
-// Repos whose status cannot be read are excluded with a warning. The
-// gathered statuses are returned so callers (ls) can render them without a
-// second gather.
+// applyStatusFilter narrows scope.names down to repos matching the status
+// filter flags on cmd, gathering statuses in parallel. With no filter flags
+// set and scope.forceAttention false, it returns the input unchanged and a
+// nil status map. forceAttention is set when the caller's scope included the
+// "@@attention" reserved pseudo-group, which requires the same
+// dirty/ahead/behind union as backend.RepoStatus.NeedsAttention even without
+// explicit filter flags. Repos whose status cannot be read are excluded with
+// a warning. The gathered statuses are returned so callers (ls) can render
+// them without a second gather.
 func applyStatusFilter(
 	ctx context.Context,
 	cmd *cobra.Command,
-	cfg *config.Config,
-	names []string,
-	forceAttention bool,
+	scope resolvedScope,
 ) ([]string, map[string]runner.StatusResult) {
 	filter := statusFilterFromCmd(cmd)
-	if forceAttention {
+	if scope.forceAttention {
 		filter.dirty, filter.ahead, filter.behind = true, true, true
 	}
 
 	if !filter.active() {
-		return names, nil
+		return scope.names, nil
 	}
 
-	statuses := make(map[string]runner.StatusResult, len(names))
+	statuses := make(map[string]runner.StatusResult, len(scope.names))
 
-	ch := runner.GatherStatus(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
+	ch := runner.GatherStatus(ctx, scope.cfg.Repos, scope.names, scope.cfg.Settings.Concurrency)
 	for res := range ch {
 		statuses[res.RepoName] = res
 	}
 
 	var matched []string
 
-	for _, name := range names {
+	for _, name := range scope.names {
 		res := statuses[name]
 		if res.Err != nil {
 			ui.Warnf("%s: %v", name, res.Err)

@@ -45,35 +45,47 @@ func addDispatchFlags(fs *pflag.FlagSet) {
 	addStatusFilterFlags(fs)
 }
 
+// resolvedScope bundles what loadAndResolve/loadAndSplit produce for a
+// command's repo scope: the loaded config, the expanded repo names, and
+// whether the raw scope included the "@@attention" reserved pseudo-group
+// (forceAttention) — which forces applyStatusFilter's status filter on even
+// without --dirty/--ahead/--behind. Keeping these together as one value
+// stops each new cross-cutting scope concern from growing every function
+// signature along the loadAndResolve/loadAndSplit → applyStatusFilter chain.
+type resolvedScope struct {
+	cfg            config.Config
+	names          []string
+	forceAttention bool
+}
+
 // loadAndResolve loads the config and resolves the CLI scope (-r flag plus
 // positional args, all of which must be known repos or groups). These
 // commands take no subprocess args, so args after a "--" separator are
 // scope too — parsing already folds both sides of "--" into one args slice
 // (see splitScopeArgs for the commands that do distinguish the two sides).
 // The loaded config is returned alongside errNoReposMatched so callers can
-// inspect it (e.g. for the ls onboarding hint). The returned bool reports
-// whether the raw scope included the "@@attention" pseudo-group, so callers
-// can force the status filter on even without --dirty/--ahead/--behind.
+// inspect it (e.g. for the ls onboarding hint).
 func loadAndResolve(
 	cfgPath *string,
 	cmd *cobra.Command,
 	args []string,
-) (config.Config, []string, bool, error) {
+) (resolvedScope, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, false, err
+		return resolvedScope{}, err
 	}
 
 	names, forceAttention, err := resolveScope(cmd, args, &cfg)
 	if err != nil {
-		return config.Config{}, nil, false, err
+		return resolvedScope{}, err
 	}
 
+	scope := resolvedScope{cfg: cfg, names: names, forceAttention: forceAttention}
 	if len(names) == 0 {
-		return cfg, nil, forceAttention, errNoReposMatched
+		return scope, errNoReposMatched
 	}
 
-	return cfg, names, forceAttention, nil
+	return scope, nil
 }
 
 // hasAttentionScope reports whether names contains the "@@attention"
@@ -136,30 +148,31 @@ func loadAndSplit(
 	cfgPath *string,
 	cmd *cobra.Command,
 	args []string,
-) (config.Config, []string, []string, bool, error) {
+) (resolvedScope, []string, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, nil, false, err
+		return resolvedScope{}, nil, err
 	}
 
-	scope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
+	rawScope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
 	if err != nil {
-		return config.Config{}, nil, nil, false, err
+		return resolvedScope{}, nil, err
 	}
 
-	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), scope)
+	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), rawScope)
 	forceAttention := hasAttentionScope(names)
 
 	resolved, err := cfg.ResolveScope(names)
 	if err != nil {
-		return config.Config{}, nil, nil, false, fmt.Errorf("resolving scope: %w", err)
+		return resolvedScope{}, nil, fmt.Errorf("resolving scope: %w", err)
 	}
 
+	scope := resolvedScope{cfg: cfg, names: resolved, forceAttention: forceAttention}
 	if len(resolved) == 0 {
-		return cfg, nil, nil, forceAttention, errNoReposMatched
+		return scope, nil, errNoReposMatched
 	}
 
-	return cfg, resolved, cmdArgs, forceAttention, nil
+	return scope, cmdArgs, nil
 }
 
 // splitScopeArgs splits positional args into repo/group scope and
@@ -312,28 +325,28 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			cfg, names, forceAttention, err := loadAndResolve(cfgPath, cmd, args)
+			scope, err := loadAndResolve(cfgPath, cmd, args)
 			if err != nil {
 				return err
 			}
 
-			names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
+			names, _ := applyStatusFilter(ctx, cmd, scope)
 			if len(names) == 0 {
 				return nil
 			}
 
 			if flagBool(cmd, "interactive") {
-				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd, nil)
+				return runSubcmdInteractive(ctx, scope.cfg.Repos, names, subcmd, nil)
 			}
 
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
 				ch := runner.VCSSubcmd(
 					ctx,
-					cfg.Repos,
+					scope.cfg.Repos,
 					names,
 					subcmd,
 					nil,
-					cfg.Settings.Concurrency,
+					scope.cfg.Settings.Concurrency,
 				)
 				for res := range ch {
 					resultCh <- res
@@ -378,7 +391,7 @@ func shellCmdAction(
 ) error {
 	ctx := cmd.Context()
 
-	cfg, names, shellArgs, forceAttention, err := loadAndSplit(cfgPath, cmd, args)
+	scope, shellArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -387,12 +400,12 @@ func shellCmdAction(
 		return errNoShellCommand
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
+	names, _ := applyStatusFilter(ctx, cmd, scope)
 	if len(names) == 0 {
 		return nil
 	}
 
-	return runShell(ctx, &cfg, names, shellJoin(shellArgs), flagBool(cmd, "interactive"))
+	return runShell(ctx, &scope.cfg, names, shellJoin(shellArgs), flagBool(cmd, "interactive"))
 }
 
 // runShell dispatches a shell command string across names, sequentially
@@ -515,9 +528,9 @@ func lsAction(
 	return func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		cfg, names, forceAttention, err := loadAndResolve(cfgPath, cmd, args)
+		scope, err := loadAndResolve(cfgPath, cmd, args)
 		if errors.Is(err, errNoReposMatched) {
-			if len(cfg.Repos) == 0 {
+			if len(scope.cfg.Repos) == 0 {
 				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)
 			} else {
 				ui.Warnf("no repos matched")
@@ -530,7 +543,7 @@ func lsAction(
 			return err
 		}
 
-		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
+		names, statuses := applyStatusFilter(ctx, cmd, scope)
 		if len(names) == 0 {
 			return nil
 		}
@@ -541,19 +554,19 @@ func lsAction(
 
 			return nil
 		case flagBool(cmd, "dirs"):
-			lsDirsOnly(cfg.Repos, names)
+			lsDirsOnly(scope.cfg.Repos, names)
 
 			return nil
 		}
 
 		vcsByName := make(map[string]string, len(names))
 		for _, n := range names {
-			vcsByName[n] = cfg.Repos[n].ActiveBackend()
+			vcsByName[n] = scope.cfg.Repos[n].ActiveBackend()
 		}
 
 		message := forceMessage || flagBool(cmd, "message")
 
-		gather := lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
+		gather := lsGatherCallback(ctx, scope.cfg.Repos, names, scope.cfg.Settings.Concurrency)
 		if statuses != nil {
 			gather = replayGather(names, statuses)
 		}
@@ -602,7 +615,7 @@ func runDispatch(
 	cfgPath *string,
 	backendName string,
 ) error {
-	cfg, names, cmdArgs, forceAttention, err := loadAndSplit(cfgPath, cmd, args)
+	scope, cmdArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -611,16 +624,16 @@ func runDispatch(
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names, forceAttention)
+	names, _ := applyStatusFilter(ctx, cmd, scope)
 	if len(names) == 0 {
 		return nil
 	}
 
 	if flagBool(cmd, "interactive") {
-		return dispatchInteractive(ctx, cfg.Repos, names, backendName, cmdArgs)
+		return dispatchInteractive(ctx, scope.cfg.Repos, names, backendName, cmdArgs)
 	}
 
-	return dispatchNonInteractive(ctx, &cfg, names, backendName, cmdArgs)
+	return dispatchNonInteractive(ctx, &scope.cfg, names, backendName, cmdArgs)
 }
 
 func runInteractive(ctx context.Context, dir, bin string, args []string) error {
