@@ -16,11 +16,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	cmdNameShell = "shell"
-
-	cmdReposFlag = "repos"
-)
+const cmdNameShell = "shell"
 
 var (
 	errNoReposMatched     = errors.New("no repos matched")
@@ -40,58 +36,86 @@ var ErrReposFailed = errors.New("repos failed")
 // addDispatchFlags registers the flags shared by every command that
 // dispatches a VCS operation across a repo scope.
 func addDispatchFlags(fs *pflag.FlagSet) {
-	fs.StringSliceP(cmdReposFlag, "r", nil, "comma-separated repo names or a single group name")
 	fs.BoolP("interactive", "i", false, "run with a real terminal (sequential, one repo at a time)")
 	addStatusFilterFlags(fs)
 }
 
-// loadAndResolve loads the config and resolves the CLI scope (-r flag plus
-// positional args, all of which must be known repos or groups). These
-// commands take no subprocess args, so args after a "--" separator are
-// scope too — parsing already folds both sides of "--" into one args slice
-// (see splitScopeArgs for the commands that do distinguish the two sides).
-// The loaded config is returned alongside errNoReposMatched so callers can
-// inspect it (e.g. for the ls onboarding hint).
-func loadAndResolve(
-	cfgPath *string,
-	cmd *cobra.Command,
-	args []string,
-) (config.Config, []string, error) {
-	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
-	if err != nil {
-		return config.Config{}, nil, err
-	}
-
-	names, err := resolveScope(cmd, args, &cfg)
-	if err != nil {
-		return config.Config{}, nil, err
-	}
-
-	if len(names) == 0 {
-		return cfg, nil, errNoReposMatched
-	}
-
-	return cfg, names, nil
+// resolvedScope bundles what loadAndResolve/loadAndSplit produce for a
+// command's repo scope: the loaded config, the expanded repo names, and
+// whether the raw scope explicitly named the "@@attention" reserved
+// pseudo-group (attentionRequested) — which forces applyStatusFilter's
+// status filter on even without --dirty/--ahead/--behind. Keeping these
+// together as one value stops each new cross-cutting scope concern from
+// growing every function signature along the loadAndResolve/loadAndSplit →
+// applyStatusFilter chain.
+//
+// attentionRequested is intentionally specific to @@attention, not a
+// generic "this scope needs live status" flag: the filter it forces
+// (dirty/ahead/behind=true) is exactly @@attention's definition
+// (backend.RepoStatus.NeedsAttention()). A future second reserved group
+// requiring live status but with different filter semantics would need its
+// own mechanism here, not a rename of this one.
+type resolvedScope struct {
+	cfg                config.Config
+	names              []string
+	attentionRequested bool
 }
 
-func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]string, error) {
-	names := slices.Clone(flagStringSlice(cmd, cmdReposFlag))
+// loadAndResolve loads the config and resolves the CLI scope (positional
+// args, all of which must be known repos or groups). These commands take no
+// subprocess args, so args after a "--" separator are scope too — parsing
+// already folds both sides of "--" into one args slice (see splitScopeArgs
+// for the commands that do distinguish the two sides). The loaded config is
+// returned alongside errNoReposMatched so callers can inspect it (e.g. for
+// the ls onboarding hint).
+func loadAndResolve(
+	cfgPath *string,
+	args []string,
+) (resolvedScope, error) {
+	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
+	if err != nil {
+		return resolvedScope{}, err
+	}
+
+	names, attentionRequested, err := resolveScope(args, &cfg)
+	if err != nil {
+		return resolvedScope{}, err
+	}
+
+	scope := resolvedScope{cfg: cfg, names: names, attentionRequested: attentionRequested}
+	if len(names) == 0 {
+		return scope, errNoReposMatched
+	}
+
+	return scope, nil
+}
+
+// hasAttentionScope reports whether names contains the "@@attention"
+// reserved pseudo-group token, prior to it being expanded by ResolveScope.
+func hasAttentionScope(names []string) bool {
+	return slices.Contains(names, config.ReservedAttention)
+}
+
+func resolveScope(args []string, cfg *config.Config) ([]string, bool, error) {
+	names := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		name, ok := scopeName(arg, cfg)
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", errUnknownScope, arg)
+			return nil, false, fmt.Errorf("%w: %s", errUnknownScope, arg)
 		}
 
 		names = append(names, name)
 	}
 
+	attentionRequested := hasAttentionScope(names)
+
 	names, err := cfg.ResolveScope(names)
 	if err != nil {
-		return nil, fmt.Errorf("resolving scope: %w", err)
+		return nil, false, fmt.Errorf("resolving scope: %w", err)
 	}
 
-	return names, nil
+	return names, attentionRequested, nil
 }
 
 // scopeName reports whether arg names a known repo, group, or reserved
@@ -99,7 +123,7 @@ func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]stri
 // a reserved "@@" token is returned unchanged).
 func scopeName(arg string, cfg *config.Config) (string, bool) {
 	if config.IsReservedGroupName(arg) {
-		return arg, arg == config.ReservedNone
+		return arg, config.IsKnownReservedGroup(arg)
 	}
 
 	if _, ok := cfg.Repos[arg]; ok {
@@ -126,29 +150,30 @@ func loadAndSplit(
 	cfgPath *string,
 	cmd *cobra.Command,
 	args []string,
-) (config.Config, []string, []string, error) {
+) (resolvedScope, []string, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
 	if err != nil {
-		return config.Config{}, nil, nil, err
+		return resolvedScope{}, nil, err
 	}
 
-	scope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
+	rawScope, cmdArgs, err := splitScopeArgs(cmd, args, &cfg)
 	if err != nil {
-		return config.Config{}, nil, nil, err
+		return resolvedScope{}, nil, err
 	}
 
-	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), scope)
+	attentionRequested := hasAttentionScope(rawScope)
 
-	resolved, err := cfg.ResolveScope(names)
+	resolved, err := cfg.ResolveScope(rawScope)
 	if err != nil {
-		return config.Config{}, nil, nil, fmt.Errorf("resolving scope: %w", err)
+		return resolvedScope{}, nil, fmt.Errorf("resolving scope: %w", err)
 	}
 
+	scope := resolvedScope{cfg: cfg, names: resolved, attentionRequested: attentionRequested}
 	if len(resolved) == 0 {
-		return cfg, nil, nil, errNoReposMatched
+		return scope, nil, errNoReposMatched
 	}
 
-	return cfg, resolved, cmdArgs, nil
+	return scope, cmdArgs, nil
 }
 
 // splitScopeArgs splits positional args into repo/group scope and
@@ -301,28 +326,28 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			cfg, names, err := loadAndResolve(cfgPath, cmd, args)
+			scope, err := loadAndResolve(cfgPath, args)
 			if err != nil {
 				return err
 			}
 
-			names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+			names, _ := applyStatusFilter(ctx, cmd, scope)
 			if len(names) == 0 {
 				return nil
 			}
 
 			if flagBool(cmd, "interactive") {
-				return runSubcmdInteractive(ctx, cfg.Repos, names, subcmd, nil)
+				return runSubcmdInteractive(ctx, scope.cfg.Repos, names, subcmd, nil)
 			}
 
 			return dispatch(names, subcmd, func(resultCh chan<- runner.Result) {
 				ch := runner.VCSSubcmd(
 					ctx,
-					cfg.Repos,
+					scope.cfg.Repos,
 					names,
 					subcmd,
 					nil,
-					cfg.Settings.Concurrency,
+					scope.cfg.Settings.Concurrency,
 				)
 				for res := range ch {
 					resultCh <- res
@@ -367,7 +392,7 @@ func shellCmdAction(
 ) error {
 	ctx := cmd.Context()
 
-	cfg, names, shellArgs, err := loadAndSplit(cfgPath, cmd, args)
+	scope, shellArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -376,12 +401,12 @@ func shellCmdAction(
 		return errNoShellCommand
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ := applyStatusFilter(ctx, cmd, scope)
 	if len(names) == 0 {
 		return nil
 	}
 
-	return runShell(ctx, &cfg, names, shellJoin(shellArgs), flagBool(cmd, "interactive"))
+	return runShell(ctx, &scope.cfg, names, shellJoin(shellArgs), flagBool(cmd, "interactive"))
 }
 
 // runShell dispatches a shell command string across names, sequentially
@@ -434,7 +459,6 @@ func runShellInteractive(
 }
 
 func addLsFlags(fs *pflag.FlagSet) {
-	fs.StringSliceP("repos", "r", nil, "repo names or a group name")
 	fs.BoolP("message", "m", false, "show commit message and time")
 	fs.BoolP("names", "n", false, "show repo names only, one per line")
 	fs.BoolP("dirs", "d", false, "show repo dirs only, one per line")
@@ -504,9 +528,9 @@ func lsAction(
 	return func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		cfg, names, err := loadAndResolve(cfgPath, cmd, args)
+		scope, err := loadAndResolve(cfgPath, args)
 		if errors.Is(err, errNoReposMatched) {
-			if len(cfg.Repos) == 0 {
+			if len(scope.cfg.Repos) == 0 {
 				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)
 			} else {
 				ui.Warnf("no repos matched")
@@ -519,7 +543,7 @@ func lsAction(
 			return err
 		}
 
-		names, statuses := applyStatusFilter(ctx, cmd, &cfg, names)
+		names, statuses := applyStatusFilter(ctx, cmd, scope)
 		if len(names) == 0 {
 			return nil
 		}
@@ -530,19 +554,19 @@ func lsAction(
 
 			return nil
 		case flagBool(cmd, "dirs"):
-			lsDirsOnly(cfg.Repos, names)
+			lsDirsOnly(scope.cfg.Repos, names)
 
 			return nil
 		}
 
 		vcsByName := make(map[string]string, len(names))
 		for _, n := range names {
-			vcsByName[n] = cfg.Repos[n].ActiveBackend()
+			vcsByName[n] = scope.cfg.Repos[n].ActiveBackend()
 		}
 
 		message := forceMessage || flagBool(cmd, "message")
 
-		gather := lsGatherCallback(ctx, cfg.Repos, names, cfg.Settings.Concurrency)
+		gather := lsGatherCallback(ctx, scope.cfg.Repos, names, scope.cfg.Settings.Concurrency)
 		if statuses != nil {
 			gather = replayGather(names, statuses)
 		}
@@ -591,7 +615,7 @@ func runDispatch(
 	cfgPath *string,
 	backendName string,
 ) error {
-	cfg, names, cmdArgs, err := loadAndSplit(cfgPath, cmd, args)
+	scope, cmdArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
@@ -600,16 +624,16 @@ func runDispatch(
 		return fmt.Errorf("%w; use: %s %s [repos] -- <args>", errNoArgsFmt, cmdNameHRD, backendName)
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ := applyStatusFilter(ctx, cmd, scope)
 	if len(names) == 0 {
 		return nil
 	}
 
 	if flagBool(cmd, "interactive") {
-		return dispatchInteractive(ctx, cfg.Repos, names, backendName, cmdArgs)
+		return dispatchInteractive(ctx, scope.cfg.Repos, names, backendName, cmdArgs)
 	}
 
-	return dispatchNonInteractive(ctx, &cfg, names, backendName, cmdArgs)
+	return dispatchNonInteractive(ctx, &scope.cfg, names, backendName, cmdArgs)
 }
 
 func runInteractive(ctx context.Context, dir, bin string, args []string) error {

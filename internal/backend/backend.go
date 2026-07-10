@@ -139,6 +139,23 @@ type RepoStatus struct {
 	LocalAhead int
 }
 
+// NeedsAttention reports whether the repo has uncommitted changes or its
+// branch differs from its remote (ahead, behind, diverged, or gone).
+// Repos with no remote configured do not qualify on sync grounds alone.
+func (st RepoStatus) NeedsAttention() bool {
+	if st.Dirty || st.LocalAhead > 0 {
+		return true
+	}
+
+	for _, bm := range st.Bookmarks {
+		if bm.Ahead > 0 || bm.Behind > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ComputeBookmarkState derives the RefState for a single BookmarkStatus from
 // its Ahead/Behind counts and whether a remote is configured.
 func ComputeBookmarkState(bookmark *BookmarkStatus) {

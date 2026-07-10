@@ -63,6 +63,8 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 		m.groupFilter = ""
 	case labelUngrouped:
 		m.groupFilter = config.ReservedNone
+	case labelAttention:
+		m.groupFilter = config.ReservedAttention
 	default:
 		m.groupFilter = selected
 	}
@@ -225,12 +227,12 @@ func openGroupPopup(m *model, mode groupMode) {
 
 	var options []string
 
-	const builtinFilterOptions = 2 // [all], [ungrouped]
+	const builtinFilterOptions = 3 // [all], [ungrouped], [attention]
 
 	switch mode {
 	case groupFilterMode:
 		options = make([]string, 0, builtinFilterOptions+len(groupNames))
-		options = append(options, labelAllRepos, labelUngrouped)
+		options = append(options, labelAllRepos, labelUngrouped, labelAttention)
 		options = append(options, groupNames...)
 	case groupAddMode:
 		options = make([]string, 0, len(groupNames)+1)
@@ -242,15 +244,22 @@ func openGroupPopup(m *model, mode groupMode) {
 	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
-	items := buildGroupItems(options, m.cfg.Groups, len(m.cfg.Repos), len(m.cfg.UngroupedRepos()))
+	attentionCount := len(filterByAttention(m.repoOrder, m.statuses))
+
+	items := buildGroupItems(
+		options,
+		m.cfg.Groups,
+		len(m.cfg.Repos),
+		len(m.cfg.UngroupedRepos()),
+		attentionCount,
+	)
 	m.groupList.SetItems(items)
 
 	cursor := 0
 
 	if m.groupFilter != "" && mode == groupFilterMode {
 		for i, opt := range options {
-			if opt == m.groupFilter || opt == "@"+m.groupFilter ||
-				(opt == labelUngrouped && m.groupFilter == config.ReservedNone) {
+			if optMatchesGroupFilter(opt, m.groupFilter) {
 				cursor = i
 
 				break
@@ -260,4 +269,22 @@ func openGroupPopup(m *model, mode groupMode) {
 
 	m.groupList.Select(cursor)
 	m.screen = screenGroup
+}
+
+// optMatchesGroupFilter reports whether popup option opt represents the
+// currently active groupFilter — either a real group (bare or "@"-prefixed)
+// or one of the reserved pseudo-group labels ([ungrouped], [attention]).
+func optMatchesGroupFilter(opt, groupFilter string) bool {
+	if opt == groupFilter || opt == "@"+groupFilter {
+		return true
+	}
+
+	switch opt {
+	case labelUngrouped:
+		return groupFilter == config.ReservedNone
+	case labelAttention:
+		return groupFilter == config.ReservedAttention
+	default:
+		return false
+	}
 }

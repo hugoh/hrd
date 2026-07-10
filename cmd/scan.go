@@ -15,7 +15,7 @@ const (
 	defaultScanDepth = 5
 	cmdNameScan      = "scan"
 	cmdNameScanAdd   = "add"
-	cmdNameScanList  = "list"
+	cmdNameScanLs    = "ls"
 )
 
 //nolint:gochecknoglobals // package-level variable required for test injection
@@ -28,7 +28,7 @@ func repoScanCmd(cfgPath *string) *cobra.Command {
 	}
 	cmd.AddCommand(
 		repoScanAddCmd(cfgPath),
-		repoScanListCmd(cfgPath),
+		repoScanLsCmd(cfgPath),
 	)
 
 	return cmd
@@ -58,24 +58,24 @@ matches unconditionally.`,
 	return cmd
 }
 
-func repoScanListCmd(cfgPath *string) *cobra.Command {
+func repoScanLsCmd(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   cmdNameScanList + " <dir>...",
+		Use:   cmdNameScanLs + " <dir>...",
 		Short: "list repositories discovered under one or more directories",
 		Long: `Walks each given directory (up to --depth levels deep) looking for git and
-jj repositories and prints what it finds, without modifying the config. Use
---tracked/--untracked to filter by whether a match is already in the config,
-and -g/--group to preview what a subsequent "repo scan add -g" would assign.`,
-		Example: `  hrd repo scan list ~/code
-  hrd repo scan list ~/code --untracked
-  hrd repo scan list ~/code --depth 2 --pattern 'api-*'`,
+jj repositories and prints what it finds. Purely read-only — never modifies
+the config. Use --tracked/--untracked to filter by whether a match is
+already in the config; use "repo scan add -g" to track and group in one
+step.`,
+		Example: `  hrd repo scan ls ~/code
+  hrd repo scan ls ~/code --untracked
+  hrd repo scan ls ~/code --depth 2 --pattern 'api-*'`,
 		Args: cobra.ArbitraryArgs,
-		RunE: repoScanListAction(cfgPath),
+		RunE: repoScanLsAction(cfgPath),
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
 	cmd.Flags().Int("depth", defaultScanDepth, "maximum directory depth to descend")
-	cmd.Flags().StringP(cmdNameGroup, "g", "", "assign tracked repos in results to this group")
 	cmd.Flags().Bool("tracked", false, "show only repos already in config")
 	cmd.Flags().Bool("untracked", false, "show only repos not yet in config")
 
@@ -155,22 +155,15 @@ func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 	}
 }
 
-func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
+func repoScanLsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		cfg, err := loadScanConfig(cfgPath, args, "list")
+		cfg, err := loadScanConfig(cfgPath, args, "ls")
 		if err != nil {
 			return err
 		}
 
 		tracked := trackedPaths(&cfg)
 		pattern := flagString(cmd, "pattern")
-		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-
-		if group != "" {
-			if err := config.ValidGroupName(group); err != nil {
-				return err //nolint:wrapcheck // config error already has context
-			}
-		}
 
 		onlyTracked := flagBool(cmd, "tracked")
 		onlyUntracked := flagBool(cmd, "untracked")
@@ -204,43 +197,8 @@ func repoScanListAction(cfgPath *string) func(cmd *cobra.Command, args []string)
 			header, rows, ui.EffectiveWidths(header, rows, maxWidths),
 		))
 
-		return groupTracked(&cfg, *cfgPath, filtered, tracked, group)
-	}
-}
-
-// groupTracked assigns all tracked paths in filtered to group and saves config.
-// A no-op when group is empty or no tracked paths are found.
-func groupTracked(
-	cfg *config.Config,
-	cfgPath string,
-	filtered []string,
-	tracked map[string]string,
-	group string,
-) error {
-	if group == "" {
 		return nil
 	}
-
-	grouped := 0
-
-	for _, path := range filtered {
-		name, isTracked := tracked[path]
-		if !isTracked {
-			continue
-		}
-
-		cfg.AddRepoToGroup(name, group)
-
-		grouped++
-	}
-
-	if grouped == 0 {
-		return nil
-	}
-
-	ui.Outf("assigned %d repo(s) to group %s", grouped, displayGroup(group))
-
-	return config.Save(cfgPath, *cfg) //nolint:wrapcheck // caller provides context
 }
 
 // buildScanListRows classifies discovered paths as tracked or untracked and

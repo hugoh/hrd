@@ -168,12 +168,58 @@ func stripGroupPrefix(name string) string {
 // user-created group.
 const ReservedNone = "@@none"
 
+// ReservedAttention is the pseudo-group matching repos that need attention:
+// a dirty working copy, or a branch out of sync with its remote (ahead,
+// behind, diverged, or gone). Unlike ReservedNone, this can't be resolved
+// from static config alone — GroupRepos expands it to every repo, and the
+// actual attention filtering happens later, once live status has been
+// gathered (see cmd.applyStatusFilter and backend.RepoStatus.NeedsAttention).
+const ReservedAttention = "@@attention"
+
+// ReservedGroupInfo pairs a reserved "@@" pseudo-group token with a
+// one-line explanation, for CLI/TUI surfaces that list available reserved
+// groups (see cmd's "hrd group" and the TUI's "@" popup).
+type ReservedGroupInfo struct {
+	Name string
+	Desc string
+
+	// Live is true when computing this group's repo membership requires
+	// gathering live git/jj status (e.g. ReservedAttention), as opposed to
+	// a free, static lookup from config alone (e.g. ReservedNone).
+	Live bool
+}
+
+// ReservedGroups lists all reserved pseudo-groups in a stable, deliberate
+// order (map iteration order is not used) so "hrd group ls" and the TUI
+// popup show them consistently.
+//
+//nolint:gochecknoglobals // read-only registry, not mutated at runtime
+var ReservedGroups = []ReservedGroupInfo{
+	{Name: ReservedNone, Desc: "repos with no group", Live: false},
+	{
+		Name: ReservedAttention,
+		Desc: "repos needing attention (dirty, or ahead/behind/diverged/gone vs. remote)",
+		Live: true,
+	},
+}
+
 const reservedGroupPrefix = "@@"
 
 // IsReservedGroupName reports whether name is in the reserved "@@" pseudo-
 // group namespace.
 func IsReservedGroupName(name string) bool {
 	return strings.HasPrefix(name, reservedGroupPrefix)
+}
+
+// IsKnownReservedGroup reports whether name is one of the tokens listed in
+// ReservedGroups — as opposed to merely having the "@@" prefix (which
+// IsReservedGroupName checks). Scope-validation code should use this so a
+// new entry added to ReservedGroups is automatically accepted, instead of
+// requiring a separate hardcoded name check to be kept in sync.
+func IsKnownReservedGroup(name string) bool {
+	return slices.ContainsFunc(ReservedGroups, func(rg ReservedGroupInfo) bool {
+		return rg.Name == name
+	})
 }
 
 var errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
@@ -323,10 +369,14 @@ func (c *Config) UngroupedRepos() []string {
 }
 
 // GroupRepos resolves name to a repo list: a real group (with or without
-// its "@" prefix), or the reserved ReservedNone pseudo-group.
+// its "@" prefix), or a reserved pseudo-group (ReservedNone, ReservedAttention).
 func (c *Config) GroupRepos(name string) ([]string, bool) {
 	if name == ReservedNone {
 		return c.UngroupedRepos(), true
+	}
+
+	if name == ReservedAttention {
+		return c.allRepos(), true
 	}
 
 	if g, ok := c.Groups[name]; ok {

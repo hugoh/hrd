@@ -21,24 +21,24 @@ func TestRepoAddRejectsReservedGroup(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRepoGroupRejectsReservedGroup(t *testing.T) {
+func TestGroupAddRejectsReservedGroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{"r1": {Path: "/1"}},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "r1", "@@none"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "@@none", "r1"})
 	require.Error(t, err)
 }
 
-// TestRepoGroupStripsAtPrefix verifies that a single "@" is treated as
+// TestGroupAddStripsAtPrefix verifies that a single "@" is treated as
 // input sugar (stripped) and never stored literally — this is what makes
 // reserving the "@@" namespace for pseudo-groups safe.
-func TestRepoGroupStripsAtPrefix(t *testing.T) {
+func TestGroupAddStripsAtPrefix(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{"r1": {Path: "/1"}},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "r1", "@work"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "@work", "r1"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -57,15 +57,6 @@ func TestRepoScanAddRejectsReservedGroup(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRepoScanListRejectsReservedGroup(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root, cfgPath := scanTreeWithTrackedApp(t)
-
-	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList, "-g", "@@none", root})
-	require.Error(t, err)
-}
-
 func TestRepoLsReservedNone(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
@@ -74,7 +65,7 @@ func TestRepoLsReservedNone(t *testing.T) {
 		},
 	})
 
-	out := runAppCapture(t, cfgPath, []string{"repo", "ls", "-g", "@@none"})
+	out := runAppCapture(t, cfgPath, []string{"repo", "ls", "@@none"})
 	assert.Contains(t, out, "ungrouped")
 	assert.NotContains(t, out, "grouped\n")
 }
@@ -91,6 +82,97 @@ func TestLsReservedNone(t *testing.T) {
 
 	out := runAppCapture(t, cfgPath, []string{"ls", "@@none", "--names"})
 	assert.Equal(t, "ungrouped", strings.TrimSpace(out))
+}
+
+func TestLsAttentionFilter(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"ls", "@@attention", "--names"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+// TestLsAttentionFilterCombinesWithExplicitFlag verifies that scoping to
+// @@attention still applies when an explicit --dirty flag is also passed
+// (redundant, but must not double-count or error).
+func TestLsAttentionFilterCombinesWithExplicitFlag(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"ls", "@@attention", "--dirty", "--names"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+func TestShellAttentionFilter(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"shell", "@@attention", "--", "echo ran"})
+	assert.Contains(t, out, "dirtyrepo")
+	assert.NotContains(t, out, "cleanrepo")
+}
+
+// TestGroupLsAttentionSingleName is a regression test: Config.GroupRepos
+// intentionally returns every repo for @@attention (correct for CLI-dispatch
+// scope resolution), but "hrd group ls @@attention" printed that unfiltered
+// result directly — showing all repos, not just the ones needing attention.
+func TestGroupLsAttentionSingleName(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls", "@@attention"})
+	assert.Equal(t, "dirtyrepo", strings.TrimSpace(out))
+}
+
+func TestGroupLsWithoutLiveShowsAttentionHint(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls"})
+	assert.Contains(t, out, "@@attention  (pass --live to compute)")
+}
+
+func TestGroupLsLiveComputesAttentionMembership(t *testing.T) {
+	cfgPath := cfgCleanAndDirtyRepo(t)
+
+	out := runAppCapture(t, cfgPath, []string{"group", "ls", "--live"})
+	assert.Contains(t, out, "@@attention")
+	assert.Contains(t, out, "dirtyrepo")
+
+	lines := strings.Split(out, "\n")
+
+	var attentionLine string
+
+	for i, line := range lines {
+		if line == "@@attention" && i+1 < len(lines) {
+			attentionLine = lines[i+1]
+		}
+	}
+
+	assert.Equal(
+		t,
+		"  dirtyrepo",
+		attentionLine,
+		"only dirtyrepo should be listed under @@attention",
+	)
+}
+
+func TestGroupListReservedFlag(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	out := runAppCapture(t, cfgPath, []string{"group", "--list-reserved"})
+	assert.Contains(t, out, "@@none")
+	assert.Contains(t, out, "@@attention")
+	assert.Contains(t, out, "repos with no group")
+}
+
+// TestGroupBareShowsHelp verifies "hrd group" (no subcommand, no flag)
+// doesn't error — it falls back to cobra's default help behavior. Cobra
+// writes help to the command's Out writer, which the test harness redirects
+// to an internal buffer (see bufferWriters), not stdout, so this only
+// asserts on the error, not captured content.
+func TestGroupBareShowsHelp(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	app := newTestApp()
+
+	err := RunApp(t.Context(), app, []string{"hrd", "--config", cfgPath, "group"})
+	require.NoError(t, err)
 }
 
 func TestRepoRootAddRejectsReservedGroup(t *testing.T) {

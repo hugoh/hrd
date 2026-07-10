@@ -19,8 +19,9 @@ const (
 )
 
 var (
-	errUnknownRoot = errors.New("unknown root")
-	errRootExists  = errors.New("root already exists")
+	errUnknownRoot        = errors.New("unknown root")
+	errRootExists         = errors.New("root already exists")
+	errAtLeastOneRootName = errors.New("at least one root name required")
 )
 
 // repoRootCmd returns the `repo root` subcommand with its children. Roots
@@ -43,20 +44,22 @@ func repoRootCmd(cfgPath *string) *cobra.Command {
 
 func repoRootAddCmd(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   cmdNameAdd + " <dir>",
-		Short: "track a directory to walk for repos on every invocation",
-		Long: `Registers dir as a live-resolved root: every hrd invocation walks it
+		Use:   cmdNameAdd + " <dir>...",
+		Short: "track one or more directories to walk for repos on every invocation",
+		Long: `Registers each dir as a live-resolved root: every hrd invocation walks it
 (up to --depth levels deep, default 1) looking for git and jj repositories
 and merges what it finds into the working repo set. Nothing is written to
 config.toml for the discovered repos themselves — only the root is
 persisted, so new repos added under dir appear automatically.`,
 		Example: `  hrd repo root add ~/my-repos
-  hrd repo root add ~/my-repos --depth 2 -g personal`,
-		Args: cobra.ExactArgs(1),
+  hrd repo root add ~/my-repos --depth 2 -g personal
+  hrd repo root add ~/work-repos ~/oss-repos`,
+		Args: cobra.ArbitraryArgs,
 		RunE: repoRootAddAction(cfgPath),
 	}
-	cmd.Flags().StringP("name", "n", "", "explicit name (defaults to the directory base name)")
-	cmd.Flags().StringP(cmdNameGroup, "g", "", "assign repos discovered under this root to a group")
+	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single root)")
+	cmd.Flags().
+		StringP(cmdNameGroup, "g", "", "assign repos discovered under these roots to a group")
 	cmd.Flags().
 		Int("depth", defaultRootDepth, "maximum directory depth to walk on every invocation")
 
@@ -65,11 +68,13 @@ persisted, so new repos added under dir appear automatically.`,
 
 func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		dir := args[0]
+		if len(args) == 0 {
+			return errAtLeastOnePath
+		}
 
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			return fmt.Errorf("resolving %q: %w", dir, err)
+		name := flagString(cmd, "name")
+		if name != "" && len(args) > 1 {
+			return errNameSingleRepo
 		}
 
 		cfg, err := loadConfig(cfgPath, "repo root add")
@@ -77,63 +82,86 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 			return err
 		}
 
-		name := flagString(cmd, "name")
-		if name == "" {
-			name = filepath.Base(abs)
-		}
-
-		if _, exists := cfg.Roots[name]; exists {
-			return fmt.Errorf(
-				"%w %q (path: %s). use --name/-n to specify a unique name",
-				errRootExists,
-				name,
-				cfg.Roots[name].Path,
-			)
-		}
-
 		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-
-		var groups []string
-
 		if group != "" {
 			if err := config.ValidGroupName(group); err != nil {
 				return err //nolint:wrapcheck // config error already has context
 			}
-
-			groups = []string{group}
 		}
 
-		cfg.AddRoot(name, config.Root{
-			Path:   abs,
-			Depth:  flagInt(cmd, "depth"),
-			Groups: groups,
-		})
+		depth := flagInt(cmd, "depth")
 
-		ui.Success("tracking root %s as %q", abs, name)
+		for _, dir := range args {
+			if err := addRoot(&cfg, dir, name, group, depth); err != nil {
+				return err
+			}
+		}
 
 		return config.Save(*cfgPath, cfg)
 	}
 }
 
+// addRoot validates and registers a single directory root in cfg. An empty
+// explicitName derives the name from the directory base name.
+func addRoot(cfg *config.Config, dir, explicitName, group string, depth int) error {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return fmt.Errorf("resolving %q: %w", dir, err)
+	}
+
+	name := explicitName
+	if name == "" {
+		name = filepath.Base(abs)
+	}
+
+	if _, exists := cfg.Roots[name]; exists {
+		return fmt.Errorf(
+			"%w %q (path: %s). use --name/-n to specify a unique name",
+			errRootExists,
+			name,
+			cfg.Roots[name].Path,
+		)
+	}
+
+	var groups []string
+	if group != "" {
+		groups = []string{group}
+	}
+
+	cfg.AddRoot(name, config.Root{
+		Path:   abs,
+		Depth:  depth,
+		Groups: groups,
+	})
+
+	ui.Success("tracking root %s as %q", abs, name)
+
+	return nil
+}
+
 func repoRootRemoveCmd(cfgPath *string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "rm <name>",
-		Short: "stop tracking a directory root",
-		Args:  cobra.ExactArgs(1),
+		Use:   "rm <name>...",
+		Short: "stop tracking one or more directory roots",
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
-			name := args[0]
+			if len(args) == 0 {
+				return errAtLeastOneRootName
+			}
 
 			cfg, err := loadConfig(cfgPath, "repo root rm")
 			if err != nil {
 				return err
 			}
 
-			if _, ok := cfg.Roots[name]; !ok {
-				return fmt.Errorf("%w %q", errUnknownRoot, name)
-			}
+			for _, name := range args {
+				if _, ok := cfg.Roots[name]; !ok {
+					return fmt.Errorf("%w %q", errUnknownRoot, name)
+				}
 
-			cfg.RemoveRoot(name)
-			ui.Success("removed root %q", name)
+				cfg.RemoveRoot(name)
+				ui.Success("removed root %q", name)
+			}
 
 			return config.Save(*cfgPath, cfg)
 		},

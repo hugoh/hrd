@@ -78,12 +78,12 @@ func runAlias(
 ) error {
 	ctx := cmd.Context()
 
-	cfg, names, extraArgs, err := loadAndSplit(cfgPath, cmd, args)
+	scope, extraArgs, err := loadAndSplit(cfgPath, cmd, args)
 	if err != nil {
 		return err
 	}
 
-	names, _ = applyStatusFilter(ctx, cmd, &cfg, names)
+	names, _ := applyStatusFilter(ctx, cmd, scope)
 	if len(names) == 0 {
 		return nil
 	}
@@ -97,7 +97,7 @@ func runAlias(
 			sh += " " + shellJoin(extraArgs)
 		}
 
-		return runShell(ctx, &cfg, names, sh, interactive)
+		return runShell(ctx, &scope.cfg, names, sh, interactive)
 	}
 
 	tokens, err := shlex.Split(rest)
@@ -112,15 +112,15 @@ func runAlias(
 	if prefix != "" {
 		args := slices.Concat(tokens, extraArgs)
 		if interactive {
-			return dispatchInteractive(ctx, cfg.Repos, names, prefix, args)
+			return dispatchInteractive(ctx, scope.cfg.Repos, names, prefix, args)
 		}
 
-		return dispatchNonInteractive(ctx, &cfg, names, prefix, args)
+		return dispatchNonInteractive(ctx, &scope.cfg, names, prefix, args)
 	}
 
 	return runAliasSubcmd(
 		ctx,
-		&cfg,
+		&scope.cfg,
 		names,
 		tokens[0],
 		slices.Concat(tokens[1:], extraArgs),

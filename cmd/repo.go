@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,21 +11,22 @@ import (
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 var (
-	errAtLeastOnePath   = errors.New("at least one path required")
-	errNameSingleRepo   = errors.New("--name can only be used when adding a single repo")
-	errAtLeastOneName   = errors.New("at least one repo name required")
-	errRepoRenameUsage  = errors.New("usage: repo rename <old> <new>")
-	errUnknownRepo      = errors.New("unknown repo")
-	errRepoExists       = errors.New("repo already exists")
-	errRepoNoVCS        = errors.New("no VCS detected")
-	errUnknownGroup     = errors.New("unknown group")
-	errRepoGroupUsage   = errors.New("usage: repo group <repo> <group>")
-	errRepoUngroupUsage = errors.New("usage: repo ungroup <repo> <group>")
+	errAtLeastOnePath  = errors.New("at least one path required")
+	errNameSingleRepo  = errors.New("--name can only be used when adding a single repo")
+	errAtLeastOneName  = errors.New("at least one repo name required")
+	errRepoRenameUsage = errors.New("usage: repo rename <old> <new>")
+	errUnknownRepo     = errors.New("unknown repo")
+	errRepoExists      = errors.New("repo already exists")
+	errRepoNoVCS       = errors.New("no VCS detected")
+	errUnknownGroup    = errors.New("unknown group")
+	errGroupAddUsage   = errors.New("usage: group add <group> <repo> [<repo>...]")
+	errGroupRmUsage    = errors.New("usage: group rm <group> <repo> [<repo>...]")
 )
 
 // repoCommands returns the `repo` subcommand with its children.
@@ -40,8 +42,6 @@ func repoCommands(cfgPath *string) *cobra.Command {
 		repoRemoveCmd(cfgPath),
 		repoListCmd(cfgPath),
 		repoRenameCmd(cfgPath),
-		repoGroupCmd(cfgPath),
-		repoUngroupCmd(cfgPath),
 	)
 
 	return cmd
@@ -167,10 +167,12 @@ func repoRemoveCmd(cfgPath *string) *cobra.Command {
 }
 
 func repoListCmd(cfgPath *string) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "ls",
-		Short: "list tracked repositories",
-		RunE: func(cmd *cobra.Command, _ []string) error {
+	return &cobra.Command{
+		Use:               "ls [group]",
+		Short:             "list tracked repositories, optionally filtered to one group",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: groupsOnlyCompleter(cfgPath),
+		RunE: func(_ *cobra.Command, args []string) error {
 			cfg, err := loadResolvedConfig(cfgPath, "repo ls")
 			if err != nil {
 				return err
@@ -178,7 +180,7 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 
 			names := make([]string, 0, len(cfg.Repos))
 
-			if raw := flagString(cmd, "group"); raw != "" {
+			if raw := firstArg(args); raw != "" {
 				grp, ok := cfg.GroupRepos(groupQuery(raw))
 				if !ok {
 					return fmt.Errorf("%w %q", errUnknownGroup, raw)
@@ -220,17 +222,13 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringP(cmdNameGroup, "g", "", "filter to repos in a group")
-
-	return cmd
 }
 
 const (
-	cmdNameRepo    = "repo"
-	cmdNameAdd     = "add"
-	cmdNameRename  = "rename"
-	cmdNameGroup   = "group"
-	cmdNameUngroup = "ungroup"
+	cmdNameRepo   = "repo"
+	cmdNameAdd    = "add"
+	cmdNameRename = "rename"
+	cmdNameGroup  = "group"
 )
 
 // completeFirstArgWithRepos completes the first (and only the first)
@@ -242,6 +240,19 @@ func completeFirstArgWithRepos(cfgPath *string) cobraCompleter {
 		}
 
 		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+}
+
+// completeFirstArgWithGroups completes the first positional arg with group
+// names; every subsequent arg completes with repo names (see
+// "hrd group add/rm <group> <repo>...").
+func completeFirstArgWithGroups(cfgPath *string) cobraCompleter {
+	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		if len(args) == 0 {
+			return groupsOnlyCompleter(cfgPath)(cmd, args, toComplete)
+		}
+
+		return reposOnlyCompleter(cfgPath)(cmd, args, toComplete)
 	}
 }
 
@@ -310,82 +321,98 @@ func displayGroup(name string) string {
 	return name
 }
 
-func repoGroupCmd(cfgPath *string) *cobra.Command {
-	return groupActionCmd(cfgPath, cmdNameGroup, "add a group to a repo", errRepoGroupUsage, true,
-		func(cfg *config.Config, name, group string) {
-			cfg.AddRepoToGroup(name, group)
-			ui.Success("added %q to group %q", name, group)
-		})
-}
-
-func repoUngroupCmd(cfgPath *string) *cobra.Command {
-	return groupActionCmd(
-		cfgPath,
-		cmdNameUngroup,
-		"remove a group from a repo",
-		errRepoUngroupUsage,
-		false,
-		func(cfg *config.Config, name, group string) {
-			cfg.RemoveRepoFromGroup(name, group)
-			ui.Success("removed %q from group %q", name, group)
-		},
-	)
-}
-
-func groupActionCmd(
+// groupMemberAction returns a RunE for "hrd group add/rm <group> <repo>...":
+// validates the group name, loads config, applies act to each repo in turn
+// (failing fast on an unknown repo), and saves once at the end.
+func groupMemberAction(
 	cfgPath *string,
-	name, usage string,
+	cmdLabel string,
 	usageErr error,
-	validateGroup bool,
 	act func(*config.Config, string, string),
-) *cobra.Command {
-	return &cobra.Command{
-		Use:               name + " <repo> <group>",
-		Short:             usage,
-		Args:              cobra.ArbitraryArgs,
-		ValidArgsFunction: completeFirstArgWithRepos(cfgPath),
-		RunE: func(_ *cobra.Command, args []string) error {
-			if len(args) != 2 { //nolint:mnd // expects repo and group name
-				return usageErr
-			}
+) func(cmd *cobra.Command, args []string) error {
+	return func(_ *cobra.Command, args []string) error {
+		if len(args) < 2 { //nolint:mnd // expects a group and at least one repo
+			return usageErr
+		}
 
-			repoName, group := args[0], stripGroupPrefix(args[1])
+		group := stripGroupPrefix(args[0])
+		if err := config.ValidGroupName(group); err != nil {
+			return err //nolint:wrapcheck // config error already has context
+		}
 
-			if validateGroup {
-				if err := config.ValidGroupName(group); err != nil {
-					return err //nolint:wrapcheck // config error already has context
-				}
-			}
+		cfg, err := loadConfig(cfgPath, cmdLabel)
+		if err != nil {
+			return err
+		}
 
-			cfg, err := loadConfig(cfgPath, name)
-			if err != nil {
-				return err
-			}
-
+		for _, repoName := range args[1:] {
 			if _, ok := cfg.Repos[repoName]; !ok {
 				return fmt.Errorf("%w %q", errUnknownRepo, repoName)
 			}
 
 			act(&cfg, repoName, group)
+		}
 
-			return config.Save(*cfgPath, cfg)
-		},
+		return config.Save(*cfgPath, cfg)
 	}
 }
 
-// groupCommands returns the `group` subcommand (read-only).
+func groupAddCmd(cfgPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:               cmdNameAdd + " <group> <repo>...",
+		Short:             "add one or more repos to a group",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeFirstArgWithGroups(cfgPath),
+		RunE: groupMemberAction(cfgPath, "group add", errGroupAddUsage,
+			func(cfg *config.Config, name, group string) {
+				cfg.AddRepoToGroup(name, group)
+				ui.Success("added %q to group %q", name, group)
+			}),
+	}
+}
+
+func groupRmCmd(cfgPath *string) *cobra.Command {
+	return &cobra.Command{
+		Use:               "rm <group> <repo>...",
+		Short:             "remove one or more repos from a group",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeFirstArgWithGroups(cfgPath),
+		RunE: groupMemberAction(cfgPath, "group rm", errGroupRmUsage,
+			func(cfg *config.Config, name, group string) {
+				cfg.RemoveRepoFromGroup(name, group)
+				ui.Success("removed %q from group %q", name, group)
+			}),
+	}
+}
+
+// groupCommands returns the `group` subcommand (read-only). It also accepts
+// its own --list-reserved flag (printing what the "@@" reserved pseudo-
+// groups mean) since that's a fast, static lookup unrelated to any specific
+// group listing.
 func groupCommands(cfgPath *string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   cmdNameGroup,
-		Short: "list repo groups",
+		Short: "manage repo groups",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if flagBool(cmd, "list-reserved") {
+				return renderReservedGroupMeanings()
+			}
+
+			return cmd.Help()
+		},
 	}
-	cmd.AddCommand(groupListCmd(cfgPath))
+	cmd.Flags().Bool("list-reserved", false, `list reserved "@@" pseudo-groups and what they mean`)
+	cmd.AddCommand(
+		groupListCmd(cfgPath),
+		groupAddCmd(cfgPath),
+		groupRmCmd(cfgPath),
+	)
 
 	return cmd
 }
 
 func groupListCmd(cfgPath *string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "ls [name]",
 		Short: "list groups",
 		Args:  cobra.ArbitraryArgs,
@@ -398,10 +425,16 @@ func groupListCmd(cfgPath *string) *cobra.Command {
 		},
 		RunE: listGroupsAction(cfgPath),
 	}
+	cmd.Flags().Bool(
+		"live", false,
+		`also compute repo membership for reserved groups that require live git/jj status (e.g. @@attention)`,
+	)
+
+	return cmd
 }
 
 func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
-	return func(_ *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
 		cfg, err := loadResolvedConfig(cfgPath, "group ls")
 		if err != nil {
 			return err
@@ -415,6 +448,10 @@ func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 				return fmt.Errorf("%w %q", errUnknownGroup, displayGroup(name))
 			}
 
+			if name == config.ReservedAttention {
+				repos = attentionRepos(cmd.Context(), cfg, repos)
+			}
+
 			for _, repo := range repos {
 				ui.Out(repo)
 			}
@@ -424,11 +461,11 @@ func listGroupsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 
 		if len(cfg.Groups) == 0 {
 			ui.Out("no groups defined")
-
-			return nil
+		} else if err := renderGroupTable(cfg); err != nil {
+			return err
 		}
 
-		return renderGroupTable(cfg)
+		return renderReservedGroupMemberships(cmd.Context(), cfg, flagBool(cmd, "live"))
 	}
 }
 
@@ -437,6 +474,89 @@ func renderGroupTable(cfg config.Config) error {
 		ui.Out(displayGroup(name))
 		ui.Out("  " + strings.Join(group.Repos, ", "))
 	}
+
+	return nil
+}
+
+// renderReservedGroupMemberships prints each reserved "@@" pseudo-group
+// alongside the repos it currently contains, in the same visual format as
+// renderGroupTable, so they read as "more groups in the list" rather than a
+// separate concept. Live groups (e.g. @@attention) only have their
+// membership computed when live is true; otherwise a hint is printed
+// instead, keeping the default "hrd group ls" a fast, config-only read.
+func renderReservedGroupMemberships(ctx context.Context, cfg config.Config, live bool) error {
+	for _, rg := range config.ReservedGroups {
+		if rg.Live && !live {
+			ui.Out(rg.Name + "  (pass --live to compute)")
+
+			continue
+		}
+
+		repos, ok := cfg.GroupRepos(rg.Name)
+		if !ok {
+			continue
+		}
+
+		if rg.Name == config.ReservedAttention {
+			repos = attentionRepos(ctx, cfg, repos)
+		}
+
+		ui.Out(rg.Name)
+
+		if len(repos) == 0 {
+			ui.Out("  (none)")
+		} else {
+			ui.Out("  " + strings.Join(repos, ", "))
+		}
+	}
+
+	return nil
+}
+
+// attentionRepos narrows candidates down to repos currently needing
+// attention (dirty, or ahead/behind/diverged/gone vs. their remote),
+// gathering live status in parallel. Repos whose status can't be read are
+// excluded with a warning, matching applyStatusFilter's behavior.
+func attentionRepos(ctx context.Context, cfg config.Config, candidates []string) []string {
+	statuses := make(map[string]runner.StatusResult, len(candidates))
+
+	ch := runner.GatherStatus(ctx, cfg.Repos, candidates, cfg.Settings.Concurrency)
+	for res := range ch {
+		statuses[res.RepoName] = res
+	}
+
+	var matched []string
+
+	for _, name := range candidates {
+		res := statuses[name]
+		if res.Err != nil {
+			ui.Warnf("%s: %v", name, res.Err)
+
+			continue
+		}
+
+		if res.Status.NeedsAttention() {
+			matched = append(matched, name)
+		}
+	}
+
+	return matched
+}
+
+// renderReservedGroupMeanings prints the "@@" pseudo-groups and what they
+// mean, for "hrd group --list-reserved".
+func renderReservedGroupMeanings() error {
+	rows := make([][]string, 0, len(config.ReservedGroups))
+	for _, rg := range config.ReservedGroups {
+		rows = append(rows, []string{rg.Name, rg.Desc})
+	}
+
+	const nameWidth = len("@@attention") + 2
+
+	header := []string{"GROUP", "MEANING"}
+	widths := ui.EffectiveWidths(header, rows, []int{nameWidth, ui.GetTermWidth()})
+
+	_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(header, rows, widths))
 
 	return nil
 }

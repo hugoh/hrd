@@ -494,7 +494,7 @@ func TestRepoList(t *testing.T) {
 				err = RunApp(
 					t.Context(),
 					app,
-					[]string{"hrd", "--config", cfgPath, "repo", "ls", "--group", tt.group},
+					[]string{"hrd", "--config", cfgPath, "repo", "ls", tt.group},
 				)
 			})
 			if tt.wantErr {

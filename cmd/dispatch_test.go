@@ -70,13 +70,13 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			expectErrorIs: ErrReposFailed,
 		},
 		{
-			name: "TestGitCmdWithReposFlag",
+			name: "TestGitCmdWithExplicitRepo",
 			setup: func(t *testing.T) string {
 				t.Helper()
 
 				return cfgGitRepoPlusMissing(t)
 			},
-			args:          []string{"git", "--repos", "repo1", "--", "status"},
+			args:          []string{"git", "repo1", "--", "status"},
 			expectError:   true,
 			expectErrorIs: ErrReposFailed,
 		},
@@ -144,13 +144,13 @@ func TestDispatchCommands(t *testing.T) { //nolint:funlen
 			expectErrorIs: ErrReposFailed,
 		},
 		{
-			name: "TestFetchCmdWithReposFlag",
+			name: "TestFetchCmdWithExplicitRepo",
 			setup: func(t *testing.T) string {
 				t.Helper()
 
 				return cfgGitRepoPlusMissing(t)
 			},
-			args:          []string{"fetch", "--repos", "repo1"},
+			args:          []string{"fetch", "repo1"},
 			expectError:   true,
 			expectErrorIs: ErrReposFailed,
 		},
@@ -293,7 +293,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 			setup: setupSingleRepoWithArgs([]string{"ll"}),
 		},
 		{
-			name: "TestLsCmdWithReposFlag",
+			name: "TestLsCmdWithExplicitRepo",
 			setup: func(t *testing.T) setupResult {
 				t.Helper()
 
@@ -305,7 +305,7 @@ func TestStatusReadingCommands(t *testing.T) { //nolint:funlen
 
 				return setupResult{
 					cfgPath: cfgPath,
-					args:    []string{"ls", "--repos", "repo1"},
+					args:    []string{"ls", "repo1"},
 					assert: func(t *testing.T, stdout string) {
 						t.Helper()
 						assert.Contains(t, stdout, "repo1")

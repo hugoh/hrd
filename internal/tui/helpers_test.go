@@ -3,7 +3,9 @@ package tui
 import (
 	"testing"
 
+	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/runner"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -53,6 +55,11 @@ func TestGroupLabel(t *testing.T) {
 		m.groupFilter = config.ReservedNone
 		assert.Equal(t, "ungrouped", m.groupLabel())
 	})
+
+	t.Run("attention filter", func(t *testing.T) {
+		m.groupFilter = config.ReservedAttention
+		assert.Equal(t, "attention", m.groupLabel())
+	})
 }
 
 func TestActiveRepoOrder(t *testing.T) {
@@ -96,6 +103,59 @@ func TestActiveRepoOrder(t *testing.T) {
 			},
 		}
 		assert.Equal(t, []string{"b", "c"}, m.activeRepoOrder())
+	})
+
+	t.Run("reserved attention filter uses repos needing attention", func(t *testing.T) {
+		m.groupFilter = config.ReservedAttention
+		m.cfg = config.Config{}
+		m.repoOrder = []string{"a", "b", "c"}
+		m.statuses = map[string]runner.StatusResult{
+			"a": {Status: backend.RepoStatus{Dirty: true}},
+			"b": {Status: backend.RepoStatus{}},
+			"c": {Status: backend.RepoStatus{}},
+		}
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+		m.repoOrder = []string{"a", "b", "c"}
+	})
+}
+
+func TestActiveRepoOrder_AttentionFilter(t *testing.T) {
+	m := &model{
+		repoOrder: []string{"a", "b", "c"},
+		cfg: config.Config{
+			Groups: map[string]config.Group{"work": {Repos: []string{"a", "b"}}},
+		},
+		statuses: map[string]runner.StatusResult{
+			"a": {Status: backend.RepoStatus{Dirty: true}},
+			"b": {Status: backend.RepoStatus{}},
+			"c": {Err: assert.AnError},
+		},
+	}
+
+	t.Run("narrows to repos needing attention", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = true
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+	})
+
+	t.Run("composes with group filter", func(t *testing.T) {
+		m.groupFilter = "work"
+		m.attentionFilter = true
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+	})
+
+	t.Run("composes with name filter", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = true
+		m.nameFilter = "a"
+		assert.Equal(t, []string{"a"}, m.activeRepoOrder())
+		m.nameFilter = ""
+	})
+
+	t.Run("off returns unfiltered", func(t *testing.T) {
+		m.groupFilter = ""
+		m.attentionFilter = false
+		assert.Equal(t, []string{"a", "b", "c"}, m.activeRepoOrder())
 	})
 }
 

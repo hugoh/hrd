@@ -198,14 +198,14 @@ func TestRepoScanAddConfirm(t *testing.T) {
 
 func TestRepoScanListNoArgs(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{})
-	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList})
+	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanLs})
 	require.ErrorIs(t, err, errAtLeastOnePath)
 }
 
 func TestRepoScanList(t *testing.T) {
 	root, cfgPath := scanTreeWithTrackedApp(t)
 
-	out := runAppCapture(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList, root})
+	out := runAppCapture(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanLs, root})
 
 	// Both status values and both names should appear in the output.
 	assert.Contains(t, out, "tracked")
@@ -219,7 +219,7 @@ func TestRepoScanListTracked(t *testing.T) {
 	out := runAppCapture(
 		t,
 		cfgPath,
-		[]string{"repo", cmdNameScan, cmdNameScanList, "--tracked", root},
+		[]string{"repo", cmdNameScan, cmdNameScanLs, "--tracked", root},
 	)
 
 	// Only the tracked repo ("app") should appear; work-app is untracked.
@@ -233,14 +233,18 @@ func TestRepoScanListUntracked(t *testing.T) {
 	out := runAppCapture(
 		t,
 		cfgPath,
-		[]string{"repo", cmdNameScan, cmdNameScanList, "--untracked", root},
+		[]string{"repo", cmdNameScan, cmdNameScanLs, "--untracked", root},
 	)
 
 	// Only the untracked repo should appear; "app" (ossApp) is already tracked.
 	assert.Contains(t, out, "work-app")
 }
 
-func TestRepoScanListGroup(t *testing.T) {
+// TestRepoScanListReadOnly is a regression test: "scan ls" used to assign
+// tracked matches to a group as a side effect of listing when -g was passed.
+// That flag was removed — scan ls must never write to config, regardless of
+// what it finds. Grouping happens via "scan add -g" instead.
+func TestRepoScanListReadOnly(t *testing.T) {
 	backend.ResetDetectCache()
 
 	root := discovertest.Tree(t)
@@ -252,16 +256,15 @@ func TestRepoScanListGroup(t *testing.T) {
 		},
 	})
 
-	// Assign only the "app" repo (oss/app) to the spoon group via scan list.
-	args := []string{
-		"repo", cmdNameScan, cmdNameScanList,
-		"-p", "app", "-g", "spoon", "--tracked", root,
-	}
+	before, err := os.ReadFile(cfgPath)
+	require.NoError(t, err)
+
+	args := []string{"repo", cmdNameScan, cmdNameScanLs, "-p", "app", "--tracked", root}
 	require.NoError(t, runHRD(t, cfgPath, args))
 
-	cfg, err := config.Load(cfgPath)
+	after, err := os.ReadFile(cfgPath)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"app", "work-app"}, cfg.Groups["spoon"].Repos)
+	assert.Equal(t, before, after, "scan ls must not modify config")
 }
 
 func TestRepoAddWithGroup(t *testing.T) {

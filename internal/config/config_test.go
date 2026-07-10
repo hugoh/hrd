@@ -266,6 +266,20 @@ func TestGroupRepos_ReservedNone(t *testing.T) {
 	assert.Equal(t, []string{"ungrouped"}, repos)
 }
 
+func TestGroupRepos_ReservedAttention(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"grouped":   {Path: "/g", Groups: []string{"work"}},
+			"ungrouped": {Path: "/u"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	repos, ok := cfg.GroupRepos(ReservedAttention)
+	require.True(t, ok)
+	assert.ElementsMatch(t, []string{"grouped", "ungrouped"}, repos)
+}
+
 func TestGroupRepos_RealGroup(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
@@ -306,6 +320,35 @@ func TestIsReservedGroupName(t *testing.T) {
 	assert.True(t, IsReservedGroupName("@@anything"))
 	assert.False(t, IsReservedGroupName("@work"))
 	assert.False(t, IsReservedGroupName("work"))
+}
+
+// TestIsKnownReservedGroup guards scope-validation code (cmd.scopeName)
+// against drift from ReservedGroups: "@@"-shaped but undefined tokens must
+// be rejected, while every defined reserved group must be accepted.
+func TestIsKnownReservedGroup(t *testing.T) {
+	assert.True(t, IsKnownReservedGroup(ReservedNone))
+	assert.True(t, IsKnownReservedGroup(ReservedAttention))
+	assert.False(t, IsKnownReservedGroup("@@bogus"))
+	assert.False(t, IsKnownReservedGroup("work"))
+}
+
+// TestReservedGroups guards the CLI/TUI "@@ keyword -> meaning" registry
+// against drift: every reserved pseudo-group must be listed here exactly
+// once, with a non-empty description.
+func TestReservedGroups(t *testing.T) {
+	names := make([]string, 0, len(ReservedGroups))
+	live := make(map[string]bool, len(ReservedGroups))
+
+	for _, rg := range ReservedGroups {
+		names = append(names, rg.Name)
+		live[rg.Name] = rg.Live
+		assert.True(t, IsReservedGroupName(rg.Name))
+		assert.NotEmpty(t, rg.Desc)
+	}
+
+	assert.ElementsMatch(t, []string{ReservedNone, ReservedAttention}, names)
+	assert.False(t, live[ReservedNone], "ReservedNone should be a free, static lookup")
+	assert.True(t, live[ReservedAttention], "ReservedAttention requires live status")
 }
 
 func TestValidGroupName(t *testing.T) {
