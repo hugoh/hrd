@@ -16,11 +16,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
-const (
-	cmdNameShell = "shell"
-
-	cmdReposFlag = "repos"
-)
+const cmdNameShell = "shell"
 
 var (
 	errNoReposMatched     = errors.New("no repos matched")
@@ -40,7 +36,6 @@ var ErrReposFailed = errors.New("repos failed")
 // addDispatchFlags registers the flags shared by every command that
 // dispatches a VCS operation across a repo scope.
 func addDispatchFlags(fs *pflag.FlagSet) {
-	fs.StringSliceP(cmdReposFlag, "r", nil, "comma-separated repo names or a single group name")
 	fs.BoolP("interactive", "i", false, "run with a real terminal (sequential, one repo at a time)")
 	addStatusFilterFlags(fs)
 }
@@ -58,16 +53,15 @@ type resolvedScope struct {
 	forceAttention bool
 }
 
-// loadAndResolve loads the config and resolves the CLI scope (-r flag plus
-// positional args, all of which must be known repos or groups). These
-// commands take no subprocess args, so args after a "--" separator are
-// scope too — parsing already folds both sides of "--" into one args slice
-// (see splitScopeArgs for the commands that do distinguish the two sides).
-// The loaded config is returned alongside errNoReposMatched so callers can
-// inspect it (e.g. for the ls onboarding hint).
+// loadAndResolve loads the config and resolves the CLI scope (positional
+// args, all of which must be known repos or groups). These commands take no
+// subprocess args, so args after a "--" separator are scope too — parsing
+// already folds both sides of "--" into one args slice (see splitScopeArgs
+// for the commands that do distinguish the two sides). The loaded config is
+// returned alongside errNoReposMatched so callers can inspect it (e.g. for
+// the ls onboarding hint).
 func loadAndResolve(
 	cfgPath *string,
-	cmd *cobra.Command,
 	args []string,
 ) (resolvedScope, error) {
 	cfg, err := loadResolvedConfig(cfgPath, "dispatch")
@@ -75,7 +69,7 @@ func loadAndResolve(
 		return resolvedScope{}, err
 	}
 
-	names, forceAttention, err := resolveScope(cmd, args, &cfg)
+	names, forceAttention, err := resolveScope(args, &cfg)
 	if err != nil {
 		return resolvedScope{}, err
 	}
@@ -94,8 +88,8 @@ func hasAttentionScope(names []string) bool {
 	return slices.Contains(names, config.ReservedAttention)
 }
 
-func resolveScope(cmd *cobra.Command, args []string, cfg *config.Config) ([]string, bool, error) {
-	names := slices.Clone(flagStringSlice(cmd, cmdReposFlag))
+func resolveScope(args []string, cfg *config.Config) ([]string, bool, error) {
+	names := make([]string, 0, len(args))
 
 	for _, arg := range args {
 		name, ok := scopeName(arg, cfg)
@@ -159,10 +153,9 @@ func loadAndSplit(
 		return resolvedScope{}, nil, err
 	}
 
-	names := slices.Concat(flagStringSlice(cmd, cmdReposFlag), rawScope)
-	forceAttention := hasAttentionScope(names)
+	forceAttention := hasAttentionScope(rawScope)
 
-	resolved, err := cfg.ResolveScope(names)
+	resolved, err := cfg.ResolveScope(rawScope)
 	if err != nil {
 		return resolvedScope{}, nil, fmt.Errorf("resolving scope: %w", err)
 	}
@@ -325,7 +318,7 @@ func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			scope, err := loadAndResolve(cfgPath, cmd, args)
+			scope, err := loadAndResolve(cfgPath, args)
 			if err != nil {
 				return err
 			}
@@ -458,7 +451,6 @@ func runShellInteractive(
 }
 
 func addLsFlags(fs *pflag.FlagSet) {
-	fs.StringSliceP("repos", "r", nil, "repo names or a group name")
 	fs.BoolP("message", "m", false, "show commit message and time")
 	fs.BoolP("names", "n", false, "show repo names only, one per line")
 	fs.BoolP("dirs", "d", false, "show repo dirs only, one per line")
@@ -528,7 +520,7 @@ func lsAction(
 	return func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
 
-		scope, err := loadAndResolve(cfgPath, cmd, args)
+		scope, err := loadAndResolve(cfgPath, args)
 		if errors.Is(err, errNoReposMatched) {
 			if len(scope.cfg.Repos) == 0 {
 				ui.Warnf("no repos tracked — run \"%s repo add <path>\" to get started", cmdNameHRD)

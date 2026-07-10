@@ -78,8 +78,7 @@ hrd repo root add ~/my-repos -g personal
 hrd
 
 # Add repos to groups
-hrd repo group myproject work
-hrd repo group infra work
+hrd group add work myproject infra
 
 # Live status across all repos in context
 hrd ls
@@ -127,7 +126,7 @@ Status symbols at a glance:
 Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
-- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`. `[ungrouped]` (alongside `[all]`) filters to repos in no group at all.
+- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`. `[ungrouped]`/`[attention]` (alongside `[all]`) filter to repos in no group, or repos needing attention (dirty/out of sync), respectively. `*` toggles the attention filter directly without opening the picker.
 - Type-to-filter with `/` — fuzzy-match repos by name as you type; `Enter` keeps the filter, `Esc` clears it.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.
@@ -156,7 +155,7 @@ Examples:
   hrd ls                 # show status of all tracked repos
 
 Repository management:
-  group       list repo groups
+  group       manage repo groups
   repo        manage tracked repositories
 
 Inspect:
@@ -210,16 +209,16 @@ log` works, but flags like `--oneline` need the `--` form).
 `hrd repo scan add <dir>...` walks each directory (default depth 5, tune
 with `--depth`) and tracks every git/jj repo it finds as its own entry in
 the config. Detected repos are not descended into, so vendored or nested
-checkouts stay untracked; hidden directories are skipped. `hrd repo scan
-list <dir>...` previews the same walk without saving, with `--tracked` /
-`--untracked` to filter by whether a match is already in the config.
-`-g/--group` assigns everything found to a group. Name collisions fall back
-to `<parent>-<dir>`; already-tracked paths are left alone, so re-running
-`scan add` is safe.
+checkouts stay untracked; hidden directories are skipped. `-g/--group`
+assigns everything found to a group. Name collisions fall back to
+`<parent>-<dir>`; already-tracked paths are left alone, so re-running
+`scan add` is safe. `hrd repo scan ls <dir>...` previews the same walk
+without saving — purely read-only — with `--tracked`/`--untracked` to
+filter by whether a match is already in the config.
 
 ```sh
 hrd repo scan add ~/dev --depth 2 --pattern 'api-*' -g backend
-hrd repo scan list ~/dev --untracked
+hrd repo scan ls ~/dev --untracked
 ```
 
 For a directory you want to stay in sync automatically, use `hrd repo root
@@ -257,8 +256,8 @@ hrd shell --dirty -- git stash list
 ### Aliases
 
 Define your own commands in the config and they become first-class
-subcommands — with repo/group scoping, `-r`, `--interactive`, status
-filters, and shell completion, and listed under `hrd --help`:
+subcommands — with repo/group scoping, `--interactive`, status filters, and
+shell completion, and listed under `hrd --help`:
 
 ```toml
 [aliases]
@@ -316,7 +315,7 @@ gpf = "git push --force-with-lease" # always that backend
 mkclean = "!make clean" # "!" or "sh " prefix = shell command
 ```
 
-**Note**: Groups are derived from the `groups` field on each repo, plus the `groups` field on any `[roots.*]` entry (inherited by every repo discovered under it). Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. Group names can never start with `@` (so `hrd repo group myrepo @work` stores `work`, not `@work`) — this reserves the `@@` namespace (e.g. `@@none`, see the Quick start tip) for built-in pseudo-groups, which can never collide with anything you create.
+**Note**: Groups are derived from the `groups` field on each repo, plus the `groups` field on any `[roots.*]` entry (inherited by every repo discovered under it). Group names are displayed with an `@` prefix (e.g., `@work`) to distinguish them from repo names. The `@` is optional on input — `work` and `@work` are treated identically. Group names can never start with `@` (so `hrd group add @work myrepo` stores `work`, not `@work`) — this reserves the `@@` namespace (e.g. `@@none`, see the Quick start tip) for built-in pseudo-groups, which can never collide with anything you create.
 
 ---
 

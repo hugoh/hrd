@@ -21,24 +21,24 @@ func TestRepoAddRejectsReservedGroup(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRepoGroupRejectsReservedGroup(t *testing.T) {
+func TestGroupAddRejectsReservedGroup(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{"r1": {Path: "/1"}},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "r1", "@@none"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "@@none", "r1"})
 	require.Error(t, err)
 }
 
-// TestRepoGroupStripsAtPrefix verifies that a single "@" is treated as
+// TestGroupAddStripsAtPrefix verifies that a single "@" is treated as
 // input sugar (stripped) and never stored literally — this is what makes
 // reserving the "@@" namespace for pseudo-groups safe.
-func TestRepoGroupStripsAtPrefix(t *testing.T) {
+func TestGroupAddStripsAtPrefix(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{"r1": {Path: "/1"}},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "r1", "@work"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "@work", "r1"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -57,15 +57,6 @@ func TestRepoScanAddRejectsReservedGroup(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRepoScanListRejectsReservedGroup(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root, cfgPath := scanTreeWithTrackedApp(t)
-
-	err := runHRD(t, cfgPath, []string{"repo", cmdNameScan, cmdNameScanList, "-g", "@@none", root})
-	require.Error(t, err)
-}
-
 func TestRepoLsReservedNone(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
@@ -74,7 +65,7 @@ func TestRepoLsReservedNone(t *testing.T) {
 		},
 	})
 
-	out := runAppCapture(t, cfgPath, []string{"repo", "ls", "-g", "@@none"})
+	out := runAppCapture(t, cfgPath, []string{"repo", "ls", "@@none"})
 	assert.Contains(t, out, "ungrouped")
 	assert.NotContains(t, out, "grouped\n")
 }

@@ -150,7 +150,7 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestRepoGroup(t *testing.T) {
+func TestGroupAdd(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
 			"repo1": {Path: "/tmp/repo1"},
@@ -158,7 +158,7 @@ func TestRepoGroup(t *testing.T) {
 		},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "repo1", "work"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "work", "repo1"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -168,7 +168,7 @@ func TestRepoGroup(t *testing.T) {
 	assert.Equal(t, []string{"repo1"}, cfg.Groups["work"].Repos)
 
 	// Add same group again — should no-op
-	err = runHRD(t, cfgPath, []string{"repo", "group", "repo1", "work"})
+	err = runHRD(t, cfgPath, []string{"group", "add", "work", "repo1"})
 	require.NoError(t, err)
 
 	cfg, err = config.Load(cfgPath)
@@ -176,17 +176,37 @@ func TestRepoGroup(t *testing.T) {
 	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
 }
 
-func TestRepoGroupUnknownRepo(t *testing.T) {
+// TestGroupAddMultipleRepos verifies the group-first argument order allows
+// adding several repos to one group in a single invocation.
+func TestGroupAddMultipleRepos(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1"},
+			"repo2": {Path: "/tmp/repo2"},
+		},
+	})
+
+	err := runHRD(t, cfgPath, []string{"group", "add", "work", "repo1", "repo2"})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo2"].Groups)
+	assert.ElementsMatch(t, []string{"repo1", "repo2"}, cfg.Groups["work"].Repos)
+}
+
+func TestGroupAddUnknownRepo(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "group", "nonexistent", "work"})
+	err := runHRD(t, cfgPath, []string{"group", "add", "work", "nonexistent"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
 }
 
-func TestRepoUngroup(t *testing.T) {
+func TestGroupRm(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
 			"repo1": {Path: "/tmp/repo1", Groups: []string{"work", "oss"}},
@@ -194,7 +214,7 @@ func TestRepoUngroup(t *testing.T) {
 		},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "ungroup", "repo1", "work"})
+	err := runHRD(t, cfgPath, []string{"group", "rm", "work", "repo1"})
 	require.NoError(t, err)
 
 	cfg, err := config.Load(cfgPath)
@@ -202,17 +222,48 @@ func TestRepoUngroup(t *testing.T) {
 	assert.Equal(t, []string{"oss"}, cfg.Repos["repo1"].Groups)
 	assert.NotContains(t, cfg.Groups["work"].Repos, "repo1")
 
-	// Ungroup non-existent group — should no-op
-	err = runHRD(t, cfgPath, []string{"repo", "ungroup", "repo1", "nonexistent"})
+	// Remove from a group the repo isn't in — should no-op
+	err = runHRD(t, cfgPath, []string{"group", "rm", "nonexistent", "repo1"})
 	require.NoError(t, err)
 }
 
-func TestRepoUngroupUnknownRepo(t *testing.T) {
+// TestGroupRmMultipleRepos verifies the group-first argument order allows
+// removing several repos from one group in a single invocation.
+func TestGroupRmMultipleRepos(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: "/tmp/repo1", Groups: []string{"work"}},
+			"repo2": {Path: "/tmp/repo2", Groups: []string{"work"}},
+		},
+	})
+
+	err := runHRD(t, cfgPath, []string{"group", "rm", "work", "repo1", "repo2"})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Repos["repo1"].Groups)
+	assert.Empty(t, cfg.Repos["repo2"].Groups)
+}
+
+func TestGroupRmUnknownRepo(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{},
 	})
 
-	err := runHRD(t, cfgPath, []string{"repo", "ungroup", "nonexistent", "work"})
+	err := runHRD(t, cfgPath, []string{"group", "rm", "work", "nonexistent"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown repo")
+}
+
+// TestGroupRmValidatesGroupName is a symmetry regression test: "group rm"
+// now validates the group name the same way "group add" does (the old
+// "repo ungroup" skipped this).
+func TestGroupRmValidatesGroupName(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{"repo1": {Path: "/tmp/repo1"}},
+	})
+
+	err := runHRD(t, cfgPath, []string{"group", "rm", "@@none", "repo1"})
+	require.Error(t, err)
 }

@@ -210,10 +210,7 @@ $XDG_CONFIG_HOME/hrd/config.toml, falling back to ~/.config/hrd/config.toml.`,
 		SilenceErrors: true,
 		Args:          cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTUI(cmd.Context(), tui.Options{
-				ConfigPath: cfgPath,
-				Repos:      args,
-			})
+			return runTUIWithArgs(cmd.Context(), cfgPath, args)
 		},
 	}
 
@@ -250,12 +247,6 @@ func flagBool(cmd *cobra.Command, name string) bool {
 
 func flagInt(cmd *cobra.Command, name string) int {
 	v, _ := cmd.Flags().GetInt(name)
-
-	return v
-}
-
-func flagStringSlice(cmd *cobra.Command, name string) []string {
-	v, _ := cmd.Flags().GetStringSlice(name)
 
 	return v
 }
