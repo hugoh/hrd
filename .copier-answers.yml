@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.5.2
+_commit: v1.8.0
 _src_path: https://github.com/hugoh/go-tools.git
 codecov_components:
 -   id: backends_git
@@ -15,7 +15,6 @@ codecov_style: full
 codecov_target: 80%
 cog_omit_types: []
 coverage_total: 90
-dev_watch: false
 gen_check_cmd: git diff --exit-code README.md
 gen_cmd:
 - go generate ./...
@@ -45,6 +44,7 @@ golangci_test_exclude_linters:
 goreleaser_before_hooks:
 - go run ./cmd/genman
 goreleaser_version_pkg: github.com/hugoh/hrd/cmd
+has_executable: true
 has_fuzz: false
 has_gen: true
 has_goreleaser: true

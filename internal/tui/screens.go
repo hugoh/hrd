@@ -63,8 +63,6 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 		m.groupFilter = ""
 	case labelUngrouped:
 		m.groupFilter = config.ReservedNone
-	case labelAttention:
-		m.groupFilter = config.ReservedAttention
 	default:
 		m.groupFilter = selected
 	}
@@ -227,12 +225,12 @@ func openGroupPopup(m *model, mode groupMode) {
 
 	var options []string
 
-	const builtinFilterOptions = 3 // [all], [ungrouped], [attention]
+	const builtinFilterOptions = 2 // [all], [ungrouped]
 
 	switch mode {
 	case groupFilterMode:
 		options = make([]string, 0, builtinFilterOptions+len(groupNames))
-		options = append(options, labelAllRepos, labelUngrouped, labelAttention)
+		options = append(options, labelAllRepos, labelUngrouped)
 		options = append(options, groupNames...)
 	case groupAddMode:
 		options = make([]string, 0, len(groupNames)+1)
@@ -244,14 +242,11 @@ func openGroupPopup(m *model, mode groupMode) {
 	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
-	attentionCount := len(filterByAttention(m.repoOrder, m.statuses))
-
 	items := buildGroupItems(
 		options,
 		m.cfg.Groups,
 		len(m.cfg.Repos),
 		len(m.cfg.UngroupedRepos()),
-		attentionCount,
 	)
 	m.groupList.SetItems(items)
 
@@ -273,18 +268,11 @@ func openGroupPopup(m *model, mode groupMode) {
 
 // optMatchesGroupFilter reports whether popup option opt represents the
 // currently active groupFilter — either a real group (bare or "@"-prefixed)
-// or one of the reserved pseudo-group labels ([ungrouped], [attention]).
+// or the reserved pseudo-group label ([ungrouped]).
 func optMatchesGroupFilter(opt, groupFilter string) bool {
 	if opt == groupFilter || opt == "@"+groupFilter {
 		return true
 	}
 
-	switch opt {
-	case labelUngrouped:
-		return groupFilter == config.ReservedNone
-	case labelAttention:
-		return groupFilter == config.ReservedAttention
-	default:
-		return false
-	}
+	return opt == labelUngrouped && groupFilter == config.ReservedNone
 }

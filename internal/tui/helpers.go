@@ -16,7 +16,6 @@ var errUnknownGroup = errors.New("unknown group")
 const (
 	labelAllRepos  = "[all]"
 	labelUngrouped = "[ungrouped]"
-	labelAttention = "[attention]"
 )
 
 func matchingGroups(
@@ -121,8 +120,6 @@ func (m *model) groupLabel() string {
 	switch {
 	case m.groupFilter == config.ReservedNone:
 		return "ungrouped"
-	case m.groupFilter == config.ReservedAttention:
-		return "attention"
 	case m.groupFilter != "":
 		return "@" + m.groupFilter
 	default:
@@ -142,8 +139,6 @@ func (m *model) activeRepoOrder() []string {
 	switch {
 	case m.groupFilter == config.ReservedNone:
 		base = m.cfg.UngroupedRepos()
-	case m.groupFilter == config.ReservedAttention:
-		base = filterByAttention(m.repoOrder, m.statuses)
 	case m.groupFilter != "":
 		if g, ok := m.cfg.Groups[m.groupFilter]; ok {
 			base = g.Repos
