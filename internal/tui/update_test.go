@@ -294,6 +294,32 @@ func TestCheckboxPlainText(t *testing.T) {
 	require.NotContains(t, rows[1][0], "\x1b", "checkbox must not contain ANSI codes")
 }
 
+func TestPendingRowShowsSpinner(t *testing.T) {
+	m := newAlphaBetaModel(t)
+	m.selected = map[string]bool{"alpha": true, "beta": true}
+	m.pending = map[string]bool{"alpha": true}
+	m.updateTableRows()
+
+	rows := m.repoTable.Rows()
+	require.Len(t, rows, 2)
+	assert.NotEmpty(t, rows[0][0], "pending row should show a spinner glyph in the checkbox column")
+	assert.Empty(t, rows[1][0], "non-pending row's checkbox column stays blank outside select mode")
+
+	m.mode = modeSelect
+	m.selected = map[string]bool{"alpha": true, "beta": false}
+	m.updateTableRows()
+
+	rows = m.repoTable.Rows()
+	require.Len(t, rows, 2)
+	assert.Equal(
+		t,
+		checkboxSelected+m.rowSpinner.View(),
+		rows[0][0],
+		"pending selected row appends the spinner after the checkmark",
+	)
+	assert.Equal(t, checkboxUnsel, rows[1][0], "non-pending unselected row is unchanged")
+}
+
 func TestColoredSummaryAllSuccess(t *testing.T) {
 	m := &model{
 		execTotal: 2,

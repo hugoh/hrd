@@ -165,10 +165,12 @@ type model struct {
 
 	repoOrder []string
 
-	loading  bool
-	spinner  spinner.Model
-	statuses map[string]runner.StatusResult
-	vcsCache map[string]string
+	loading    bool
+	spinner    spinner.Model
+	rowSpinner spinner.Model
+	statuses   map[string]runner.StatusResult
+	pending    map[string]bool // repos with a status fetch in flight; drives per-row spinner
+	vcsCache   map[string]string
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -254,7 +256,12 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithSpinner(spinner.Dot),
 			spinner.WithStyle(ui.MutedStyle()),
 		),
+		rowSpinner: spinner.New(
+			spinner.WithSpinner(spinner.Jump),
+			spinner.WithStyle(ui.MutedStyle()),
+		),
 		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
+		pending:     make(map[string]bool, len(cfg.Repos)),
 		vcsCache:    make(map[string]string, len(cfg.Repos)),
 		repoOrder:   repoOrder,
 		selected:    selected,
@@ -281,6 +288,7 @@ func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		loadStatusesCmd(m),
 		m.spinner.Tick,
+		m.rowSpinner.Tick,
 	)
 }
 

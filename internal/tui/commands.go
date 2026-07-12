@@ -37,6 +37,11 @@ func loadStatusesCmd(m *model) tea.Cmd {
 		return func() tea.Msg { return statusDoneMsg{} }
 	}
 
+	m.pending = make(map[string]bool, len(names))
+	for _, name := range names {
+		m.pending[name] = true
+	}
+
 	m.statusCh = runner.GatherStatus(
 		m.ctx,
 		m.cfg.Repos,
