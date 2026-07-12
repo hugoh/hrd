@@ -75,7 +75,10 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 	m.pushSelectionHistory()
 	m.savePersState()
 
-	return m, loadStatusesCmd(m)
+	cmd := loadStatusesCmd(m)
+	m.updateTableRows()
+
+	return m, cmd
 }
 
 func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
@@ -212,12 +215,14 @@ func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
 	m.selected = selected
 	m.mode = modeNormal
 	m.repoTable.SetStyles(tableStyles(false))
-	m.updateTableRows()
 	m.pushSelectionHistory()
 	m.savePersState()
 	m.screen = screenMain
 
-	return m, loadStatusesCmd(m)
+	cmd := loadStatusesCmd(m)
+	m.updateTableRows()
+
+	return m, cmd
 }
 
 func openGroupPopup(m *model, mode groupMode) {

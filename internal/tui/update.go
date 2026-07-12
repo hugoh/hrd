@@ -86,11 +86,12 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var headerCmd, rowCmd tea.Cmd
 
-	m.spinner, cmd = m.spinner.Update(msg)
+	m.spinner, headerCmd = m.spinner.Update(msg)
+	m.rowSpinner, rowCmd = m.rowSpinner.Update(msg)
 
-	return m, cmd
+	return m, tea.Batch(headerCmd, rowCmd)
 }
 
 //nolint:cyclop // key dispatch with multiple screens
@@ -265,6 +266,7 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleStatusUpdate(msg statusUpdateMsg) (tea.Model, tea.Cmd) {
 	m.statuses[msg.result.RepoName] = msg.result
+	delete(m.pending, msg.result.RepoName)
 	m.updateTableRows()
 
 	return m, streamNextStatusCmd(m)
@@ -273,6 +275,7 @@ func (m *model) handleStatusUpdate(msg statusUpdateMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
 	m.loading = false
 	m.statusCh = nil
+	clear(m.pending)
 
 	total := m.totalCount()
 	if m.cursor >= total && total > 0 {
@@ -312,7 +315,10 @@ func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 		m.execSideEffect = false
 		m.loading = true
 
-		return m, loadStatusesCmd(m)
+		cmd := loadStatusesCmd(m)
+		m.updateTableRows()
+
+		return m, cmd
 	}
 
 	return m, nil
@@ -410,6 +416,12 @@ func (m *model) updateTableRows() {
 			} else {
 				chk = checkboxUnsel
 			}
+
+			if m.pending[name] {
+				chk += m.rowSpinner.View()
+			}
+		} else if m.pending[name] {
+			chk = m.rowSpinner.View()
 		}
 
 		statusStr := m.formatStatusLine(name)

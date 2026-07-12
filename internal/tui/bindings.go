@@ -163,7 +163,10 @@ var mainBindings = []binding{
 
 		m.loading = true
 
-		return m, loadStatusesCmd(m)
+		cmd := loadStatusesCmd(m)
+		m.updateTableRows()
+
+		return m, cmd
 	}, label: "refresh", desc: "Refresh repo statuses and config", hrd: true, section: secGeneral, order: 10},
 	{key: "/", handler: func(m *model) (tea.Model, tea.Cmd) {
 		m.openNameFilter()
