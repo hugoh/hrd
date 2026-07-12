@@ -149,7 +149,6 @@ func TestRepoScanAddPattern(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, cfg.Repos, 2)
 
-	// Reset and use a non-matching pattern
 	cfgPath2 := setupTestConfig(t, config.Config{})
 	require.NoError(
 		t,

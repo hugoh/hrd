@@ -167,7 +167,6 @@ func TestGroupAdd(t *testing.T) {
 	assert.Contains(t, cfg.Groups, "work")
 	assert.Equal(t, []string{"repo1"}, cfg.Groups["work"].Repos)
 
-	// Add same group again — should no-op
 	err = runHRD(t, cfgPath, []string{"group", "add", "work", "repo1"})
 	require.NoError(t, err)
 
@@ -222,7 +221,6 @@ func TestGroupRm(t *testing.T) {
 	assert.Equal(t, []string{"oss"}, cfg.Repos["repo1"].Groups)
 	assert.NotContains(t, cfg.Groups["work"].Repos, "repo1")
 
-	// Remove from a group the repo isn't in — should no-op
 	err = runHRD(t, cfgPath, []string{"group", "rm", "nonexistent", "repo1"})
 	require.NoError(t, err)
 }

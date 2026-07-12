@@ -365,12 +365,10 @@ func TestPushSelectionHistory(t *testing.T) {
 	assert.Equal(t, []string{"a", "b"}, entry.Repos)
 	assert.False(t, entry.Timestamp.IsZero())
 
-	// Push identical state — should be deduped
 	m.pushSelectionHistory()
 
 	assert.Len(t, m.persState.SelectionHistory, 1, "SelectionHistory should be deduped")
 
-	// Push different state
 	m.selected = map[string]bool{"a": true}
 	m.pushSelectionHistory()
 

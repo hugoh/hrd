@@ -259,7 +259,6 @@ func Register(backend Backend) error {
 		}
 	}
 
-	// Insert in priority order (descending)
 	idx := len(registry)
 	for i, existing := range registry {
 		if backend.Priority() > existing.Priority() {
