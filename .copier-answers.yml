@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.8.0
+_commit: v1.9.0
 _src_path: https://github.com/hugoh/go-tools.git
 codecov_components:
 -   id: backends_git
@@ -68,5 +68,3 @@ testcoverage_overrides:
 -   path: backends/
     threshold: 100
 
-
-#copier updated
