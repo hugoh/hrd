@@ -333,7 +333,7 @@ func (m *model) initInput() {
 	ti := textinput.New()
 	ti.Placeholder = "type a command..."
 	ti.CharLimit = 512
-	ti.SetWidth(initInputW) // adjusted on resize
+	ti.SetWidth(initInputW)
 	m.input = ti
 }
 
@@ -341,7 +341,7 @@ func (m *model) initFilterInput() {
 	ti := textinput.New()
 	ti.Placeholder = "filter repos by name..."
 	ti.CharLimit = 128
-	ti.SetWidth(initInputW) // adjusted on resize
+	ti.SetWidth(initInputW)
 	m.filterInput = ti
 }
 
@@ -445,11 +445,11 @@ func (m *model) execCancelAll() {
 // optional input line.
 func (m *model) contentHeight() int {
 	h := m.height
-	h -= layoutHeaderH // header
-	h -= layoutSepH    // separator after header
-	h -= layoutFooterH // footer
+	h -= layoutHeaderH
+	h -= layoutSepH
+	h -= layoutFooterH
+	h -= layoutSepH
 
-	h -= layoutSepH // separator before footer
 	if m.commandOpen || m.filterOpen {
 		h -= inputLineH
 	}
