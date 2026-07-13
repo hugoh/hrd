@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/list"
 	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/theme"
 )
 
 const (
@@ -104,7 +105,7 @@ func buildGroupItems(
 	return items
 }
 
-func defaultItemDelegate(spacing int) list.DefaultDelegate {
+func defaultItemDelegate(spacing int, dark bool) list.DefaultDelegate {
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = true
 	delegate.SetHeight(itemH)
@@ -114,7 +115,9 @@ func defaultItemDelegate(spacing int) list.DefaultDelegate {
 	desc := lipgloss.NewStyle().PaddingLeft(itemIndent)
 
 	delegate.Styles.NormalTitle = title
-	delegate.Styles.SelectedTitle = title.Background(lipgloss.Color("62")).UnsetForeground()
+	delegate.Styles.SelectedTitle = title.
+		Background(lipgloss.Color(theme.SelectionBackground.Resolve(dark))).
+		UnsetForeground()
 	delegate.Styles.NormalDesc = desc
 	delegate.Styles.SelectedDesc = desc
 

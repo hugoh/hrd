@@ -214,7 +214,7 @@ func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
 
 	m.selected = selected
 	m.mode = modeNormal
-	m.repoTable.SetStyles(tableStyles(false))
+	m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
 	m.pushSelectionHistory()
 	m.savePersState()
 	m.screen = screenMain
@@ -244,7 +244,7 @@ func openGroupPopup(m *model, mode groupMode) {
 	}
 
 	m.groupMode = mode
-	m.groupList = initList(defaultItemDelegate(0), nil, m.width)
+	m.groupList = initList(defaultItemDelegate(0, m.darkBackground), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
 	items := buildGroupItems(

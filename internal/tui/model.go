@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
 	"golang.org/x/term"
 )
@@ -137,6 +138,10 @@ type model struct {
 	width  int
 	height int
 
+	// darkBackground defaults true (most terminals) until
+	// tea.BackgroundColorMsg reports the real value.
+	darkBackground bool
+
 	cfg  config.Config
 	opts Options
 
@@ -248,10 +253,11 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 	}
 
 	m := &model{
-		ctx:     ctx,
-		cfg:     cfg,
-		opts:    opts,
-		loading: true,
+		ctx:            ctx,
+		cfg:            cfg,
+		opts:           opts,
+		loading:        true,
+		darkBackground: true,
 		spinner: spinner.New(
 			spinner.WithSpinner(spinner.Dot),
 			spinner.WithStyle(ui.MutedStyle()),
@@ -289,6 +295,7 @@ func (m *model) Init() tea.Cmd {
 		loadStatusesCmd(m),
 		m.spinner.Tick,
 		m.rowSpinner.Tick,
+		tea.RequestBackgroundColor,
 	)
 }
 
@@ -308,14 +315,14 @@ func (m *model) initTable() {
 		table.WithWidth(defaultViewW),
 	)
 	m.repoTable = t
-	m.repoTable.SetStyles(tableStyles(false))
+	m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
 }
 
-func tableStyles(cursorVisible bool) table.Styles {
+func tableStyles(cursorVisible, dark bool) table.Styles {
 	selected := lipgloss.NewStyle() // empty: preserves Cell styling, no width change
 	if cursorVisible {
 		selected = lipgloss.NewStyle().
-			Background(lipgloss.Color("62"))
+			Background(lipgloss.Color(theme.SelectionBackground.Resolve(dark)))
 	}
 
 	return table.Styles{
@@ -377,7 +384,7 @@ func (m *model) initHelpViewport() {
 
 func (m *model) initHistoryList() {
 	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, m.allRepoSet())
-	m.historyList = initList(defaultItemDelegate(0), items, defaultViewW)
+	m.historyList = initList(defaultItemDelegate(0, m.darkBackground), items, defaultViewW)
 }
 
 // allRepoSet returns the set of all configured repo names.
@@ -391,7 +398,7 @@ func (m *model) allRepoSet() map[string]struct{} {
 }
 
 func (m *model) initGroupList() {
-	m.groupList = initList(defaultItemDelegate(0), nil, defaultViewW)
+	m.groupList = initList(defaultItemDelegate(0, m.darkBackground), nil, defaultViewW)
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.

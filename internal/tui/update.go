@@ -9,7 +9,6 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/internal/cmdspec"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -45,6 +44,10 @@ func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleExecDone(msg)
 	case vcsCompletionsMsg:
 		return m.handleVCSCompletions(msg)
+	case tea.BackgroundColorMsg:
+		m.darkBackground = msg.IsDark()
+
+		return m, nil
 	}
 
 	return m, nil
@@ -181,7 +184,7 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		}
 
 		m.mode = modeNormal
-		m.repoTable.SetStyles(tableStyles(false))
+		m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
 		m.updateTableRows()
 
 		return m, nil
@@ -301,6 +304,7 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 		msg.result.name,
 		msg.result.result,
 		m.output.Width(),
+		m.darkBackground,
 	) + "\n"
 	m.output.SetContent(m.execOutputStr)
 
@@ -488,39 +492,20 @@ func (m *model) formatStatusLine(name string) string {
 	return ""
 }
 
-func formatExecOutput(results []execResult, width int) string {
+func formatExecOutput(results []execResult, width int, dark bool) string {
 	var b strings.Builder
 
 	for _, er := range results {
-		b.WriteString(formatDispatchResultLine(er.name, er.result, width))
+		b.WriteString(formatDispatchResultLine(er.name, er.result, width, dark))
 		b.WriteString("\n")
 	}
 
 	return b.String()
 }
 
-func formatDispatchResultLine(name string, res runner.Result, width int) string {
-	headerStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("15"))
-
-	statusSym := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorCode("green"))).
-		Render("✓")
-
-	switch {
-	case res.Err != nil:
-		statusSym = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCode("red"))).
-			Render("✗")
-	case res.ExitCode != 0:
-		statusSym = lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorCode("yellow"))).
-			Render("✗")
-	}
-
-	header := headerStyle.Width(width).
-		Render(fmt.Sprintf("%s %s ", ui.FormatDispatchHeader(name, res.VCS), statusSym))
+func formatDispatchResultLine(name string, res runner.Result, width int, dark bool) string {
+	res.RepoName = name
+	header := ui.RenderDispatchHeaderBar(res, width, dark)
 
 	switch {
 	case res.Err != nil:
