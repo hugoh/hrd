@@ -128,9 +128,9 @@ func addRepo(cfg *config.Config, path, explicitName, group string) error {
 	}
 
 	if group != "" {
-		ui.Success("added %s as %q in group %s", abs, name, group)
+		ui.Infof("added %s as %q in group %s", abs, name, group)
 	} else {
-		ui.Success("added %s as %q", abs, name)
+		ui.Infof("added %s as %q", abs, name)
 	}
 
 	return nil
@@ -158,7 +158,7 @@ func repoRemoveCmd(cfgPath *string) *cobra.Command {
 				}
 
 				cfg.RemoveRepo(name)
-				ui.Success("removed %q", name)
+				ui.Infof("removed %q", name)
 			}
 
 			return config.Save(*cfgPath, cfg)
@@ -286,7 +286,7 @@ func repoRenameCmd(cfgPath *string) *cobra.Command {
 			cfg.RemoveRepo(oldName)
 			cfg.AddRepo(newName, repo)
 
-			ui.Success("renamed %q → %q", oldName, newName)
+			ui.Infof("renamed %q → %q", oldName, newName)
 
 			return config.Save(*cfgPath, cfg)
 		},
@@ -366,7 +366,7 @@ func groupAddCmd(cfgPath *string) *cobra.Command {
 		RunE: groupMemberAction(cfgPath, "group add", errGroupAddUsage,
 			func(cfg *config.Config, name, group string) {
 				cfg.AddRepoToGroup(name, group)
-				ui.Success("added %q to group %q", name, group)
+				ui.Infof("added %q to group %q", name, group)
 			}),
 	}
 }
@@ -380,7 +380,7 @@ func groupRmCmd(cfgPath *string) *cobra.Command {
 		RunE: groupMemberAction(cfgPath, "group rm", errGroupRmUsage,
 			func(cfg *config.Config, name, group string) {
 				cfg.RemoveRepoFromGroup(name, group)
-				ui.Success("removed %q from group %q", name, group)
+				ui.Infof("removed %q from group %q", name, group)
 			}),
 	}
 }

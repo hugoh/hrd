@@ -49,6 +49,27 @@ func lipglossColor(colorName string) color.Color {
 	return lipgloss.Color(theme.ColorCode(colorName))
 }
 
+//nolint:gochecknoglobals // memoizes one terminal query for the process lifetime
+var (
+	darkBackground     bool
+	darkBackgroundOnce sync.Once
+)
+
+// HasDarkBackground reports whether the terminal has a dark background,
+// querying it once and caching the result for the process lifetime.
+//
+// Only call this outside the TUI (bubbletea already owns stdin there and
+// queries its own background color via tea.RequestBackgroundColor /
+// tea.BackgroundColorMsg — querying stdin directly here as well would race
+// with bubbletea's raw-mode input reader).
+func HasDarkBackground() bool {
+	darkBackgroundOnce.Do(func() {
+		darkBackground = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
+	})
+
+	return darkBackground
+}
+
 func MutedStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipglossColor("gray"))
 }
@@ -73,27 +94,44 @@ func FormatDispatchHeader(name, vcs string) string {
 	return fmt.Sprintf(" %-15s %-3s", name, vcs)
 }
 
-//nolint:gochecknoglobals // cached dispatch result styles
-var (
-	dispatchHeaderStyle = lipgloss.NewStyle().
-				Background(lipgloss.Color("236")).
-				Foreground(lipgloss.Color("15"))
-	dispatchErrorStyle   = lipgloss.NewStyle().Foreground(lipglossColor("red"))
-	dispatchSuccessStyle = lipgloss.NewStyle().Foreground(lipglossColor("green"))
-)
+// RenderDispatchHeaderBar renders the "<repo> <vcs> <glyph>" separator bar
+// for a dispatch result, tinted by result tier (success/warning/error) and
+// stretched to width. It is a single Style.Render() call over unstyled
+// content so the background/foreground span the whole bar with no gaps.
+// dark selects the dark or light terminal-background color variant — pass
+// HasDarkBackground() from the CLI path, or the TUI's own
+// tea.BackgroundColorMsg-derived value.
+func RenderDispatchHeaderBar(res runner.Result, width int, dark bool) string {
+	tier := theme.BarTierFor(res.Err, res.ExitCode)
+
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.BarBackground(tier, dark))).
+		Foreground(lipgloss.Color(theme.BarForeground(tier, dark))).
+		Width(width)
+
+	glyph := "✓"
+	if tier != theme.BarSuccess {
+		glyph = "✗"
+	}
+
+	return style.Render(fmt.Sprintf("%s %s ", FormatDispatchHeader(res.RepoName, res.VCS), glyph))
+}
+
+//nolint:gochecknoglobals // cached dispatch result detail-text style
+var dispatchErrorStyle = lipgloss.NewStyle().Foreground(lipglossColor("red"))
 
 func RenderDispatchResult(res runner.Result) string {
-	header := dispatchHeaderStyle.Render(FormatDispatchHeader(res.RepoName, res.VCS))
+	header := RenderDispatchHeaderBar(res, GetTermWidth(), HasDarkBackground())
 
 	if runner.ResultColor(res) == "red" {
 		if res.Err != nil {
-			return header + " " + dispatchErrorStyle.Render("✗ "+res.Err.Error())
+			return header + "\n" + dispatchErrorStyle.Render(res.Err.Error())
 		}
 
-		return header + " " + dispatchErrorStyle.Render("✗ exit "+strconv.Itoa(res.ExitCode))
+		return header + "\n" + dispatchErrorStyle.Render("exit "+strconv.Itoa(res.ExitCode))
 	}
 
-	return header + " " + dispatchSuccessStyle.Render("✓")
+	return header
 }
 
 type StatusLineParts struct {
@@ -164,12 +202,8 @@ func Warnf(format string, args ...any) {
 	logLogger().Warnf(format, args...)
 }
 
-func Success(msg string, args ...any) {
+func Infof(msg string, args ...any) {
 	logLogger().Infof(msg, args...)
-}
-
-func Fail(msg string, args ...any) {
-	logLogger().Errorf(msg, args...)
 }
 
 func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {

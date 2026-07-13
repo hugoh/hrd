@@ -101,24 +101,14 @@ func TestErrf(t *testing.T) {
 	assert.Contains(t, buf.String(), "error msg")
 }
 
-func TestSuccess(t *testing.T) {
+func TestInfof(t *testing.T) {
 	var buf bytes.Buffer
 
 	ui.SetLogger(log.New(&buf))
 	defer ui.SetLogger(nil)
 
-	ui.Success("done %s", "ok")
+	ui.Infof("done %s", "ok")
 	assert.Contains(t, buf.String(), "done ok")
-}
-
-func TestFail(t *testing.T) {
-	var buf bytes.Buffer
-
-	ui.SetLogger(log.New(&buf))
-	defer ui.SetLogger(nil)
-
-	ui.Fail("fail %s", "err")
-	assert.Contains(t, buf.String(), "fail err")
 }
 
 func TestApplyColor(t *testing.T) {

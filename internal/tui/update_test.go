@@ -225,7 +225,7 @@ func TestRowAlignmentNoSelectMode(t *testing.T) {
 }
 
 func TestCursorRowNoWidthShift(t *testing.T) {
-	ss := tableStyles(true)
+	ss := tableStyles(true, true)
 	cellStyle := lipgloss.NewStyle().Padding(0, 1)
 
 	// Simulate 4-column row: checkbox + name + vcs + status
@@ -357,7 +357,7 @@ func TestColoredSummaryWithFailures(t *testing.T) {
 
 func TestFormatDispatchResultLineSuccess(t *testing.T) {
 	res := runner.Result{ExitCode: 0, Output: "hello"}
-	line := formatDispatchResultLine("myrepo", res, 40)
+	line := formatDispatchResultLine("myrepo", res, 40, true)
 
 	assert.Contains(t, line, "myrepo", "output should contain repo name")
 	assert.Contains(t, line, "hello", `output should contain 'hello'`)
@@ -368,7 +368,7 @@ func TestFormatDispatchResultLineError(t *testing.T) {
 		Err:    errors.New("something broke"),
 		Output: "details",
 	}
-	line := formatDispatchResultLine("myrepo", res, 40)
+	line := formatDispatchResultLine("myrepo", res, 40, true)
 
 	assert.Contains(t, line, "error:", "output should contain 'error:'")
 	assert.Contains(t, line, "something broke", "output should contain error msg")
@@ -376,14 +376,14 @@ func TestFormatDispatchResultLineError(t *testing.T) {
 
 func TestFormatDispatchResultLineNonZeroExit(t *testing.T) {
 	res := runner.Result{ExitCode: 1, Output: "oops"}
-	line := formatDispatchResultLine("myrepo", res, 40)
+	line := formatDispatchResultLine("myrepo", res, 40, true)
 
 	assert.Contains(t, line, "exit 1", "output should contain 'exit 1'")
 }
 
 func TestFormatDispatchResultLineNoOutput(t *testing.T) {
 	res := runner.Result{ExitCode: 0}
-	line := formatDispatchResultLine("myrepo", res, 40)
+	line := formatDispatchResultLine("myrepo", res, 40, true)
 
 	assert.Contains(t, line, "myrepo", "output should contain repo name")
 }
@@ -393,14 +393,14 @@ func TestFormatExecOutput(t *testing.T) {
 		{name: "a", result: runner.Result{ExitCode: 0, Output: "ok"}},
 		{name: "b", result: runner.Result{ExitCode: 1, Output: "fail"}},
 	}
-	got := formatExecOutput(results, 40)
+	got := formatExecOutput(results, 40, true)
 
 	assert.Contains(t, got, "a", "output should contain 'a'")
 	assert.Contains(t, got, "b", "output should contain 'b'")
 }
 
 func TestFormatExecOutputEmpty(t *testing.T) {
-	got := formatExecOutput(nil, 40)
+	got := formatExecOutput(nil, 40, true)
 	assert.Empty(t, got, "expected empty output for nil results")
 }
 

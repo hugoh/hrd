@@ -61,6 +61,85 @@ var ANSIColors = map[string]string{
 // DefaultColor is the ANSI code used when a color name is not found.
 const DefaultColor = "15" // white
 
+// BarTier classifies a dispatch result for the purpose of tinting its
+// header bar.
+type BarTier int
+
+const (
+	BarSuccess BarTier = iota
+	BarWarning
+	BarError
+)
+
+// LightDarkPair holds an ANSI 256-color code for light and dark terminal
+// backgrounds; lipgloss/v2 dropped AdaptiveColor in favor of resolving
+// light/dark manually, so this fills that role for this package.
+type LightDarkPair struct {
+	Light string
+	Dark  string
+}
+
+// Resolve returns the Dark code when dark is true, else the Light code.
+func (p LightDarkPair) Resolve(dark bool) string {
+	if dark {
+		return p.Dark
+	}
+
+	return p.Light
+}
+
+type barColorPair struct {
+	bg LightDarkPair
+	fg LightDarkPair
+}
+
+//nolint:gochecknoglobals // const-like lookup table shared by CLI and TUI
+var barColors = map[BarTier]barColorPair{
+	BarSuccess: {
+		bg: LightDarkPair{Light: "150", Dark: "22"},
+		fg: LightDarkPair{Light: "0", Dark: "15"},
+	},
+	BarWarning: {
+		bg: LightDarkPair{Light: "223", Dark: "94"},
+		fg: LightDarkPair{Light: "0", Dark: "15"},
+	},
+	BarError: {
+		bg: LightDarkPair{Light: "217", Dark: "88"},
+		fg: LightDarkPair{Light: "0", Dark: "15"},
+	},
+}
+
+// BarBackground returns the background ANSI code for a result tier, resolved
+// for a dark (dark=true) or light (dark=false) terminal background.
+func BarBackground(tier BarTier, dark bool) string {
+	return barColors[tier].bg.Resolve(dark)
+}
+
+// BarForeground returns the foreground ANSI code for a result tier, resolved
+// for a dark (dark=true) or light (dark=false) terminal background.
+func BarForeground(tier BarTier, dark bool) string {
+	return barColors[tier].fg.Resolve(dark)
+}
+
+// BarTierFor classifies a dispatch result into a bar tier based on whether
+// it errored or exited non-zero.
+func BarTierFor(err error, exitCode int) BarTier {
+	switch {
+	case err != nil:
+		return BarError
+	case exitCode != 0:
+		return BarWarning
+	default:
+		return BarSuccess
+	}
+}
+
+// SelectionBackground is the highlight color for the currently selected
+// table row / list item, resolved for a dark or light terminal background.
+//
+//nolint:gochecknoglobals // const-like value shared by CLI and TUI
+var SelectionBackground = LightDarkPair{Light: "111", Dark: "62"}
+
 // ColorCode returns the ANSI 256-color code for the given semantic name.
 // Returns DefaultColor for unknown names.
 func ColorCode(name string) string {

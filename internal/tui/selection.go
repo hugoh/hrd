@@ -24,7 +24,7 @@ func (m *model) toggleMode(target mode, saveSelection bool) {
 		m.mode = target
 	}
 
-	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal))
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal, m.darkBackground))
 	m.updateTableRows()
 
 	if saved != "" {

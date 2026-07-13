@@ -134,7 +134,7 @@ func addRoot(cfg *config.Config, dir, explicitName, group string, depth int) err
 		Groups: groups,
 	})
 
-	ui.Success("tracking root %s as %q", abs, name)
+	ui.Infof("tracking root %s as %q", abs, name)
 
 	return nil
 }
@@ -160,7 +160,7 @@ func repoRootRemoveCmd(cfgPath *string) *cobra.Command {
 				}
 
 				cfg.RemoveRoot(name)
-				ui.Success("removed root %q", name)
+				ui.Infof("removed root %q", name)
 			}
 
 			return config.Save(*cfgPath, cfg)
