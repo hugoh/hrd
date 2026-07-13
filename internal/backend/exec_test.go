@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,6 +58,23 @@ func TestRunCommand_Interactive(t *testing.T) {
 	assert.Equal(t, 0, res.ExitCode)
 	// In interactive mode, output is not captured.
 	assert.Empty(t, res.Output)
+}
+
+func TestRunCommand_PWDMatchesDir(t *testing.T) {
+	dir := t.TempDir()
+
+	res, err := RunCommand(t.Context(), "sh", dir, []string{"-c", "echo $PWD"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, dir, strings.TrimSpace(res.Output))
+}
+
+func TestRunCommand_EmptyPathKeepsRealPWD(t *testing.T) {
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+
+	res, err := RunCommand(t.Context(), "sh", "", []string{"-c", "echo $PWD"}, false)
+	require.NoError(t, err)
+	assert.Equal(t, wd, strings.TrimSpace(res.Output))
 }
 
 func TestRunTool_NoArgs(t *testing.T) {

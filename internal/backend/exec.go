@@ -41,7 +41,13 @@ func RunCommand(
 ) (RunResult, error) {
 	//nolint:gosec // controlled command execution, args from user input
 	cmd := exec.CommandContext(ctx, binary, args...)
+
 	cmd.Dir = path
+
+	if path != "" {
+		// mise shims resolve the tool version from $PWD, not the process cwd, so it must track cmd.Dir.
+		cmd.Env = append(os.Environ(), "PWD="+path)
+	}
 
 	var buf bytes.Buffer
 
