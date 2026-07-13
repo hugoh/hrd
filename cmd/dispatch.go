@@ -668,12 +668,12 @@ func runInteractiveEach(
 // exit code.
 func dispatchSummary(total int, failed []string) error {
 	if len(failed) > 0 {
-		ui.Fail("%s", ui.FormatSummary(total, failed))
+		ui.Errf("%s", ui.FormatSummary(total, failed))
 
 		return fmt.Errorf("%w: %d/%d", ErrReposFailed, len(failed), total)
 	}
 
-	ui.Success("%s", ui.FormatSummary(total, failed))
+	ui.Infof("%s", ui.FormatSummary(total, failed))
 
 	return nil
 }

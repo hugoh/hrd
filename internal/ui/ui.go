@@ -164,12 +164,8 @@ func Warnf(format string, args ...any) {
 	logLogger().Warnf(format, args...)
 }
 
-func Success(msg string, args ...any) {
+func Infof(msg string, args ...any) {
 	logLogger().Infof(msg, args...)
-}
-
-func Fail(msg string, args ...any) {
-	logLogger().Errorf(msg, args...)
 }
 
 func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
