@@ -36,6 +36,9 @@ local linters = new Mapping<String, Step> {
   ["golangci-lint-config"] = {
     check = "golangci-lint config verify"
   }
+  ["golangci-lint"] = (Builtins.golangci_lint) {
+    profiles = List("!ci")
+  }
   ["gomod-tidy"] = (Builtins.gomod_tidy) {
     profiles = List("!ci")
   }
@@ -60,12 +63,7 @@ hooks {
     steps = linters
   }
   ["pre-push"] {
-    steps = new Mapping<String, Step> {
-      ... linters
-      ["go-ci"] {
-        check = "mise ci"
-      }
-    }
+    steps = linters
   }
   ["fix"] {
     fix = true

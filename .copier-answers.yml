@@ -1,18 +1,6 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.9.0
+_commit: v1.11.0
 _src_path: https://github.com/hugoh/go-tools.git
-codecov_components:
--   id: backends_git
-    name: backends/git
-    path: backends/git/**
--   id: backends_jj
-    name: backends/jj
-    path: backends/jj/**
-codecov_ignore:
-- main.go
-- cmd/genreadme/**
-codecov_style: full
-codecov_target: 80%
 cog_omit_types: []
 coverage_total: 90
 gen_check_cmd: git diff --exit-code README.md
@@ -50,9 +38,6 @@ has_gen: true
 has_goreleaser: true
 has_homebrew_cask: true
 has_test_int: false
-hk_has_golangci_step: false
-hk_has_goreleaser_step: true
-hk_prepush_with_go_ci: true
 nfpm_extra_contents:
 -   dst: /usr/share/man/man1
     src: man/*.1
@@ -68,5 +53,3 @@ testcoverage_overrides:
 -   path: backends/
     threshold: 100
 
-
-#copier updated
