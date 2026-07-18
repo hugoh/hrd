@@ -6,7 +6,7 @@ coverage_total: 90
 gen_check_cmd: git diff --exit-code README.md
 gen_cmd:
 - go generate ./...
-- dprint fmt README.md
+- rumdl check --fix README.md
 gen_outputs:
 - README.md
 gen_sources:

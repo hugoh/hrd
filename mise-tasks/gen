@@ -4,4 +4,4 @@
 #MISE outputs=["README.md"]
 set -e
 go generate ./...
-dprint fmt README.md
+rumdl check --fix README.md
