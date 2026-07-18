@@ -1,12 +1,12 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.12.0
+_commit: v1.13.2
 _src_path: https://github.com/hugoh/go-tools.git
 cog_omit_types: []
 coverage_total: 90
 gen_check_cmd: git diff --exit-code README.md
 gen_cmd:
 - go generate ./...
-- dprint fmt README.md
+- rumdl check --fix README.md
 gen_outputs:
 - README.md
 gen_sources:
