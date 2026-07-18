@@ -33,6 +33,10 @@ func TestMain(m *testing.M) {
 		// outlives WaitFinished; it's internal to the third-party library,
 		// not something callers can drain or cancel.
 		goleak.IgnoreTopFunction("github.com/charmbracelet/x/exp/teatest/v2.NewTestModel.func2"),
+		// cursor.(*Model).Blink starts a timer-backed goroutine that self-
+		// terminates after BlinkSpeed (~530ms); it can still be in flight
+		// when WaitFinished returns right after a focused input is quit.
+		goleak.IgnoreTopFunction("charm.land/bubbles/v2/cursor.(*Model).Blink.func1"),
 	)
 }
 
