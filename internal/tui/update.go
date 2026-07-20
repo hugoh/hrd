@@ -23,6 +23,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKeyMsg(msg)
 	case tea.MouseMsg:
 		return m.handleMouseMsg(msg)
+	case tea.PasteMsg:
+		return m.handlePasteMsg(msg)
 	default:
 		return m.handleAsyncMsg(msg)
 	}
@@ -134,6 +136,33 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.handleGroupKey(msg)
 	case screenSelHistory:
 		return m.handleSelHistoryKey(msg)
+	}
+
+	return m, nil
+}
+
+// handlePasteMsg routes a bracketed paste to whichever text input is
+// currently active. bubbletea delivers pasted text as tea.PasteMsg rather
+// than tea.KeyPressMsg, so it needs its own dispatch alongside handleKeyMsg.
+func (m *model) handlePasteMsg(msg tea.PasteMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
+	switch {
+	case m.commandOpen:
+		m.input, cmd = m.input.Update(msg)
+		loadCmd := m.updateCompletions()
+
+		return m, tea.Batch(cmd, loadCmd)
+	case m.groupNewInput:
+		m.input, cmd = m.input.Update(msg)
+
+		return m, cmd
+	case m.filterOpen:
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		m.nameFilter = strings.TrimSpace(m.filterInput.Value())
+		m.updateTableRows()
+
+		return m, cmd
 	}
 
 	return m, nil
