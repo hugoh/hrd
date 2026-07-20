@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hugoh/hrd/internal/atomicfile"
+	renameio "github.com/google/renameio/v2/maybe"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/pelletier/go-toml/v2"
 )
@@ -150,7 +150,7 @@ func Save(path string, cfg Config) error {
 		return fmt.Errorf("encoding config: %w", err)
 	}
 
-	if err := atomicfile.WriteFile(path, data, defaultFilePerm); err != nil {
+	if err := renameio.WriteFile(path, data, defaultFilePerm); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 
