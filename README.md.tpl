@@ -268,7 +268,3 @@ Implement the `Backend` interface in a new package, add a `Register()` function 
 [gita](https://github.com/nosarthur/gita) is the direct inspiration for `hrd`.
 
 [Jujutsu (jj) VCS](https://github.com/jj-vcs/jj) motivated creating `hrd` with first-class non-git support.
-
-## Disclaimer
-
-LLMs were used to put together the initial version.
