@@ -50,12 +50,14 @@ func run() error {
 	}
 
 	data := pageData{
-		SiteName:    siteName,
-		RepoURL:     repoURL,
-		SiteURL:     siteURL,
-		Description: tagline(readme),
-		ReadmeHTML:  renderMarkdown(readme),
-		Commands:    collectCommands(cmd.NewApp()),
+		SiteName:      siteName,
+		RepoURL:       repoURL,
+		SiteURL:       siteURL,
+		Description:   tagline(readme),
+		ReadmeHTML:    renderMarkdown(readme),
+		Commands:      collectCommands(cmd.NewApp()),
+		PicoVersion:   picoVersion,
+		PicoIntegrity: picoIntegrity,
 	}
 
 	if err := writeIndex(data); err != nil {
@@ -151,7 +153,7 @@ func collectFlags(c *cobra.Command) []flagDoc {
 		flags = append(flags, flagDoc{
 			Name:      f.Name,
 			Shorthand: f.Shorthand,
-			Default:   f.DefValue,
+			Default:   anonymizeHomeDir(f.DefValue),
 			Usage:     f.Usage,
 		})
 	})
@@ -159,6 +161,20 @@ func collectFlags(c *cobra.Command) []flagDoc {
 	sort.Slice(flags, func(i, j int) bool { return flags[i].Name < flags[j].Name })
 
 	return flags
+}
+
+// anonymizeHomeDir rewrites a flag default like the -c/--config path, which
+// Cobra renders as the actual absolute path on the machine that ran this
+// generator, to use "~" instead. Without this, every regeneration would embed
+// whoever ran it's home directory, making the committed site differ machine
+// to machine and breaking the gen-check CI diff.
+func anonymizeHomeDir(s string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return s
+	}
+
+	return strings.ReplaceAll(s, home, "~")
 }
 
 func writeFile(path string, content string) error {
