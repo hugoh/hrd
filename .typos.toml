@@ -1,2 +1,6 @@
 [default.extend-words]
 bck = "bck"
+
+[default.extend-identifiers]
+# SRI hash for the vendored Pico CSS version (cmd/genweb/style.go) — base64 noise, not prose.
+NZhm4G1I7BpEGdjDKnzEfy3d78xvy7ECKUwwnKTYi036z42IyF056PbHfpQLIYgL = "NZhm4G1I7BpEGdjDKnzEfy3d78xvy7ECKUwwnKTYi036z42IyF056PbHfpQLIYgL"

@@ -9,12 +9,14 @@ import (
 
 // pageData feeds the index.html template.
 type pageData struct {
-	SiteName    string
-	RepoURL     string
-	SiteURL     string
-	Description string
-	ReadmeHTML  template.HTML
-	Commands    []commandDoc
+	SiteName      string
+	RepoURL       string
+	SiteURL       string
+	Description   string
+	ReadmeHTML    template.HTML
+	Commands      []commandDoc
+	PicoVersion   string
+	PicoIntegrity string
 }
 
 //nolint:gochecknoglobals // parsed once at package init, read-only thereafter
@@ -65,6 +67,9 @@ const indexHTMLTpl = `<!doctype html>
 <meta property="og:title" content="{{.SiteName}}">
 <meta property="og:description" content="{{.Description}}">
 <meta property="og:url" content="{{.SiteURL}}">
+<link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/@picocss/pico@{{.PicoVersion}}/css/pico.classless.min.css"
+  integrity="{{.PicoIntegrity}}" crossorigin="anonymous">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
