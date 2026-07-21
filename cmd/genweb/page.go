@@ -17,6 +17,7 @@ type pageData struct {
 	Commands    []commandDoc
 }
 
+//nolint:gochecknoglobals // parsed once at package init, read-only thereafter
 var indexTemplate = template.Must(template.New("index.html").Parse(indexHTMLTpl))
 
 func writeIndex(data pageData) error {
@@ -31,7 +32,11 @@ func writeIndex(data pageData) error {
 		return fmt.Errorf("executing index.html template: %w", err)
 	}
 
-	return out.Close()
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("closing index.html: %w", err)
+	}
+
+	return nil
 }
 
 func robotsTxt(siteURL string) string {
