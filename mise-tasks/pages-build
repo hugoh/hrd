@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Build the static site for GitHub Pages"
+#MISE outputs=["site"]
+set -e
+go run ./cmd/genweb
