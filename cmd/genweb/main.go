@@ -77,7 +77,7 @@ func run() error {
 // use as the page's meta description: README.md.tpl always opens with an
 // "# hrd" heading followed by a one-line tagline paragraph.
 func tagline(readme []byte) string {
-	for _, line := range strings.Split(string(readme), "\n") {
+	for line := range strings.SplitSeq(string(readme), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || headingLineRE.MatchString(line) || strings.HasPrefix(line, "[") {
 			continue
@@ -89,10 +89,11 @@ func tagline(readme []byte) string {
 	return ""
 }
 
-func renderMarkdown(src []byte) template.HTML { //nolint:gosec // src is our own committed README.md
+func renderMarkdown(src []byte) template.HTML {
 	exts := blackfriday.CommonExtensions | blackfriday.AutoHeadingIDs
+	rendered := blackfriday.Run(src, blackfriday.WithExtensions(exts))
 
-	return template.HTML(blackfriday.Run(src, blackfriday.WithExtensions(exts)))
+	return template.HTML(rendered) //nolint:gosec // src is our own committed README.md
 }
 
 // commandDoc is one Cobra command rendered for the "Commands" reference
@@ -118,6 +119,7 @@ func collectCommands(root *cobra.Command) []commandDoc {
 	var docs []commandDoc
 
 	var walk func(c *cobra.Command)
+
 	walk = func(c *cobra.Command) {
 		if c.Name() != "help" && c.Name() != "completion" {
 			docs = append(docs, commandDoc{

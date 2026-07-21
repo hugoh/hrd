@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.14.0
+_commit: v1.15.0
 _src_path: https://github.com/hugoh/go-tools.git
 cog_omit_types: []
 coverage_total: 90
@@ -37,10 +37,14 @@ has_fuzz: false
 has_gen: true
 has_goreleaser: true
 has_homebrew_cask: true
+has_pages: true
 has_test_int: false
 nfpm_extra_contents:
 -   dst: /usr/share/man/man1
     src: man/*.1
+pages_dir: site
+pages_gen_cmd:
+- go run ./cmd/genweb
 project_description: Multi-repo manager for git and jj with parallel execution and
     live status
 project_name: hrd
