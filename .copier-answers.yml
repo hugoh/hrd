@@ -1,7 +1,6 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.15.1
+_commit: v1.16.0
 _src_path: https://github.com/hugoh/go-tools.git
-cog_omit_types: []
 coverage_total: 90
 gen_check_cmd: git diff --exit-code README.md
 gen_cmd:
