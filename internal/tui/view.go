@@ -12,7 +12,11 @@ import (
 )
 
 const (
-	progressBarW = 10
+	progressBarW = 30
+
+	// progressPercentMax converts a done/total ratio to the 0-100 scale
+	// expected by ui.ProgressOSC.
+	progressPercentMax = 100
 )
 
 //nolint:gochecknoglobals // effectively constant, progress bar model

@@ -170,12 +170,14 @@ type model struct {
 
 	repoOrder []string
 
-	loading    bool
-	spinner    spinner.Model
-	rowSpinner spinner.Model
-	statuses   map[string]runner.StatusResult
-	pending    map[string]bool // repos with a status fetch in flight; drives per-row spinner
-	vcsCache   map[string]string
+	loading      bool
+	spinner      spinner.Model
+	rowSpinner   spinner.Model
+	statuses     map[string]runner.StatusResult
+	pending      map[string]bool // repos with a status fetch in flight; drives per-row spinner
+	vcsCache     map[string]string
+	statusTotal  int // repos requested by the current loadStatusesCmd run, for OSC progress
+	statusAnyErr bool
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -444,6 +446,8 @@ func (m *model) execCancelAll() {
 	if m.execCancel != nil {
 		m.execCancel()
 		m.executing = false
+
+		ui.ProgressOSCDone()
 	}
 }
 
