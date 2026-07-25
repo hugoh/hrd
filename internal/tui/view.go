@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	progressBarW = 10
+	progressBarW = 30
 )
 
 //nolint:gochecknoglobals // effectively constant, progress bar model
