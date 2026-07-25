@@ -18,6 +18,10 @@ import (
 
 const cmdNameShell = "shell"
 
+// progressPercentMax converts a done/total ratio to the 0-100 scale expected
+// by ui.ProgressOSC.
+const progressPercentMax = 100
+
 var (
 	errNoReposMatched     = errors.New("no repos matched")
 	errNoShellCommand     = errors.New("no shell command provided")
@@ -777,6 +781,8 @@ func dispatch(
 ) error {
 	ui.Out(cmdLabel)
 
+	defer ui.ProgressOSCDone()
+
 	resultCh := make(chan runner.Result, len(names))
 	go func() {
 		defer close(resultCh)
@@ -791,10 +797,19 @@ func dispatch(
 		resultIdx[n] = i
 	}
 
+	var (
+		done      int
+		anyFailed bool
+	)
+
 	for res := range resultCh {
 		printDispatchResult(res)
 
 		results[resultIdx[res.RepoName]] = res
+
+		done++
+		anyFailed = anyFailed || res.Err != nil || res.ExitCode != 0
+		ui.ProgressOSC(done*progressPercentMax/len(names), anyFailed)
 	}
 
 	var errs []string
@@ -822,28 +837,10 @@ func printDispatchResult(res runner.Result) {
 	ui.Out("")
 }
 
-func gatherStatus(
-	names []string,
-	vcsByName map[string]string,
-	details bool,
-	gather func(resultCh chan<- runner.StatusResult),
-) error {
-	if len(names) == 0 {
-		return nil
-	}
-
+// printStatusHeader prints the ls/ll table header and returns the effective
+// column widths used to render each subsequent row.
+func printStatusHeader(names []string, vcsByName map[string]string, details bool) []int {
 	widths, header := statusTableConfig(details)
-
-	resultCh := make(chan runner.StatusResult, len(names))
-	go func() {
-		gather(resultCh)
-		close(resultCh)
-	}()
-
-	nameIdx := make(map[string]int, len(names))
-	for i, n := range names {
-		nameIdx[n] = i
-	}
 
 	pending := make([][]string, len(names))
 	for i, name := range names {
@@ -859,12 +856,49 @@ func gatherStatus(
 
 	ui.Out(ui.RenderHeader(header, eff))
 
+	return eff
+}
+
+func gatherStatus(
+	names []string,
+	vcsByName map[string]string,
+	details bool,
+	gather func(resultCh chan<- runner.StatusResult),
+) error {
+	if len(names) == 0 {
+		return nil
+	}
+
+	defer ui.ProgressOSCDone()
+
+	nameIdx := make(map[string]int, len(names))
+	for i, n := range names {
+		nameIdx[n] = i
+	}
+
+	eff := printStatusHeader(names, vcsByName, details)
+
+	resultCh := make(chan runner.StatusResult, len(names))
+	go func() {
+		gather(resultCh)
+		close(resultCh)
+	}()
+
 	results := make([]*runner.StatusResult, len(names))
 	next := 0
+
+	var (
+		done      int
+		anyFailed bool
+	)
 
 	for res := range resultCh {
 		idx := nameIdx[res.RepoName]
 		results[idx] = &res
+
+		done++
+		anyFailed = anyFailed || res.Err != nil
+		ui.ProgressOSC(done*progressPercentMax/len(names), anyFailed)
 
 		for next < len(names) && results[next] != nil {
 			cells := statusRow(names[next], vcsByName[names[next]], results[next], details)

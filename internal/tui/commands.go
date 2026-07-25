@@ -11,6 +11,7 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
+	"github.com/hugoh/hrd/internal/ui"
 )
 
 var errEmptyCommand = errors.New("empty command")
@@ -41,6 +42,11 @@ func loadStatusesCmd(m *model) tea.Cmd {
 	for _, name := range names {
 		m.pending[name] = true
 	}
+
+	m.statusTotal = len(names)
+	m.statusAnyErr = false
+
+	ui.ProgressOSC(0, false)
 
 	m.statusCh = runner.GatherStatus(
 		m.ctx,
@@ -147,6 +153,8 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 
 	m.executing = true
 	m.resultsCh = resultsCh
+
+	ui.ProgressOSC(0, false)
 
 	return waitForResult(resultsCh)
 }

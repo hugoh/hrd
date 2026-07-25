@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"charm.land/log/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
@@ -608,6 +609,41 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestDispatchReportsProgressOSC(t *testing.T) {
+	var buf bytes.Buffer
+
+	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
+	ui.SetProgressOutput(&buf, true)
+
+	names := []string{"repo1", "repo2"}
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
+		resultCh <- makeDispatchResult("repo1", "ok", 0, nil)
+
+		resultCh <- makeDispatchResult("repo2", "", 0, assert.AnError)
+	})
+	require.ErrorIs(t, err, ErrReposFailed)
+
+	out := buf.String()
+	assert.Contains(
+		t,
+		out,
+		ansi.SetProgressBar(50),
+		"first result should report 50%% in normal state",
+	)
+	assert.Contains(
+		t,
+		out,
+		ansi.SetErrorProgressBar(100),
+		"failing result should switch to error state",
+	)
+	assert.Contains(
+		t,
+		out,
+		ansi.ResetProgressBar,
+		"progress indicator should be cleared when dispatch returns",
+	)
+}
+
 func TestFilterMatchingUnknownBackend(t *testing.T) {
 	result := filterMatching([]string{"repo1"}, map[string]config.Repo{"repo1": {}}, "nonexistent")
 	assert.Nil(t, result)
@@ -984,4 +1020,41 @@ func TestGatherStatus(t *testing.T) { //nolint:funlen
 			}
 		})
 	}
+}
+
+func TestGatherStatusReportsProgressOSC(t *testing.T) {
+	var buf bytes.Buffer
+
+	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
+	ui.SetProgressOutput(&buf, true)
+
+	names := []string{"repo1", "repo2"}
+	vcsByName := map[string]string{"repo1": "git", "repo2": "git"}
+
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+		resultCh <- makeStatusResult("git", backend.RepoStatus{Ref: "main"})
+
+		resultCh <- makeStatusError("repo2", "git", assert.AnError)
+	})
+	require.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(
+		t,
+		out,
+		ansi.SetProgressBar(50),
+		"first result should report 50%% in normal state",
+	)
+	assert.Contains(
+		t,
+		out,
+		ansi.SetErrorProgressBar(100),
+		"errored result should switch to error state",
+	)
+	assert.Contains(
+		t,
+		out,
+		ansi.ResetProgressBar,
+		"progress indicator should be cleared when gatherStatus returns",
+	)
 }

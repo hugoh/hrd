@@ -301,6 +301,12 @@ func (m *model) handleStatusUpdate(msg statusUpdateMsg) (tea.Model, tea.Cmd) {
 	delete(m.pending, msg.result.RepoName)
 	m.updateTableRows()
 
+	if m.statusTotal > 0 {
+		m.statusAnyErr = m.statusAnyErr || msg.result.Err != nil
+		done := m.statusTotal - len(m.pending)
+		ui.ProgressOSC(done*progressPercentMax/m.statusTotal, m.statusAnyErr)
+	}
+
 	return m, streamNextStatusCmd(m)
 }
 
@@ -308,6 +314,7 @@ func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
 	m.loading = false
 	m.statusCh = nil
 	clear(m.pending)
+	ui.ProgressOSCDone()
 
 	total := m.totalCount()
 	if m.cursor >= total && total > 0 {
@@ -337,12 +344,28 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	) + "\n"
 	m.output.SetContent(m.execOutputStr)
 
+	if m.execTotal > 0 {
+		anyFailed := false
+
+		for _, er := range m.execResults {
+			if er.result.Err != nil || er.result.ExitCode != 0 {
+				anyFailed = true
+
+				break
+			}
+		}
+
+		ui.ProgressOSC(len(m.execResults)*progressPercentMax/m.execTotal, anyFailed)
+	}
+
 	return m, streamNextResult(m)
 }
 
 func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 	m.executing = false
 	m.resultsCh = nil
+
+	ui.ProgressOSCDone()
 
 	if m.execSideEffect {
 		m.execSideEffect = false
