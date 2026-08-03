@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -166,55 +167,22 @@ func parseJjCmdList(completion string) []string {
 //
 // Subprocess calls:
 //  1. jj log -r @ → change ID, dirty flag, conflict flag
-//  2. jj bookmark list --all-remotes <head> → structured bookmark tracking data.
+//  2. jj log -r ::@ & bookmarks() → nearest bookmark name (independent of #1,
+//     runs concurrently with it)
+//  3. jj bookmark list --all-remotes <head> → structured bookmark tracking data.
 //     jj itself computes ahead/behind for tracked remotes; for a present but
 //     untracked remote (colocated repos where the counterpart isn't an
 //     explicit tracking remote), ahead/behind is computed with an extra
 //     jj log --count call per direction (see countRevs).
+//  4. jj log --count <head>..@ → local-ahead count (independent of #3, runs
+//     concurrently with it)
 func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
-	wcArgs := append([]string{}, logBaseArgs...)
-	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
-
-	wcOut, err := b.runJJ(ctx, path, wcArgs)
+	status, headName, err := b.fetchWorkingCopyAndHead(ctx, path)
 	if err != nil {
-		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
+		return backend.RepoStatus{}, err
 	}
 
-	status, err := parseWorkingCopy(wcOut)
-	if err != nil {
-		return backend.RepoStatus{}, fmt.Errorf("jj log: %w", err)
-	}
-
-	if status.CommitMsg == "" {
-		b.fillCommitMsgFromAncestors(ctx, path, &status)
-	}
-
-	headArgs := append([]string{}, logBaseArgs...)
-	headArgs = append(headArgs, "-r", "::@ & bookmarks()", "-n", "1", ignoreWorkingCopyArg,
-		templateFlag, "bookmarks.first().name()")
-
-	headOut, _ := b.runJJ(ctx, path, headArgs)
-
-	headName := strings.TrimSpace(headOut)
-	if headName != "" {
-		bmOut, _ := b.runJJ(ctx, path, []string{
-			subCmdBookmark, subCmdList, "--all-remotes", headName, templateFlag, bookmarkTmpl,
-		})
-		status.Bookmarks = parseBookmarkRefs(bmOut, func(name, remote string) (int, int) {
-			remoteRef := name + "@" + remote
-			ahead := b.countRevs(ctx, path, remoteRef+".."+name)
-			behind := b.countRevs(ctx, path, name+".."+remoteRef)
-
-			return ahead, behind
-		})
-	}
-
-	if headName != "" {
-		status.LocalAhead = b.countRevs(ctx, path, headName+"..@")
-		if status.LocalAhead > 0 {
-			status.LocalAhead--
-		}
-	}
+	b.fillBookmarkTracking(ctx, path, headName, &status)
 
 	status.OverallState = backend.WorstState(status.Bookmarks, status.Conflict)
 
@@ -247,6 +215,94 @@ func (b *Backend) runJJ(ctx context.Context, path string, args []string) (string
 	}
 
 	return defaultRunJJ(ctx, path, args)
+}
+
+// fetchWorkingCopyAndHead runs the working-copy detail query and the
+// nearest-bookmark-name query concurrently, since neither depends on the
+// other's output.
+func (b *Backend) fetchWorkingCopyAndHead(
+	ctx context.Context,
+	path string,
+) (backend.RepoStatus, string, error) {
+	wcArgs := append([]string{}, logBaseArgs...)
+	wcArgs = append(wcArgs, "-r", "@", templateFlag, detailTmpl)
+
+	headArgs := append([]string{}, logBaseArgs...)
+	headArgs = append(headArgs, "-r", "::@ & bookmarks()", "-n", "1", ignoreWorkingCopyArg,
+		templateFlag, "bookmarks.first().name()")
+
+	var wcOut, headOut string
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+
+		wcOut, err = b.runJJ(gctx, path, wcArgs)
+
+		return err
+	})
+	g.Go(func() error {
+		headOut, _ = b.runJJ(gctx, path, headArgs)
+
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		return backend.RepoStatus{}, "", fmt.Errorf("jj log: %w", err)
+	}
+
+	status, err := parseWorkingCopy(wcOut)
+	if err != nil {
+		return backend.RepoStatus{}, "", fmt.Errorf("jj log: %w", err)
+	}
+
+	return status, strings.TrimSpace(headOut), nil
+}
+
+// fillBookmarkTracking runs the ancestor commit-message fill, bookmark-list
+// tracking query, and local-ahead count concurrently — each depends only on
+// headName/status.CommitMsg, not on each other's output.
+func (b *Backend) fillBookmarkTracking(
+	ctx context.Context,
+	path, headName string,
+	status *backend.RepoStatus,
+) {
+	var g errgroup.Group
+
+	if status.CommitMsg == "" {
+		g.Go(func() error {
+			b.fillCommitMsgFromAncestors(ctx, path, status)
+
+			return nil
+		})
+	}
+
+	if headName != "" {
+		g.Go(func() error {
+			bmOut, _ := b.runJJ(ctx, path, []string{
+				subCmdBookmark, subCmdList, "--all-remotes", headName, templateFlag, bookmarkTmpl,
+			})
+			status.Bookmarks = parseBookmarkRefs(bmOut, func(name, remote string) (int, int) {
+				remoteRef := name + "@" + remote
+				ahead := b.countRevs(ctx, path, remoteRef+".."+name)
+				behind := b.countRevs(ctx, path, name+".."+remoteRef)
+
+				return ahead, behind
+			})
+
+			return nil
+		})
+		g.Go(func() error {
+			status.LocalAhead = b.countRevs(ctx, path, headName+"..@")
+			if status.LocalAhead > 0 {
+				status.LocalAhead--
+			}
+
+			return nil
+		})
+	}
+
+	_ = g.Wait()
 }
 
 // countRevs runs jj log -r <revset> --count and returns the number.
