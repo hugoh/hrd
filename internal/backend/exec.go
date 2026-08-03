@@ -124,6 +124,16 @@ func RunCommand(
 	cmd.Dir = path
 	cmd.Env = commandEnv(path, interactive)
 
+	if !interactive {
+		// A subprocess that backgrounds a grandchild (e.g. a shell running
+		// `cmd &`) can exit itself while that grandchild keeps the
+		// inherited stdout/stderr pipe open. Wait() then blocks draining
+		// that pipe for the grandchild's entire lifetime, regardless of
+		// ctx cancellation — WaitDelay bounds that drain the same way the
+		// context above bounds the process itself.
+		cmd.WaitDelay = options.timeout
+	}
+
 	var buf bytes.Buffer
 
 	if interactive {
