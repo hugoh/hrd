@@ -239,6 +239,10 @@ type Backend interface {
 	// Run executes the given args using this VCS tool in path.
 	// When interactive is true, the caller has already arranged for the
 	// subprocess to inherit the terminal; Run must not capture output.
+	// When interactive is false, implementations going through
+	// backend.RunCommand/RunTool get credential and host-key prompting
+	// disabled and a bounded timeout for free — non-interactive runs must
+	// fail fast rather than block waiting on a prompt nothing can answer.
 	Run(ctx context.Context, path string, args []string, interactive bool) (RunResult, error)
 }
 

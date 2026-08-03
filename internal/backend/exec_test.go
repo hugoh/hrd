@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,6 +77,62 @@ func TestRunCommand_EmptyPathKeepsRealPWD(t *testing.T) {
 	res, err := RunCommand(t.Context(), "sh", "", []string{"-c", "echo $PWD"}, false)
 	require.NoError(t, err)
 	assert.Equal(t, wd, strings.TrimSpace(res.Output))
+}
+
+func TestRunCommand_NonInteractiveDisablesGitPrompting(t *testing.T) {
+	res, err := RunCommand(
+		t.Context(),
+		"sh",
+		"",
+		[]string{"-c", "echo $GIT_TERMINAL_PROMPT"},
+		false,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, "0", strings.TrimSpace(res.Output))
+}
+
+func TestRunCommand_NonInteractiveSetsSSHBatchMode(t *testing.T) {
+	res, err := RunCommand(t.Context(), "sh", "", []string{"-c", "echo $GIT_SSH_COMMAND"}, false)
+	require.NoError(t, err)
+	assert.Contains(t, res.Output, "-oBatchMode=yes")
+}
+
+func TestRunCommand_NonInteractivePreservesExistingSSHCommand(t *testing.T) {
+	t.Setenv("GIT_SSH_COMMAND", "ssh -F /custom/config")
+
+	res, err := RunCommand(t.Context(), "sh", "", []string{"-c", "echo $GIT_SSH_COMMAND"}, false)
+	require.NoError(t, err)
+	assert.Contains(t, res.Output, "/custom/config")
+	assert.Contains(t, res.Output, "-oBatchMode=yes")
+}
+
+func TestRunCommand_InteractiveDoesNotSetPromptEnv(t *testing.T) {
+	t.Setenv("GIT_TERMINAL_PROMPT", "")
+
+	// Interactive mode captures no output, so assert indirectly: run a
+	// script that fails if GIT_TERMINAL_PROMPT got forced to "0".
+	res, err := RunCommand(
+		t.Context(),
+		"sh",
+		"",
+		[]string{"-c", `test "$GIT_TERMINAL_PROMPT" != "0"`},
+		true,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 0, res.ExitCode)
+}
+
+func TestRunCommand_NonInteractiveTimesOut(t *testing.T) {
+	_, err := RunCommand(
+		t.Context(),
+		"sh",
+		"",
+		[]string{"-c", "sleep 60"},
+		false,
+		WithTimeout(50*time.Millisecond),
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 func TestRunTool_NoArgs(t *testing.T) {
