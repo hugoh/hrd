@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/backend/backendtest"
@@ -455,4 +457,30 @@ func TestBackend_Status_MergesCommitMsgAndTimeQuery(t *testing.T) {
 	assert.Equal(t, 3, lines,
 		"Status should issue exactly 3 git calls (status, remote, log) — commit message and "+
 			"commit time must come from a single combined log call, not two")
+}
+
+func TestBackend_Status_ParallelizesRemoteLookupWithStatus(t *testing.T) {
+	const delay = 60 * time.Millisecond
+
+	b := &Backend{}
+	b.runGitFn = func(_ context.Context, _ string, args []string) (string, error) {
+		time.Sleep(delay)
+
+		switch {
+		case len(args) > 0 && args[0] == subCmdStatus:
+			return "# branch.head main\n", nil
+		case len(args) > 0 && args[0] == "remote":
+			return "origin\n", nil
+		default:
+			return "", nil
+		}
+	}
+
+	start := time.Now()
+	_, err := b.Status(t.Context(), "/tmp")
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Less(t, elapsed, 3*delay,
+		"git status and the remote lookup should run concurrently, not sequentially")
 }

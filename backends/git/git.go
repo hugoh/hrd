@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -31,7 +32,9 @@ const (
 const commitLogFieldSep = "\x00"
 
 // Backend implements backend.Backend for git repositories.
-type Backend struct{}
+type Backend struct {
+	runGitFn func(ctx context.Context, path string, args []string) (string, error)
+}
 
 var _ backend.Backend = (*Backend)(nil)
 
@@ -51,17 +54,35 @@ func (*Backend) Detect(path string) (bool, error) {
 }
 
 // Status queries git for the current branch/remote relationship and working
-// tree cleanliness using a single `git status --porcelain=v2 --branch` call.
-func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
-	out, err := runGit(ctx, path, []string{subCmdStatus, "--porcelain=v2", "--branch"})
-	if err != nil {
+// tree cleanliness using a single `git status --porcelain=v2 --branch` call,
+// run concurrently with the configured-remotes lookup since neither depends
+// on the other.
+func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, error) {
+	var out string
+
+	var remotes []string
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		var err error
+
+		out, err = b.runGit(gctx, path, []string{subCmdStatus, "--porcelain=v2", "--branch"})
+
+		return err
+	})
+	g.Go(func() error {
+		remotes = knownRemotesUsing(gctx, path, b.runGit)
+
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
 	}
 
-	remotes := knownRemotes(ctx, path)
 	status := parseStatus(out, remotes)
 
-	logOut, _ := runGit(
+	logOut, _ := b.runGit(
 		ctx,
 		path,
 		[]string{logCmd, "-1", "--format=" + commitLogFormat, "--date=relative"},
@@ -129,6 +150,16 @@ func (*Backend) Run(
 	return backend.RunTool(ctx, "git", path, args, interactive)
 }
 
+// runGit executes internal status queries, using runGitFn if set (for
+// tests), falling back to the real git binary otherwise.
+func (b *Backend) runGit(ctx context.Context, path string, args []string) (string, error) {
+	if b.runGitFn != nil {
+		return b.runGitFn(ctx, path, args)
+	}
+
+	return runGit(ctx, path, args)
+}
+
 // runGit is a helper for internal status queries.
 func runGit(ctx context.Context, path string, args []string) (string, error) {
 	var buf bytes.Buffer
@@ -146,15 +177,25 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 	return buf.String(), nil
 }
 
-// knownRemotes returns configured remote names for the repo at path.
-// Returns nil if the query fails (no remotes, or not a git repo).
-func knownRemotes(ctx context.Context, path string) []string {
-	out, err := runGit(ctx, path, []string{"remote"})
+// knownRemotesUsing returns configured remote names for the repo at path,
+// using the given run function. Returns nil if the query fails (no remotes,
+// or not a git repo).
+func knownRemotesUsing(
+	ctx context.Context,
+	path string,
+	run func(context.Context, string, []string) (string, error),
+) []string {
+	out, err := run(ctx, path, []string{"remote"})
 	if err != nil {
 		return nil
 	}
 
 	return strings.Fields(strings.TrimSpace(out))
+}
+
+// knownRemotes returns configured remote names for the repo at path.
+func knownRemotes(ctx context.Context, path string) []string {
+	return knownRemotesUsing(ctx, path, runGit)
 }
 
 // parseStatus parses `git status --porcelain=v2 --branch` output into a
