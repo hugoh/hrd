@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hugoh/hrd/backends/git"
@@ -545,7 +546,7 @@ func TestBackend_Status_AncestorCommitTimeFormat(t *testing.T) {
 		switch {
 		case slices.Contains(args, "@") && slices.Contains(args, "--template"):
 			return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":""}`, nil
-		case slices.Contains(args, "@-") && slices.Contains(args, "--template"):
+		case slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, "ancestors(@") }):
 			return `{"changeId":"qzkswnpm","dirty":false,"conflict":false,` +
 				`"description":"feat: ancestor","ago":"5 minutes ago"}`, nil
 		case slices.Contains(args, "bookmarks.first().name()"):

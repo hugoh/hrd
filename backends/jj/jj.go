@@ -272,34 +272,35 @@ func (b *Backend) countRevs(ctx context.Context, path, revset string) int {
 	return n
 }
 
-// fillCommitMsgFromAncestors walks back through ancestors to find first commit with description.
+// ancestorSearchDepth bounds how far back fillCommitMsgFromAncestors looks
+// for a described commit — @ itself (always empty here) plus up to 10
+// ancestors, matching the previous ancestor-walk's loop bound.
+const ancestorSearchDepth = 11
+
+// fillCommitMsgFromAncestors finds the nearest ancestor with a non-empty
+// description in a single jj call, instead of walking @-, @--, ... one
+// subprocess at a time.
 func (b *Backend) fillCommitMsgFromAncestors(
 	ctx context.Context, path string, status *backend.RepoStatus,
 ) {
-	const maxAncestors = 10
+	rev := fmt.Sprintf(`heads(ancestors(@, %d) & description(glob:"?*"))`, ancestorSearchDepth)
 
-	for i := 1; i <= maxAncestors; i++ {
-		rev := "@" + strings.Repeat("-", i)
+	args := append([]string{}, logBaseArgs...)
+	args = append(args, "-r", rev, "-n", "1", ignoreWorkingCopyArg, templateFlag, detailTmpl)
 
-		args := append([]string{}, logBaseArgs...)
-		args = append(args, "-r", rev, ignoreWorkingCopyArg, templateFlag, detailTmpl)
+	out, err := b.runJJ(ctx, path, args)
+	if err != nil {
+		return
+	}
 
-		out, err := b.runJJ(ctx, path, args)
-		if err != nil {
-			break
-		}
+	detail, err := parseWorkingCopy(out)
+	if err != nil {
+		return
+	}
 
-		detail, err := parseWorkingCopy(out)
-		if err != nil {
-			continue
-		}
-
-		if detail.CommitMsg != "" {
-			status.CommitMsg = detail.CommitMsg
-			status.CommitTime = detail.CommitTime
-
-			break
-		}
+	if detail.CommitMsg != "" {
+		status.CommitMsg = detail.CommitMsg
+		status.CommitTime = detail.CommitTime
 	}
 }
 
