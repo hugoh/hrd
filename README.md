@@ -283,6 +283,17 @@ ignored with a warning.
 | 1    | The command ran but failed in at least one repo  |
 | 2    | Usage or config error (unknown repo, bad flags)  |
 
+### Credential prompts
+
+Bulk operations (everything except `-i`/`--interactive`) run many repos
+concurrently and, in the TUI, alongside a terminal UI that owns the
+screen — there's no way to surface an interactive git/SSH credential
+prompt safely in that context. Instead, a repo that needs auth (an HTTPS
+credential, an SSH passphrase, an unknown host key) fails fast with an
+error rather than hanging the whole batch. To authenticate interactively,
+run the command with `-i`/`--interactive` (which runs one repo at a time
+with the terminal attached), or run it directly in the repo yourself.
+
 ## Configuration
 
 Config lives at `~/.config/hrd/config.toml` (respects `$XDG_CONFIG_HOME`).
