@@ -8,7 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/internal/backend"
@@ -545,7 +547,7 @@ func TestBackend_Status_AncestorCommitTimeFormat(t *testing.T) {
 		switch {
 		case slices.Contains(args, "@") && slices.Contains(args, "--template"):
 			return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,"description":"","ago":""}`, nil
-		case slices.Contains(args, "@-") && slices.Contains(args, "--template"):
+		case slices.ContainsFunc(args, func(a string) bool { return strings.Contains(a, "ancestors(@") }):
 			return `{"changeId":"qzkswnpm","dirty":false,"conflict":false,` +
 				`"description":"feat: ancestor","ago":"5 minutes ago"}`, nil
 		case slices.Contains(args, "bookmarks.first().name()"):
@@ -580,6 +582,38 @@ func TestBackend_Status_AncestorWalkError(t *testing.T) {
 	// and returns whatever the working copy gave us.
 	require.NoError(t, err)
 	assert.NotEmpty(t, st.Ref)
+}
+
+func TestBackend_Status_ParallelizesIndependentCalls(t *testing.T) {
+	const delay = 60 * time.Millisecond
+
+	b := &Backend{}
+	b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
+		time.Sleep(delay)
+
+		switch {
+		case slices.Contains(args, "@") && slices.Contains(args, "--template"):
+			return `{"changeId":"sxoqvoon","dirty":false,"conflict":false,"description":"msg","ago":"now"}`, nil
+		case slices.Contains(args, "bookmarks.first().name()"):
+			return "main\n", nil
+		case slices.Contains(args, "bookmark") && slices.Contains(args, "list"):
+			return bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n", nil
+		default:
+			return "0", nil
+		}
+	}
+
+	start := time.Now()
+	_, err := b.Status(t.Context(), "/tmp")
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Less(
+		t,
+		elapsed,
+		3*delay,
+		"wc/head query and bookmark-list/local-ahead query should each run concurrently, not sequentially",
+	)
 }
 
 //nolint:cyclop // runJJFn dispatch switch covers several distinct jj subcommands

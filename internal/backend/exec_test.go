@@ -135,6 +135,36 @@ func TestRunCommand_NonInteractiveTimesOut(t *testing.T) {
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
+func TestRunCommand_NonInteractiveDoesNotHangOnOrphanedChild(t *testing.T) {
+	// A backgrounded grandchild ("sleep 3 &") outlives its parent shell,
+	// which exits almost immediately, and inherits the same stdout/stderr
+	// pipe. cmd.Wait() blocks draining that pipe until every holder closes
+	// it — including the orphan — regardless of context cancellation
+	// (a documented os/exec limitation, not specific to this codebase).
+	// Without a WaitDelay bound, RunCommand would block for the orphan's
+	// full lifetime even though the context deadline fired immediately.
+	start := time.Now()
+
+	_, err := RunCommand(
+		t.Context(),
+		"sh",
+		"",
+		[]string{"-c", "sleep 3 &"},
+		false,
+		WithTimeout(50*time.Millisecond),
+	)
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Less(
+		t,
+		elapsed,
+		2*time.Second,
+		"RunCommand must not block waiting on an orphaned backgrounded child holding the output pipe open",
+	)
+}
+
 func TestRunTool_NoArgs(t *testing.T) {
 	_, err := RunTool(t.Context(), "echo", "", nil, false)
 	assert.ErrorIs(t, err, ErrNoArgs)

@@ -18,19 +18,19 @@ permissions: {}
 
 jobs:
   hk:
-    uses: hugoh/go-tools/.github/workflows/go-hk.yml@f9585764f4dcb3cb7bf8a81096573692db329e7e
+    uses: hugoh/go-tools/.github/workflows/go-hk.yml@efb529737c7aa6692f07a9564f4267f2ecf5244a
     permissions:
       contents: read
 
   goci:
-    uses: hugoh/go-tools/.github/workflows/go-ci.yml@f9585764f4dcb3cb7bf8a81096573692db329e7e
+    uses: hugoh/go-tools/.github/workflows/go-ci.yml@efb529737c7aa6692f07a9564f4267f2ecf5244a
     permissions:
       contents: read
 
   pages:
     needs: [hk, goci]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: hugoh/go-tools/.github/workflows/go-pages.yml@f9585764f4dcb3cb7bf8a81096573692db329e7e
+    uses: hugoh/go-tools/.github/workflows/go-pages.yml@efb529737c7aa6692f07a9564f4267f2ecf5244a
     permissions:
       contents: read
       pages: write
@@ -40,7 +40,7 @@ jobs:
 
   release:
     needs: [hk, goci]
-    uses: hugoh/go-tools/.github/workflows/go-release.yml@f9585764f4dcb3cb7bf8a81096573692db329e7e
+    uses: hugoh/go-tools/.github/workflows/go-release.yml@efb529737c7aa6692f07a9564f4267f2ecf5244a
     permissions:
       contents: write
     with:
