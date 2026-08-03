@@ -1,9 +1,12 @@
 package git
 
 import (
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -416,4 +419,40 @@ func runGitCmd(t *testing.T, dir string, args []string) {
 
 	_, err := runGit(t.Context(), dir, args)
 	require.NoError(t, err)
+}
+
+// stubGitCountingCalls wraps the real git binary with a shim that appends
+// one line per invocation to logPath before delegating, then prepends the
+// shim's directory to PATH so exec.CommandContext("git", ...) resolves to it.
+func stubGitCountingCalls(t *testing.T, logPath string) {
+	t.Helper()
+
+	realGit, err := exec.LookPath("git")
+	require.NoError(t, err)
+
+	binDir := t.TempDir()
+	script := fmt.Sprintf("#!/bin/sh\necho \"$*\" >> %q\nexec %q \"$@\"\n", logPath, realGit)
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "git"), []byte(script), 0o755))
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+func TestBackend_Status_MergesCommitMsgAndTimeQuery(t *testing.T) {
+	dir := initGitRepoWithCommit(t)
+
+	logPath := filepath.Join(t.TempDir(), "calls.log")
+	stubGitCountingCalls(t, logPath)
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, "initial", st.CommitMsg)
+	assert.NotEmpty(t, st.CommitTime)
+
+	calls, err := os.ReadFile(logPath)
+	require.NoError(t, err)
+
+	lines := strings.Count(string(calls), "\n")
+	assert.Equal(t, 3, lines,
+		"Status should issue exactly 3 git calls (status, remote, log) — commit message and "+
+			"commit time must come from a single combined log call, not two")
 }

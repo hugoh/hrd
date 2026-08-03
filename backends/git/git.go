@@ -15,11 +15,20 @@ import (
 
 const (
 	priorityGit  = 10
-	abPartsCount = 2      // number of parts in "branch.ab +<ahead> -<behind>"
-	headRef      = "HEAD" // HEAD reference name
-	logCmd       = "log"  // log command name
+	abPartsCount = 2     // number of parts in "branch.ab +<ahead> -<behind>"
+	logCmd       = "log" // log command name
 	subCmdStatus = "status"
+	// commitLogFormat combines the subject and relative date into one `git
+	// log` call; %x00 is git's own escape for a literal NUL byte in its
+	// output, which can't appear in either field, so splitting on it can't
+	// misparse a subject line.
+	commitLogFormat = "%s%x00%cd"
 )
+
+// commitLogFieldSep is the actual NUL byte commitLogFormat's %x00 renders
+// as, used to split git log's output (as opposed to commitLogFormat itself,
+// which must stay the literal 4-character escape git expects in argv).
+const commitLogFieldSep = "\x00"
 
 // Backend implements backend.Backend for git repositories.
 type Backend struct{}
@@ -52,11 +61,15 @@ func (*Backend) Status(ctx context.Context, path string) (backend.RepoStatus, er
 	remotes := knownRemotes(ctx, path)
 	status := parseStatus(out, remotes)
 
-	msgOut, _ := runGit(ctx, path, []string{"show-branch", "--no-name", headRef})
-	status.CommitMsg = strings.TrimSpace(msgOut)
+	logOut, _ := runGit(
+		ctx,
+		path,
+		[]string{logCmd, "-1", "--format=" + commitLogFormat, "--date=relative"},
+	)
+	msg, relTime, _ := strings.Cut(logOut, commitLogFieldSep)
+	status.CommitMsg = strings.TrimSpace(msg)
 
-	timeOut, _ := runGit(ctx, path, []string{logCmd, "-1", "--format=%cd", "--date=relative"})
-	if t := strings.TrimSpace(timeOut); t != "" {
+	if t := strings.TrimSpace(relTime); t != "" {
 		status.CommitTime = "(" + t + ")"
 	}
 
