@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/discover/discovertest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -99,6 +100,20 @@ func TestReposOnlyCompleter(t *testing.T) {
 	got, _ := completer(nil, nil, "")
 
 	assert.Contains(t, got, "myrepo")
+}
+
+func TestRepoGroupCompleterIncludesRootDiscoveredRepos(t *testing.T) {
+	root := discovertest.Tree(t)
+	cfgPath := setupTestConfig(t, config.Config{
+		Roots: map[string]config.Root{
+			"work": {Path: root, Depth: 3},
+		},
+	})
+
+	completer := repoGroupCompleter(&cfgPath)
+	got, _ := completer(nil, nil, "")
+
+	assert.Contains(t, got, "app")
 }
 
 func TestGroupsOnlyCompleter(t *testing.T) {
