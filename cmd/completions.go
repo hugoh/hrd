@@ -39,7 +39,7 @@ func makeCompleter(
 	getters ...func(*config.Config) []string,
 ) cobraCompleter {
 	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
-		cfg, err := config.Load(*cfgPath)
+		cfg, _, err := config.LoadResolved(*cfgPath)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
