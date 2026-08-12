@@ -26,7 +26,7 @@ const (
 	siteDir    = "site"
 	readmePath = "README.md"
 	repoURL    = "https://github.com/hugoh/hrd"
-	siteURL    = "https://hugoh.github.io/hrd/"
+	siteURL    = "https://hrd.larve.net/"
 	siteName   = "hrd"
 	dirPerm    = 0o750
 	filePerm   = 0o600
