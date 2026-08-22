@@ -2,6 +2,7 @@ package tui
 
 import (
 	"testing"
+	"time"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/viewport"
@@ -152,6 +153,100 @@ func TestOutputViewExecuting(t *testing.T) {
 	view := m.outputView()
 	assert.Contains(t, view, "[2/5]")
 	assert.Contains(t, view, "Esc/q:close")
+}
+
+func TestOutputViewExecuting_LiveCounts(t *testing.T) {
+	m := &model{
+		screen:    screenOutput,
+		width:     80,
+		height:    30,
+		executing: true,
+		execTotal: 4,
+		execResults: []execResult{
+			{name: "alpha", result: runner.Result{RepoName: "alpha"}},
+			{name: "beta", result: runner.Result{RepoName: "beta", ExitCode: 1}},
+		},
+		execStartTime: time.Now().Add(-2 * time.Second),
+		output:        viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+	m.ready = true
+
+	view := m.outputView()
+	assert.Contains(t, view, "✓1")
+	assert.Contains(t, view, "✗1")
+	assert.Contains(t, view, "ETA")
+}
+
+func TestOutputViewExecuting_NoETABeforeFirstResult(t *testing.T) {
+	m := &model{
+		screen:        screenOutput,
+		width:         80,
+		height:        30,
+		executing:     true,
+		execTotal:     5,
+		execStartTime: time.Now(),
+		output:        viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+	}
+	m.ready = true
+
+	assert.NotContains(t, m.outputView(), "ETA")
+}
+
+func TestExecCounts(t *testing.T) {
+	m := &model{
+		execResults: []execResult{
+			{name: "a", result: runner.Result{ExitCode: 0}},
+			{name: "b", result: runner.Result{ExitCode: 1}},
+			{name: "c", result: runner.Result{Err: assert.AnError}},
+		},
+	}
+
+	succeeded, failed := m.execCounts()
+	assert.Equal(t, 1, succeeded)
+	assert.Equal(t, 2, failed)
+}
+
+func TestExecETA(t *testing.T) {
+	t.Run("no estimate before any result", func(t *testing.T) {
+		m := &model{execTotal: 5, execStartTime: time.Now()}
+		_, ok := m.execETA(0)
+		assert.False(t, ok)
+	})
+
+	t.Run("no estimate once complete", func(t *testing.T) {
+		m := &model{execTotal: 5, execStartTime: time.Now()}
+		_, ok := m.execETA(5)
+		assert.False(t, ok)
+	})
+
+	t.Run("no estimate with zero start time", func(t *testing.T) {
+		m := &model{execTotal: 5}
+		_, ok := m.execETA(2)
+		assert.False(t, ok)
+	})
+
+	t.Run("extrapolates from elapsed time", func(t *testing.T) {
+		m := &model{execTotal: 4, execStartTime: time.Now().Add(-4 * time.Second)}
+		eta, ok := m.execETA(2)
+		require.True(t, ok)
+		assert.InDelta(t, 4*time.Second, eta, float64(time.Second))
+	})
+}
+
+func TestFormatETA(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		d    time.Duration
+		want string
+	}{
+		{"seconds only", 8 * time.Second, "0:08"},
+		{"minutes and seconds", 83 * time.Second, "1:23"},
+		{"rounds to nearest second", 8*time.Second + 600*time.Millisecond, "0:09"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, formatETA(tt.d))
+		})
+	}
 }
 
 func TestRenderInputLine(t *testing.T) {

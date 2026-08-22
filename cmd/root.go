@@ -43,7 +43,7 @@ var commandGroups = []*cobra.Group{
 	{ID: groupExec, Title: "Run commands:"},
 }
 
-func buildCommands(cfgPath *string, aliases map[string]string) []*cobra.Command {
+func buildCommands(cfgPath *string, aliases map[string]config.AliasSpec) []*cobra.Command {
 	n := len(backend.Names())
 
 	cmds := make([]*cobra.Command, 0, staticCmdCount+n+len(aliases))
@@ -180,16 +180,16 @@ func loadResolvedConfig(cfgPath *string, label string) (config.Config, error) {
 	return cfg, nil
 }
 
-func loadAliases(cfgPath string) map[string]string {
+func loadAliases(cfgPath string) map[string]config.AliasSpec {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return nil
 	}
 
-	return cfg.Aliases
+	return cfg.EffectiveAliases()
 }
 
-func buildRootCmd(aliases map[string]string) *cobra.Command {
+func buildRootCmd(aliases map[string]config.AliasSpec) *cobra.Command {
 	cfgPath := config.DefaultPath()
 
 	root := &cobra.Command{

@@ -134,17 +134,9 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 			setup: func(t *testing.T) (string, []string) {
 				t.Helper()
 				gitDir := setupFakeGitRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{})
 
-				return setupTestConfig(
-						t,
-						config.Config{},
-					), []string{
-						"repo",
-						"add",
-						"--name",
-						"mygit",
-						gitDir,
-					}
+				return cfgPath, []string{"repo", "add", "--name", "mygit", gitDir}
 			},
 			check: func(t *testing.T, cfgPath string, _ error) {
 				t.Helper()
@@ -228,18 +220,9 @@ func TestRepoAdd(t *testing.T) { //nolint:funlen
 				t.Helper()
 				gitDir := setupFakeGitRepo(t)
 				jjDir := setupFakeJJRepo(t)
+				cfgPath := setupTestConfig(t, config.Config{})
 
-				return setupTestConfig(
-						t,
-						config.Config{},
-					), []string{
-						"repo",
-						"add",
-						"--name",
-						"mygit",
-						gitDir,
-						jjDir,
-					}
+				return cfgPath, []string{"repo", "add", "--name", "mygit", gitDir, jjDir}
 			},
 			wantErr: errNameSingleRepo,
 		},

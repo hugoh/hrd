@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/config"
 )
 
 // PrefixShell is the prefix returned for shell commands.
@@ -37,20 +38,30 @@ func Parse(input string) (string, string) {
 	return "", input
 }
 
-// ExpandAlias replaces a leading alias token in input with its expansion,
-// keeping the rest of the input as trailing text. Returns input unchanged
-// when the first token is not a known alias.
-func ExpandAlias(aliases map[string]string, input string) string {
+// ExpandAliasForBackend replaces a leading alias token in input with its
+// expansion for backendName, keeping the rest of the input as trailing
+// text. Returns (input, true) unchanged when the first token is not a
+// known alias, and ("", false) when it is a known alias with no variant
+// defined for backendName.
+func ExpandAliasForBackend(
+	aliases map[string]config.AliasSpec,
+	input, backendName string,
+) (string, bool) {
 	first, rest, _ := strings.Cut(strings.TrimSpace(input), " ")
 
-	expansion, ok := aliases[first]
+	spec, ok := aliases[first]
 	if !ok {
-		return input
+		return input, true
+	}
+
+	expansion, ok := spec.Resolve(backendName)
+	if !ok {
+		return "", false
 	}
 
 	if rest == "" {
-		return expansion
+		return expansion, true
 	}
 
-	return expansion + " " + rest
+	return expansion + " " + rest, true
 }

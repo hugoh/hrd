@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
@@ -237,7 +238,21 @@ func (m *model) outputView() string {
 		done := len(m.execResults)
 		pct := float64(done) / float64(m.execTotal)
 		bar := progressModel.ViewAs(pct)
-		left = ui.MutedStyle().Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal))
+
+		succeeded, failed := m.execCounts()
+		counts := ui.ApplyColor("green", fmt.Sprintf("✓%d", succeeded))
+
+		if failed > 0 {
+			counts += " " + ui.ApplyColor("red", fmt.Sprintf("✗%d", failed))
+		}
+
+		left = ui.MutedStyle().
+			Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal)) +
+			" " + counts
+
+		if eta, ok := m.execETA(done); ok {
+			left += ui.MutedStyle().Render("  ETA " + formatETA(eta))
+		}
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}
@@ -247,6 +262,47 @@ func (m *model) outputView() string {
 	footer := left + strings.Repeat(" ", pad) + right
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.output.View(), sep, footer)
+}
+
+// execCounts tallies how many completed results so far succeeded vs.
+// failed, for the live progress bar footer.
+func (m *model) execCounts() (int, int) {
+	var succeeded, failed int
+
+	for _, er := range m.execResults {
+		if er.result.Err != nil || er.result.ExitCode != 0 {
+			failed++
+		} else {
+			succeeded++
+		}
+	}
+
+	return succeeded, failed
+}
+
+// execETA linearly extrapolates a remaining-time estimate from overall
+// wall-clock progress so far. This implicitly accounts for the configured
+// concurrency, since elapsed time already reflects however many repos ran
+// in parallel. Returns false before enough progress has been made to give
+// a meaningful estimate, or once the run is complete.
+func (m *model) execETA(done int) (time.Duration, bool) {
+	if done == 0 || done >= m.execTotal || m.execStartTime.IsZero() {
+		return 0, false
+	}
+
+	elapsed := time.Since(m.execStartTime)
+	remaining := m.execTotal - done
+
+	return elapsed / time.Duration(done) * time.Duration(remaining), true
+}
+
+// formatETA renders a duration as "m:ss", rounded to the nearest second.
+func formatETA(d time.Duration) string {
+	d = d.Round(time.Second)
+	mins := d / time.Minute
+	secs := (d % time.Minute) / time.Second
+
+	return fmt.Sprintf("%d:%02d", mins, secs)
 }
 
 func (m *model) coloredSummary() string {

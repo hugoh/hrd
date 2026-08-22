@@ -5,6 +5,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -66,13 +67,135 @@ type Config struct {
 	Roots  map[string]Root  `toml:"roots"`
 	Groups map[string]Group `toml:"-"` // derived from Repos[].Groups, not persisted
 
-	// Aliases maps user-defined command names to their expansion in the
-	// unified command grammar (see internal/cmdspec): "pull --rebase"
-	// routes per-repo, "git ..."/"jj ..." to that backend, "!..." or
-	// "sh ..." to the shell.
-	Aliases map[string]string `toml:"aliases,omitempty"`
+	// Aliases holds only the user's own alias definitions, as parsed from
+	// config.toml; built-in defaults (see defaultAliases) are layered on
+	// top by EffectiveAliases and never appear here, so Save never writes
+	// them back into the user's file. Decoded/encoded by hand in Load/Save
+	// (see decodeAliasSpecs/encodeAliasSpecs) because each value can be
+	// either a plain command string or a per-backend table, which plain
+	// struct-tag (un)marshaling can't express.
+	Aliases map[string]AliasSpec `toml:"-"`
 
 	Settings Settings `toml:"settings"`
+}
+
+// AliasSpec is one alias's command expansion: either a single command used
+// for every repo regardless of backend, or per-backend variants keyed by
+// backend name (e.g. "git", "jj"). In config.toml this is written as either
+// a plain string ("pull --rebase") or an inline table
+// ({ git = "...", jj = "..." }).
+type AliasSpec struct {
+	Command  string
+	Backends map[string]string
+}
+
+// Resolve returns the command expansion to use for backendName, and
+// whether one was found: Command if set (a plain alias applies to every
+// backend), otherwise the per-backend variant.
+func (a AliasSpec) Resolve(backendName string) (string, bool) {
+	if a.Command != "" {
+		return a.Command, true
+	}
+
+	cmd, ok := a.Backends[backendName]
+
+	return cmd, ok
+}
+
+const (
+	backendNameGit = "git"
+	backendNameJJ  = "jj"
+)
+
+//nolint:gochecknoglobals // read-only registry of built-in aliases, not mutated at runtime
+var defaultAliases = map[string]AliasSpec{
+	"up": {
+		Backends: map[string]string{
+			backendNameGit: `!git fetch --prune && git rebase @{u}`,
+			backendNameJJ:  `!jj util exec -- sh -c "jj git fetch && jj rebase --skip-emptied -d 'trunk()'"`,
+		},
+	},
+}
+
+// EffectiveAliases merges the built-in default aliases with the user's own,
+// which take precedence on a name collision. The result is what callers
+// (CLI command registration, the TUI command bar) should use to resolve an
+// alias name — never Aliases directly, which holds only what's on disk.
+func (c *Config) EffectiveAliases() map[string]AliasSpec {
+	out := make(map[string]AliasSpec, len(defaultAliases)+len(c.Aliases))
+
+	maps.Copy(out, defaultAliases)
+	maps.Copy(out, c.Aliases)
+
+	return out
+}
+
+var (
+	errAliasInvalidType   = errors.New("alias must be a string or a table of backend -> command")
+	errAliasBackendNotStr = errors.New("alias backend command must be a string")
+)
+
+// decodeAliasSpecs converts the raw TOML values decoded for the "aliases"
+// table (each either a string or a table of strings) into AliasSpecs.
+func decodeAliasSpecs(raw map[string]any) (map[string]AliasSpec, error) {
+	if len(raw) == 0 {
+		return nil, nil //nolint:nilnil // absent "aliases" table is a valid, non-error empty result
+	}
+
+	out := make(map[string]AliasSpec, len(raw))
+
+	for name, v := range raw {
+		spec, err := aliasSpecFromRaw(v)
+		if err != nil {
+			return nil, fmt.Errorf("alias %q: %w", name, err)
+		}
+
+		out[name] = spec
+	}
+
+	return out, nil
+}
+
+func aliasSpecFromRaw(raw any) (AliasSpec, error) {
+	switch v := raw.(type) {
+	case string:
+		return AliasSpec{Command: v}, nil
+	case map[string]any:
+		backends := make(map[string]string, len(v))
+
+		for backendName, val := range v {
+			s, ok := val.(string)
+			if !ok {
+				return AliasSpec{}, fmt.Errorf("backend %q: %w", backendName, errAliasBackendNotStr)
+			}
+
+			backends[backendName] = s
+		}
+
+		return AliasSpec{Backends: backends}, nil
+	default:
+		return AliasSpec{}, fmt.Errorf("%w: got %T", errAliasInvalidType, raw)
+	}
+}
+
+// encodeAliasSpecs converts Aliases back into the raw string-or-table shape
+// Save writes to TOML.
+func encodeAliasSpecs(specs map[string]AliasSpec) map[string]any {
+	if len(specs) == 0 {
+		return nil
+	}
+
+	out := make(map[string]any, len(specs))
+
+	for name, spec := range specs {
+		if spec.Backends != nil {
+			out[name] = spec.Backends
+		} else {
+			out[name] = spec.Command
+		}
+	}
+
+	return out
 }
 
 // defaultConfig returns a Config with sensible defaults.
@@ -114,6 +237,18 @@ func Load(path string) (Config, error) {
 	if err := toml.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("decoding config %q: %w", path, err)
 	}
+
+	var aliasesRaw struct {
+		Aliases map[string]any `toml:"aliases"`
+	}
+	if err := toml.Unmarshal(data, &aliasesRaw); err != nil {
+		return cfg, fmt.Errorf("decoding config %q: %w", path, err)
+	}
+
+	cfg.Aliases, err = decodeAliasSpecs(aliasesRaw.Aliases)
+	if err != nil {
+		return cfg, fmt.Errorf("decoding config %q: %w", path, err)
+	}
 	// Ensure maps are non-nil even if the TOML sections were absent.
 	if cfg.Repos == nil {
 		cfg.Repos = make(map[string]Repo)
@@ -145,7 +280,19 @@ func Save(path string, cfg Config) error {
 		return fmt.Errorf("creating config dir: %w", err)
 	}
 
-	data, err := toml.Marshal(cfg)
+	out := struct {
+		Repos    map[string]Repo `toml:"repos"`
+		Roots    map[string]Root `toml:"roots"`
+		Aliases  map[string]any  `toml:"aliases,omitempty"`
+		Settings Settings        `toml:"settings"`
+	}{
+		Repos:    cfg.Repos,
+		Roots:    cfg.Roots,
+		Aliases:  encodeAliasSpecs(cfg.Aliases),
+		Settings: cfg.Settings,
+	}
+
+	data, err := toml.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("encoding config: %w", err)
 	}

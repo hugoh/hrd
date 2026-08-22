@@ -5,6 +5,7 @@ import (
 
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/internal/cmdspec"
+	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,25 +36,39 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestExpandAlias(t *testing.T) {
-	aliases := map[string]string{
-		"sync": "pull --rebase",
-		"mkc":  "!make clean",
+func TestExpandAliasForBackend(t *testing.T) {
+	aliases := map[string]config.AliasSpec{
+		"sync": {Command: "pull --rebase"},
+		"mkc":  {Command: "!make clean"},
+		"up": {Backends: map[string]string{
+			"git": "!git up",
+			"jj":  "!jj up",
+		}},
 	}
 
 	for _, tt := range []struct {
-		name  string
-		input string
-		want  string
+		name       string
+		input      string
+		backend    string
+		want       string
+		wantExpand bool
 	}{
-		{name: "bare alias", input: "sync", want: "pull --rebase"},
-		{name: "alias with trailing args", input: "sync --autostash", want: "pull --rebase --autostash"},
-		{name: "shell alias", input: "mkc", want: "!make clean"},
-		{name: "not an alias", input: "status", want: "status"},
-		{name: "alias only matches first token", input: "log sync", want: "log sync"},
+		{name: "bare alias", input: "sync", backend: "git", want: "pull --rebase", wantExpand: true},
+		{
+			name: "alias with trailing args", input: "sync --autostash", backend: "git",
+			want: "pull --rebase --autostash", wantExpand: true,
+		},
+		{name: "shell alias", input: "mkc", backend: "git", want: "!make clean", wantExpand: true},
+		{name: "not an alias", input: "status", backend: "git", want: "status", wantExpand: true},
+		{name: "alias only matches first token", input: "log sync", backend: "git", want: "log sync", wantExpand: true},
+		{name: "per-backend alias resolves git variant", input: "up", backend: "git", want: "!git up", wantExpand: true},
+		{name: "per-backend alias resolves jj variant", input: "up", backend: "jj", want: "!jj up", wantExpand: true},
+		{name: "per-backend alias with no variant for backend", input: "up", backend: "hg", wantExpand: false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, cmdspec.ExpandAlias(aliases, tt.input))
+			got, ok := cmdspec.ExpandAliasForBackend(aliases, tt.input, tt.backend)
+			assert.Equal(t, tt.wantExpand, ok)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
