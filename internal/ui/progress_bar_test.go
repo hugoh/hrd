@@ -57,6 +57,16 @@ func TestRenderProgressBar(t *testing.T) {
 	assert.Equal(t, 20, TextWidth(bar))
 }
 
+// TestRenderProgressBarUsesFullBlockGlyphs guards against the underlying
+// library's default fill glyph ('▌', a half block reserved for multi-color
+// blend rendering): a plain solid fill using that glyph only paints half of
+// each cell, rendering as visibly disjointed rather than a solid bar.
+func TestRenderProgressBarUsesFullBlockGlyphs(t *testing.T) {
+	bar := RenderProgressBar(0.5, 20)
+	assert.Contains(t, bar, "█", "filled portion should use the full block glyph")
+	assert.NotContains(t, bar, "▌", "must not use the library's disjointed half-block default")
+}
+
 func TestTextWidth(t *testing.T) {
 	plain := "hello"
 	colored := ApplyColor("green", plain)

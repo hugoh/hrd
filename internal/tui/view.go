@@ -20,11 +20,27 @@ const (
 	progressPercentMax = 100
 )
 
-//nolint:gochecknoglobals // effectively constant, progress bar model
-var progressModel = progress.New(
-	progress.WithWidth(progressBarW),
-	progress.WithoutPercentage(),
-)
+// newProgressBar constructs a fresh exec-progress bar model, forcing the
+// full-block fill/empty glyphs. The library's default fill glyph is a half
+// block ('▌'), meant to double blending resolution for multi-color
+// gradients, but a plain solid fill only paints that glyph's foreground
+// half, leaving the other half of each cell unpainted — which renders as a
+// visibly disjointed bar rather than a solid one.
+func newProgressBar() progress.Model {
+	return progress.New(
+		progress.WithWidth(progressBarW),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+	)
+}
+
+// progressModel is the animated exec-progress bar. It's reset fresh (see
+// execCmd) at the start of every exec run so percentShown starts at 0
+// instantly rather than animating backwards from the previous run's ending
+// value.
+//
+//nolint:gochecknoglobals // mutable animation state, reset per exec run
+var progressModel = newProgressBar()
 
 func (m *model) View() tea.View {
 	if !m.ready {
@@ -236,8 +252,7 @@ func (m *model) outputView() string {
 
 	if m.executing && m.execTotal > 0 {
 		done := len(m.execResults)
-		pct := float64(done) / float64(m.execTotal)
-		bar := progressModel.ViewAs(pct)
+		bar := progressModel.View()
 
 		succeeded, failed := m.execCounts()
 		counts := ui.ApplyColor("green", fmt.Sprintf("✓%d", succeeded))

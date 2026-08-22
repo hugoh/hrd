@@ -135,6 +135,19 @@ func TestOutputViewWithLabel(t *testing.T) {
 	}
 }
 
+// TestNewProgressBarUsesFullBlockGlyphs guards against the library's default
+// fill glyph ('▌', a half block reserved for multi-color blend rendering):
+// a plain solid fill using that glyph only paints half of each cell,
+// rendering as visibly disjointed rather than a solid bar. newProgressBar
+// must force full-block glyphs instead.
+func TestNewProgressBarUsesFullBlockGlyphs(t *testing.T) {
+	bar := newProgressBar()
+
+	rendered := bar.ViewAs(0.5)
+	assert.Contains(t, rendered, "█", "filled portion should use the full block glyph")
+	assert.NotContains(t, rendered, "▌", "must not use the library's disjointed half-block default")
+}
+
 func TestOutputViewExecuting(t *testing.T) {
 	m := &model{
 		screen:    screenOutput,
