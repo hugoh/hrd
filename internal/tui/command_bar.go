@@ -68,22 +68,47 @@ func (m *model) handleInputEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	prefix := prefixLabels[m.cmdPrefix]
+	cmd := cmdStr
+
+	if m.cmdPrefix == prefixNone {
+		expanded, ok := cmdspec.ExpandAliasForBackend(
+			m.cfg.EffectiveAliases(),
+			cmdStr,
+			m.selectionBackend(selected),
+		)
+		if !ok {
+			m.modal = modalAlert
+			m.alertMsg = "alias " + cmdStr + " has no command for this repo's backend"
+
+			return m, nil
+		}
+
+		prefix, cmd = parseUnifiedCmd(expanded)
+	}
+
 	m.commandOpen = false
 	m.screen = screenOutput
 	m.output.SetContent("running...")
 
 	m.execSideEffect = true
 
-	prefix := prefixLabels[m.cmdPrefix]
-	cmd := cmdStr
-
-	if m.cmdPrefix == prefixNone {
-		prefix, cmd = parseUnifiedCmd(cmdspec.ExpandAlias(m.cfg.Aliases, cmdStr))
-	}
-
 	m.pushHistory(prefix, cmd)
 
 	return m, execCmd(m, selected, prefix, cmd)
+}
+
+// selectionBackend returns the active backend (e.g. "git", "jj") of the
+// first name in the selection, used to resolve which variant of a
+// per-backend alias to run for the unified command bar. The command bar
+// dispatches one expansion for the whole selection, so a mixed-backend
+// selection resolves against the first repo's backend only.
+func (m *model) selectionBackend(selected []string) string {
+	if len(selected) == 0 {
+		return ""
+	}
+
+	return m.cfg.Repos[selected[0]].ActiveBackend()
 }
 
 func (m *model) suggestionsActive() bool {
@@ -121,7 +146,7 @@ func (m *model) updateCompletions() tea.Cmd {
 // aliases for the unified command bar.
 func (m *model) unifiedSuggestions() []string {
 	suggestions := slices.Clone(vcsSubcommands)
-	for name := range m.cfg.Aliases {
+	for name := range m.cfg.EffectiveAliases() {
 		suggestions = append(suggestions, name)
 	}
 

@@ -16,8 +16,19 @@ func aliasTestConfig(t *testing.T, aliases map[string]string) string {
 		Repos: map[string]config.Repo{
 			"repo1": {Path: setupRealGitRepo(t, false)},
 		},
-		Aliases: aliases,
+		Aliases: aliasSpecs(aliases),
 	})
+}
+
+// aliasSpecs wraps plain command strings into AliasSpecs, for tests that
+// don't care about per-backend variants.
+func aliasSpecs(aliases map[string]string) map[string]config.AliasSpec {
+	specs := make(map[string]config.AliasSpec, len(aliases))
+	for name, cmd := range aliases {
+		specs[name] = config.AliasSpec{Command: cmd}
+	}
+
+	return specs
 }
 
 func TestAliasInHelp(t *testing.T) {
@@ -87,7 +98,7 @@ func TestAliasScopeAndFilter(t *testing.T) {
 			"cleanrepo": {Path: setupRealGitRepo(t, false)},
 			"dirtyrepo": {Path: dirty},
 		},
-		Aliases: map[string]string{"hello": "!echo hi"},
+		Aliases: aliasSpecs(map[string]string{"hello": "!echo hi"}),
 	})
 
 	out := runAppCapture(t, cfgPath, []string{"hello", "--dirty"})
@@ -123,4 +134,71 @@ func TestAliasInteractiveBare(t *testing.T) {
 
 	err := runHRD(t, cfgPath, []string{"last", "-i"})
 	require.NoError(t, err)
+}
+
+func TestAliasPerBackend_DispatchesMatchingVariant(t *testing.T) {
+	backend.ResetDetectCache()
+
+	gitDir := setupFakeGitRepo(t)
+	jjDir := setupFakeJJRepo(t)
+
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"gitrepo": {Path: gitDir},
+			"jjrepo":  {Path: jjDir},
+		},
+		Aliases: map[string]config.AliasSpec{
+			"whoami": {Backends: map[string]string{
+				"git": "!echo it-was-git",
+				"jj":  "!echo it-was-jj",
+			}},
+		},
+	})
+
+	out := runAppCapture(t, cfgPath, []string{"whoami"})
+	assert.Contains(t, out, "it-was-git")
+	assert.Contains(t, out, "it-was-jj")
+}
+
+func TestAliasPerBackend_SkipsReposWithNoVariant(t *testing.T) {
+	backend.ResetDetectCache()
+
+	gitDir := setupFakeGitRepo(t)
+	jjDir := setupFakeJJRepo(t)
+
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"gitrepo": {Path: gitDir},
+			"jjrepo":  {Path: jjDir},
+		},
+		Aliases: map[string]config.AliasSpec{
+			"gitonly": {Backends: map[string]string{
+				"git": "!echo only-git",
+			}},
+		},
+	})
+
+	out := runAppCapture(t, cfgPath, []string{"gitonly"})
+	assert.Contains(t, out, "only-git")
+}
+
+func TestAliasBuiltinUp_PresentWithNoUserConfig(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: setupRealGitRepo(t, false)},
+		},
+	})
+
+	args := []string{"hrd", "-c", cfgPath, "up", "--help"}
+	app := NewAppForArgs(args)
+	bufferWriters(app)
+
+	require.NoError(t, RunApp(t.Context(), app, args))
+}
+
+func TestAliasBuiltinUp_UserOverride(t *testing.T) {
+	cfgPath := aliasTestConfig(t, map[string]string{"up": "!echo custom-up"})
+
+	out := runAppCapture(t, cfgPath, []string{"up"})
+	assert.Contains(t, out, "custom-up")
 }
