@@ -58,6 +58,7 @@ brews:
       owner: hugoh
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
     description: "Multi-repo manager for git and jj with parallel execution and live status"
     homepage: "https://github.com/hugoh/hrd"
 changelog:
