@@ -12,20 +12,15 @@ gen_sources:
 - README.md.tpl
 - cmd/**/*.go
 golangci_extra_disable:
-- depguard
-- exhaustruct
 - godoclint
 - ireturn
-- testpackage
 - varnamelen
 golangci_extra_exclusions: []
 golangci_settings: "revive:\n  rules:\n    - name: redefines-builtin-id\n      disabled:\
     \ true\n    - name: exported\n      disabled: true\n    - name: unused-parameter\n\
     \    - name: unused-receiver\n"
 golangci_test_exclude_linters:
-- err113
 - noctx
-- varnamelen
 - goconst
 - gosec
 goreleaser_before_hooks:
