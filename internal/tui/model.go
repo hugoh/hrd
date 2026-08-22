@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"charm.land/bubbles/v2/list"
 	"charm.land/bubbles/v2/spinner"
@@ -200,6 +201,7 @@ type model struct {
 	execResults    []execResult
 	execOutputStr  string
 	execLabel      string
+	execStartTime  time.Time
 	resultsCh      <-chan runner.Result
 
 	statusCh <-chan runner.StatusResult

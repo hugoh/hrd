@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/google/shlex"
@@ -140,6 +141,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execResults = nil
 	m.execOutputStr = ""
 	m.execLabel = strings.TrimSpace(prefix + " " + cmdStr)
+	m.execStartTime = time.Now()
 
 	concurrency := m.cfg.Settings.Concurrency
 
