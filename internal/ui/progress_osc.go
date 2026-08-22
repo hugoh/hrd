@@ -42,6 +42,36 @@ func ProgressOSCDone() {
 	_, _ = fmt.Fprint(progressWriter, ansi.ResetProgressBar)
 }
 
+// IsTTY reports whether stdout is a terminal — the same check ProgressOSC
+// gates on, exported so callers (e.g. a live-redrawn progress bar) can
+// decide up front whether to engage terminal-only behavior at all, rather
+// than duplicating the term.IsTerminal call.
+func IsTTY() bool {
+	return isProgressTTY()
+}
+
+// clearLineSeq moves the cursor to column 0 and erases the rest of the
+// line — the standard "redraw a status line in place" ANSI sequence.
+const clearLineSeq = "\r\x1b[2K"
+
+// ClearLiveLine erases whatever was last drawn by DrawLiveLine, leaving the
+// cursor at column 0 of that line. Safe to call even if nothing has been
+// drawn yet (erasing a blank line is a no-op). Callers are expected to gate
+// on IsTTY() themselves before drawing/clearing at all — unlike
+// ProgressOSC/ProgressOSCDone, this does not self-gate, since a caller that
+// only ever draws when IsTTY() is true never needs to clear when it isn't.
+func ClearLiveLine() {
+	_, _ = fmt.Fprint(progressWriter, clearLineSeq)
+}
+
+// DrawLiveLine clears the previously drawn live line and writes s in its
+// place, without a trailing newline, so the cursor stays ready for the next
+// ClearLiveLine/DrawLiveLine pair or for a caller to move past it with a
+// plain "\n" write of its own.
+func DrawLiveLine(s string) {
+	_, _ = fmt.Fprint(progressWriter, clearLineSeq+s)
+}
+
 // SetProgressOutput overrides where ProgressOSC/ProgressOSCDone write and
 // whether that destination is treated as a terminal. Used by tests, in this
 // package and others, to observe the sequences without a real stdout tty.

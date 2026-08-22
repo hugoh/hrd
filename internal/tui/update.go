@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
@@ -40,6 +41,8 @@ func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStatusDone()
 	case spinner.TickMsg:
 		return m.handleSpinnerTick(msg)
+	case progress.FrameMsg:
+		return m.handleProgressFrame(msg)
 	case execResultMsg:
 		return m.handleExecResult(msg)
 	case execDoneMsg:
@@ -97,6 +100,16 @@ func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 	m.rowSpinner, rowCmd = m.rowSpinner.Update(msg)
 
 	return m, tea.Batch(headerCmd, rowCmd)
+}
+
+// handleProgressFrame advances the exec-progress bar's spring animation one
+// step. progressModel self-perpetuates its own tick chain (the returned Cmd
+// re-arms the next frame) until it settles at its target percent.
+func (m *model) handleProgressFrame(msg progress.FrameMsg) (tea.Model, tea.Cmd) {
+	updated, cmd := progressModel.Update(msg)
+	progressModel = updated
+
+	return m, cmd
 }
 
 //nolint:cyclop // key dispatch with multiple screens
@@ -344,6 +357,8 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	) + "\n"
 	m.output.SetContent(m.execOutputStr)
 
+	var progressCmd tea.Cmd
+
 	if m.execTotal > 0 {
 		anyFailed := false
 
@@ -356,9 +371,12 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 		}
 
 		ui.ProgressOSC(len(m.execResults)*progressPercentMax/m.execTotal, anyFailed)
+
+		pct := float64(len(m.execResults)) / float64(m.execTotal)
+		progressCmd = progressModel.SetPercent(pct)
 	}
 
-	return m, streamNextResult(m)
+	return m, tea.Batch(streamNextResult(m), progressCmd)
 }
 
 func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {

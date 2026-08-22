@@ -13,6 +13,7 @@ import (
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/cmd"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/genutil"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
@@ -228,9 +229,5 @@ func run() error {
 }
 
 func main() {
-	if err := run(); err != nil {
-		_, _ = os.Stderr.WriteString("error: " + err.Error() + "\n")
-
-		os.Exit(1)
-	}
+	os.Exit(genutil.Main(run))
 }

@@ -142,6 +142,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execOutputStr = ""
 	m.execLabel = strings.TrimSpace(prefix + " " + cmdStr)
 	m.execStartTime = time.Now()
+	progressModel = newProgressBar()
 
 	concurrency := m.cfg.Settings.Concurrency
 

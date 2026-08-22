@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
@@ -774,6 +775,77 @@ func dispatchNonInteractive(
 	})
 }
 
+// liveProgress renders a bottom-anchored, redrawn-in-place status line (bar
+// + done/total + success/fail counts + ETA) while a dispatch or
+// status-gather run is in flight. Every method is nil-safe — newLiveProgress
+// returns nil when stdout isn't a terminal, so callers invoke clear/update/
+// draw unconditionally without a separate TTY check at each call site, and
+// a non-TTY run (piped output, CI) never draws anything, byte-for-byte
+// matching pre-live-bar output.
+type liveProgress struct {
+	total     int
+	done      int
+	succeeded int
+	failed    int
+	start     time.Time
+}
+
+func newLiveProgress(total int) *liveProgress {
+	if !ui.IsTTY() {
+		return nil
+	}
+
+	return &liveProgress{total: total, start: time.Now()}
+}
+
+func (lp *liveProgress) update(failed bool) {
+	if lp == nil {
+		return
+	}
+
+	lp.done++
+
+	if failed {
+		lp.failed++
+	} else {
+		lp.succeeded++
+	}
+}
+
+func (lp *liveProgress) clear() {
+	if lp == nil {
+		return
+	}
+
+	ui.ClearLiveLine()
+}
+
+func (lp *liveProgress) draw() {
+	if lp == nil {
+		return
+	}
+
+	ui.DrawLiveLine(lp.line())
+}
+
+func (lp *liveProgress) line() string {
+	counts := ui.ApplyColor("green", fmt.Sprintf("✓%d", lp.succeeded))
+	if lp.failed > 0 {
+		counts += " " + ui.ApplyColor("red", fmt.Sprintf("✗%d", lp.failed))
+	}
+
+	suffix := ui.MutedStyle().Render(fmt.Sprintf(" [%d/%d]", lp.done, lp.total)) + " " + counts
+
+	if eta, ok := ui.EstimateETA(lp.start, lp.done, lp.total); ok {
+		suffix += ui.MutedStyle().Render("  ETA " + ui.FormatETA(eta))
+	}
+
+	barWidth := ui.ProgressBarWidth(ui.TextWidth(suffix) + 1)
+	bar := ui.RenderProgressBar(float64(lp.done)/float64(lp.total), barWidth)
+
+	return " " + bar + suffix
+}
+
 func dispatch(
 	names []string,
 	cmdLabel string,
@@ -782,6 +854,8 @@ func dispatch(
 	ui.Out(cmdLabel)
 
 	defer ui.ProgressOSCDone()
+
+	lp := newLiveProgress(len(names))
 
 	resultCh := make(chan runner.Result, len(names))
 	go func() {
@@ -803,14 +877,21 @@ func dispatch(
 	)
 
 	for res := range resultCh {
+		lp.clear()
 		printDispatchResult(res)
 
 		results[resultIdx[res.RepoName]] = res
 
 		done++
-		anyFailed = anyFailed || res.Err != nil || res.ExitCode != 0
+		failed := res.Err != nil || res.ExitCode != 0
+		anyFailed = anyFailed || failed
 		ui.ProgressOSC(done*progressPercentMax/len(names), anyFailed)
+
+		lp.update(failed)
+		lp.draw()
 	}
+
+	lp.clear()
 
 	var errs []string
 
@@ -878,6 +959,8 @@ func gatherStatus(
 
 	eff := printStatusHeader(names, vcsByName, details)
 
+	lp := newLiveProgress(len(names))
+
 	resultCh := make(chan runner.StatusResult, len(names))
 	go func() {
 		gather(resultCh)
@@ -897,8 +980,12 @@ func gatherStatus(
 		results[idx] = &res
 
 		done++
-		anyFailed = anyFailed || res.Err != nil
+		failed := res.Err != nil
+		anyFailed = anyFailed || failed
 		ui.ProgressOSC(done*progressPercentMax/len(names), anyFailed)
+
+		lp.update(failed)
+		lp.clear()
 
 		for next < len(names) && results[next] != nil {
 			cells := statusRow(names[next], vcsByName[names[next]], results[next], details)
@@ -906,7 +993,11 @@ func gatherStatus(
 
 			next++
 		}
+
+		lp.draw()
 	}
+
+	lp.clear()
 
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
@@ -611,6 +612,34 @@ func TestHandleKeyMsgQQuit(t *testing.T) {
 	assert.NotNil(t, cmd, "expected non-nil quit cmd when q pressed on main screen")
 }
 
+// TestHandleProgressFrameAdvancesBar drives the progress bar's
+// self-perpetuating animation tick chain (SetPercent -> Cmd -> FrameMsg ->
+// handleProgressFrame -> Cmd -> ...) and checks it actually moves
+// percentShown toward the target rather than snapping or staying put.
+func TestHandleProgressFrameAdvancesBar(t *testing.T) {
+	progressModel = newProgressBar()
+
+	before := progressModel.ViewAs(0) // baseline: an all-empty bar string
+
+	cmd := progressModel.SetPercent(1)
+	require.NotNil(t, cmd)
+
+	m := &model{}
+
+	msg, ok := cmd().(progress.FrameMsg)
+	require.True(t, ok, "expected SetPercent's cmd to produce a progress.FrameMsg")
+
+	_, nextCmd := m.handleProgressFrame(msg)
+
+	assert.NotEqual(
+		t,
+		before,
+		progressModel.View(),
+		"bar should have advanced after one animation frame",
+	)
+	assert.NotNil(t, nextCmd, "still animating, so the next frame should be re-armed")
+}
+
 func TestHandleExecResultSuccess(t *testing.T) {
 	resultsCh := make(chan runner.Result)
 	close(resultsCh)
@@ -633,14 +662,29 @@ func TestHandleExecResultSuccess(t *testing.T) {
 
 	require.NotNil(t, cmd, "expected non-nil cmd after exec result")
 
-	msg := cmd()
-	require.IsType(
+	// handleExecResult now batches streamNextResult's cmd together with the
+	// progress bar's animation-frame cmd (see progressModel.SetPercent), so
+	// the returned cmd yields a tea.BatchMsg rather than execDoneMsg
+	// directly — run each sub-cmd and find the one that closed channel
+	// produces.
+	batch, ok := cmd().(tea.BatchMsg)
+	require.True(
 		t,
-		execDoneMsg{},
-		msg,
-		"expected execDoneMsg from streamNextResult with closed channel",
+		ok,
+		"expected a batched cmd combining streamNextResult and the progress bar animation",
 	)
 
+	var gotExecDone bool
+
+	for _, sub := range batch {
+		require.NotNil(t, sub)
+
+		if _, ok := sub().(execDoneMsg); ok {
+			gotExecDone = true
+		}
+	}
+
+	assert.True(t, gotExecDone, "expected execDoneMsg from streamNextResult with closed channel")
 	assert.Contains(t, buf.String(), ansi.SetProgressBar(50), "1/2 done should report 50%%")
 }
 

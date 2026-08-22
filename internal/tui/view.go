@@ -20,11 +20,32 @@ const (
 	progressPercentMax = 100
 )
 
-//nolint:gochecknoglobals // effectively constant, progress bar model
-var progressModel = progress.New(
-	progress.WithWidth(progressBarW),
-	progress.WithoutPercentage(),
-)
+// newProgressBar constructs a fresh exec-progress bar model, forcing the
+// full-block fill/empty glyphs. The library's default fill glyph is a half
+// block ('▌'), meant to double blending resolution for multi-color
+// gradients, but a plain solid fill only paints that glyph's foreground
+// half, leaving the other half of each cell unpainted — which renders as a
+// visibly disjointed bar rather than a solid one. WithDefaultBlend matches
+// bubbletea's progress-animated example (purple haze to neon pink).
+func newProgressBar() progress.Model {
+	return progress.New(
+		progress.WithWidth(progressBarW),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
+		progress.WithDefaultBlend(),
+	)
+}
+
+// progressModel is the animated exec-progress bar. It's reset fresh (see
+// execCmd) at the start of every exec run so percentShown starts at 0
+// instantly rather than animating backwards from the previous run's ending
+// value.
+//
+//nolint:gochecknoglobals // mutable animation state, reset per exec run
+var progressModel = newProgressBar()
 
 func (m *model) View() tea.View {
 	if !m.ready {
@@ -236,8 +257,6 @@ func (m *model) outputView() string {
 
 	if m.executing && m.execTotal > 0 {
 		done := len(m.execResults)
-		pct := float64(done) / float64(m.execTotal)
-		bar := progressModel.ViewAs(pct)
 
 		succeeded, failed := m.execCounts()
 		counts := ui.ApplyColor("green", fmt.Sprintf("✓%d", succeeded))
@@ -246,13 +265,18 @@ func (m *model) outputView() string {
 			counts += " " + ui.ApplyColor("red", fmt.Sprintf("✗%d", failed))
 		}
 
-		left = ui.MutedStyle().
-			Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal)) +
-			" " + counts
+		suffix := ui.MutedStyle().Render(fmt.Sprintf(" [%d/%d]", done, m.execTotal)) + " " + counts
 
 		if eta, ok := m.execETA(done); ok {
-			left += ui.MutedStyle().Render("  ETA " + formatETA(eta))
+			suffix += ui.MutedStyle().Render("  ETA " + formatETA(eta))
 		}
+
+		// Width adapts to the TUI's own tracked width (from
+		// tea.WindowSizeMsg) rather than a fixed constant, so the bar grows
+		// on a wide terminal instead of staying pinned at its initial size.
+		progressModel.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
+
+		left = " " + progressModel.View() + suffix
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}
@@ -286,23 +310,12 @@ func (m *model) execCounts() (int, int) {
 // in parallel. Returns false before enough progress has been made to give
 // a meaningful estimate, or once the run is complete.
 func (m *model) execETA(done int) (time.Duration, bool) {
-	if done == 0 || done >= m.execTotal || m.execStartTime.IsZero() {
-		return 0, false
-	}
-
-	elapsed := time.Since(m.execStartTime)
-	remaining := m.execTotal - done
-
-	return elapsed / time.Duration(done) * time.Duration(remaining), true
+	return ui.EstimateETA(m.execStartTime, done, m.execTotal)
 }
 
 // formatETA renders a duration as "m:ss", rounded to the nearest second.
 func formatETA(d time.Duration) string {
-	d = d.Round(time.Second)
-	mins := d / time.Minute
-	secs := (d % time.Minute) / time.Second
-
-	return fmt.Sprintf("%d:%02d", mins, secs)
+	return ui.FormatETA(d)
 }
 
 func (m *model) coloredSummary() string {

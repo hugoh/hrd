@@ -17,6 +17,7 @@ import (
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/cmd"
+	"github.com/hugoh/hrd/internal/genutil"
 	"github.com/russross/blackfriday/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -186,9 +187,5 @@ func writeFile(path string, content string) error {
 }
 
 func main() {
-	if err := run(); err != nil {
-		_, _ = os.Stderr.WriteString("error: " + err.Error() + "\n")
-
-		os.Exit(1)
-	}
+	os.Exit(genutil.Main(run))
 }

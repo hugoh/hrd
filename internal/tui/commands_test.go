@@ -40,6 +40,33 @@ func TestExecCmd(t *testing.T) {
 	require.NotNil(t, cmd)
 }
 
+// TestExecCmdResetsProgressBar guards against percentShown animating
+// backwards when a new exec run starts while the previous run's bar is
+// still sitting near 100%: execCmd must replace the shared progressModel
+// with a fresh instance (percent 0) rather than reuse the old one.
+func TestExecCmdResetsProgressBar(t *testing.T) {
+	progressModel.SetPercent(1)
+	require.InDelta(t, 1.0, progressModel.Percent(), 0.0001)
+
+	m := &model{
+		cfg:      config.Config{Settings: config.Settings{Concurrency: 1}},
+		selected: map[string]bool{},
+		persState: PersistentState{
+			History: []HistoryEntry{},
+		},
+	}
+
+	execCmd(m, nil, "", "status")
+
+	assert.InDelta(
+		t,
+		0.0,
+		progressModel.Percent(),
+		0.0001,
+		"progress bar should reset to 0 for a new run",
+	)
+}
+
 func TestExecCmdSetsLabel(t *testing.T) {
 	tests := []struct {
 		name      string

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"github.com/hugoh/hrd/internal/config"
@@ -133,6 +134,86 @@ func TestOutputViewWithLabel(t *testing.T) {
 			assert.Contains(t, m.outputView(), tt.want)
 		})
 	}
+}
+
+// TestNewProgressBarUsesFullBlockGlyphs guards against the library's default
+// fill glyph ('▌', a half block reserved for multi-color blend rendering):
+// a plain solid fill using that glyph only paints half of each cell,
+// rendering as visibly disjointed rather than a solid bar. newProgressBar
+// must force full-block glyphs instead.
+func TestNewProgressBarUsesFullBlockGlyphs(t *testing.T) {
+	bar := newProgressBar()
+
+	rendered := bar.ViewAs(0.5)
+	assert.Contains(t, rendered, "█", "filled portion should use the full block glyph")
+	assert.NotContains(t, rendered, "▌", "must not use the library's disjointed half-block default")
+}
+
+// TestNewProgressBarUsesGradient guards the WithDefaultBlend addition: a
+// gradient fill styles each filled cell individually (a distinct color per
+// glyph), while a solid fill wraps the whole repeated run in one style —
+// so the gradient's rendered output is measurably longer for the same
+// width/pct. Comparing against a same-width solid-fill reference avoids
+// depending on exact ANSI byte sequences, which vary by color profile.
+func TestNewProgressBarUsesGradient(t *testing.T) {
+	gradient := newProgressBar().ViewAs(1)
+	solid := progress.New(
+		progress.WithWidth(progressBarW),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
+	).ViewAs(1)
+
+	assert.Greater(
+		t,
+		len(gradient),
+		len(solid),
+		"gradient fill should style each cell individually, rendering longer than a same-width solid fill",
+	)
+}
+
+// TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth guards against the
+// bar staying pinned at its initial fixed width (progressBarW) regardless
+// of the TUI's actual tracked width — it should grow on a wide terminal and
+// shrink on a narrow one, same as the CLI's live bar already does.
+func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
+	baseModel := func(width int) *model {
+		m := &model{
+			screen:    screenOutput,
+			width:     width,
+			height:    30,
+			executing: true,
+			execTotal: 5,
+			execResults: []execResult{
+				{name: "alpha", result: runner.Result{RepoName: "alpha"}},
+			},
+			output: viewport.New(viewport.WithWidth(width), viewport.WithHeight(10)),
+		}
+		m.ready = true
+
+		return m
+	}
+
+	wide := baseModel(172)
+	wide.outputView()
+
+	wideBarWidth := progressModel.Width()
+
+	assert.Greater(
+		t,
+		wideBarWidth,
+		progressBarW,
+		"bar should widen beyond its fixed initial default on a wide terminal",
+	)
+
+	narrow := baseModel(40)
+	narrow.outputView()
+
+	narrowBarWidth := progressModel.Width()
+
+	assert.Less(t, narrowBarWidth, wideBarWidth, "bar should shrink again on a narrower terminal")
 }
 
 func TestOutputViewExecuting(t *testing.T) {
