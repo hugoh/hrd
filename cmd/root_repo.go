@@ -72,27 +72,15 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 			return errAtLeastOnePath
 		}
 
-		name := flagString(cmd, "name")
-		if name != "" && len(args) > 1 {
-			return errNameSingleRepo
-		}
-
-		cfg, err := loadConfig(cfgPath, "repo root add")
+		flags, cfg, err := prepareAdd(cfgPath, cmd, args, "repo root add")
 		if err != nil {
 			return err
-		}
-
-		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-		if group != "" {
-			if err := config.ValidGroupName(group); err != nil {
-				return err //nolint:wrapcheck // config error already has context
-			}
 		}
 
 		depth := flagInt(cmd, "depth")
 
 		for _, dir := range args {
-			if err := addRoot(&cfg, dir, name, group, depth); err != nil {
+			if err := addRoot(&cfg, dir, flags.name, flags.group, depth); err != nil {
 				return err
 			}
 		}

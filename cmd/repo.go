@@ -61,38 +61,80 @@ func repoAddCmd(cfgPath *string) *cobra.Command {
 	return cmd
 }
 
+// addFlags holds the --name and --group flags shared by "repo add" and
+// "repo root add".
+type addFlags struct {
+	name  string
+	group string
+}
+
+// prepareAdd resolves the --name/--group flags and loads config for an
+// "add" command, in the order needed to report the most relevant error
+// first: name/count mismatch, then config load, then group validity.
+func prepareAdd(
+	cfgPath *string, cmd *cobra.Command, args []string, label string,
+) (addFlags, config.Config, error) {
+	name, err := singleNameFlag(cmd, args)
+	if err != nil {
+		return addFlags{}, config.Config{}, err
+	}
+
+	cfg, err := loadConfig(cfgPath, label)
+	if err != nil {
+		return addFlags{}, config.Config{}, err
+	}
+
+	group, err := validGroupFlag(cmd)
+	if err != nil {
+		return addFlags{}, config.Config{}, err
+	}
+
+	return addFlags{name: name, group: group}, cfg, nil
+}
+
 func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return errAtLeastOnePath
 		}
 
-		name := flagString(cmd, "name")
-
-		if name != "" && len(args) > 1 {
-			return errNameSingleRepo
-		}
-
-		cfg, err := loadConfig(cfgPath, "repo add")
+		flags, cfg, err := prepareAdd(cfgPath, cmd, args, "repo add")
 		if err != nil {
 			return err
 		}
 
-		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-		if group != "" {
-			if err := config.ValidGroupName(group); err != nil {
-				return err //nolint:wrapcheck // config error already has context
-			}
-		}
-
 		for _, arg := range args {
-			if err := addRepo(&cfg, arg, name, group); err != nil {
+			if err := addRepo(&cfg, arg, flags.name, flags.group); err != nil {
 				return err
 			}
 		}
 
 		return config.Save(*cfgPath, cfg)
 	}
+}
+
+// singleNameFlag returns the --name flag's value, rejecting it when more
+// than one arg is given since an explicit name can't apply to several.
+func singleNameFlag(cmd *cobra.Command, args []string) (string, error) {
+	name := flagString(cmd, "name")
+	if name != "" && len(args) > 1 {
+		return "", errNameSingleRepo
+	}
+
+	return name, nil
+}
+
+// validGroupFlag returns the --group flag's value, stripped of its '@'
+// prefix and validated as a group name.
+func validGroupFlag(cmd *cobra.Command) (string, error) {
+	group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
+	if group != "" {
+		if err := config.ValidGroupName(group); err != nil {
+			return "", err //nolint:wrapcheck // config error already has context
+		}
+	}
+
+	return group, nil
 }
 
 // addRepo validates and registers a single repo path in cfg. An empty
