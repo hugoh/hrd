@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/backend"
@@ -180,6 +182,35 @@ func TestAliasPerBackend_SkipsReposWithNoVariant(t *testing.T) {
 
 	out := runAppCapture(t, cfgPath, []string{"gitonly"})
 	assert.Contains(t, out, "only-git")
+}
+
+// TestAliasPerBackend_ColocatedRepoUsesActiveBackendOnly guards against a
+// colocated jj/git repo (jj repos are git-colocated, so both markers are
+// present on disk) running both backends' variants of a per-backend alias.
+// Only the repo's active backend (jj wins over git for colocated repos, see
+// backend.DetectAll) should run.
+func TestAliasPerBackend_ColocatedRepoUsesActiveBackendOnly(t *testing.T) {
+	backend.ResetDetectCache()
+
+	bothDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(bothDir, ".git"), 0o750))
+	require.NoError(t, os.MkdirAll(filepath.Join(bothDir, ".jj"), 0o750))
+
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"bothrepo": {Path: bothDir},
+		},
+		Aliases: map[string]config.AliasSpec{
+			"whoami": {Backends: map[string]string{
+				"git": "!echo it-was-git",
+				"jj":  "!echo it-was-jj",
+			}},
+		},
+	})
+
+	out := runAppCapture(t, cfgPath, []string{"whoami"})
+	assert.Contains(t, out, "it-was-jj")
+	assert.NotContains(t, out, "it-was-git")
 }
 
 func TestAliasBuiltinUp_PresentWithNoUserConfig(t *testing.T) {
