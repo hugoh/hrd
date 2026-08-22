@@ -49,7 +49,10 @@ nfpms:
       - src: man/*.1
         dst: /usr/share/man/man1
 
-homebrew_casks:
+brews:
+  # DEPRECATED but intentional: homebrew_casks requires Gatekeeper-signed
+  # binaries or macOS flags the cask as malware. brews (Formula) has no
+  # such requirement. See https://goreleaser.com/deprecations/#brews
   - name: hrd
     repository:
       owner: hugoh
@@ -57,8 +60,6 @@ homebrew_casks:
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
     description: "Multi-repo manager for git and jj with parallel execution and live status"
     homepage: "https://github.com/hugoh/hrd"
-    binaries:
-      - hrd
 changelog:
   use: git
   sort: asc
