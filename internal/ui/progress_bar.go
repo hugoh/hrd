@@ -50,11 +50,14 @@ func EstimateETA(start time.Time, done, total int) (time.Duration, bool) {
 // multi-color gradients, but a plain solid fill only paints that glyph's
 // foreground half, leaving the other half of each cell unpainted — which
 // renders as a visibly disjointed bar rather than a solid one.
+// WithDefaultBlend matches bubbletea's progress-animated example (purple
+// haze to neon pink).
 func RenderProgressBar(pct float64, width int) string {
 	return progress.New(
 		progress.WithWidth(width),
 		progress.WithoutPercentage(),
 		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+		progress.WithDefaultBlend(),
 	).ViewAs(pct)
 }
 

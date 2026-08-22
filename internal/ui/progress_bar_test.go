@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/progress"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -65,6 +66,26 @@ func TestRenderProgressBarUsesFullBlockGlyphs(t *testing.T) {
 	bar := RenderProgressBar(0.5, 20)
 	assert.Contains(t, bar, "█", "filled portion should use the full block glyph")
 	assert.NotContains(t, bar, "▌", "must not use the library's disjointed half-block default")
+}
+
+// TestRenderProgressBarUsesGradient guards the WithDefaultBlend addition: a
+// gradient fill styles each filled cell individually (a distinct color per
+// glyph), while a solid fill wraps the whole repeated run in one style —
+// so the gradient's rendered output is measurably longer for the same
+// width/pct. Comparing against a same-width solid-fill reference avoids
+// depending on exact ANSI byte sequences, which vary by color profile.
+func TestRenderProgressBarUsesGradient(t *testing.T) {
+	const width = 20
+
+	gradient := RenderProgressBar(1, width)
+	solid := progress.New(
+		progress.WithWidth(width),
+		progress.WithoutPercentage(),
+		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+	).ViewAs(1)
+
+	assert.Greater(t, len(gradient), len(solid),
+		"gradient fill should style each cell individually, rendering longer than a same-width solid fill")
 }
 
 func TestTextWidth(t *testing.T) {
