@@ -13,7 +13,7 @@ import (
 // dominate the line on an ultra-wide one.
 const (
 	progressBarMinWidth = 10
-	progressBarMaxWidth = 40
+	progressBarMaxWidth = 80
 )
 
 // FormatETA renders a duration as "m:ss", rounded to the nearest second.
@@ -63,7 +63,16 @@ func RenderProgressBar(pct float64, width int) string {
 // clamped to [progressBarMinWidth, progressBarMaxWidth] so the bar neither
 // collapses on a narrow terminal nor dominates an ultra-wide one.
 func ProgressBarWidth(reservedWidth int) int {
-	return min(ComputeRemainderWidth(GetTermWidth(), progressBarMinWidth, reservedWidth), progressBarMaxWidth)
+	return ProgressBarWidthFor(GetTermWidth(), reservedWidth)
+}
+
+// ProgressBarWidthFor is ProgressBarWidth parametrized on the available
+// width instead of querying the real terminal via GetTermWidth() — for a
+// caller that already tracks its own width (e.g. the TUI, via bubbletea's
+// WindowSizeMsg), where querying the terminal directly would be redundant
+// and, inside the TUI's raw-mode input handling, unsafe.
+func ProgressBarWidthFor(width, reservedWidth int) int {
+	return min(ComputeRemainderWidth(width, progressBarMinWidth, reservedWidth), progressBarMaxWidth)
 }
 
 // TextWidth returns the rendered terminal width of s, ignoring ANSI escape

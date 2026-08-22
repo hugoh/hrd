@@ -252,7 +252,6 @@ func (m *model) outputView() string {
 
 	if m.executing && m.execTotal > 0 {
 		done := len(m.execResults)
-		bar := progressModel.View()
 
 		succeeded, failed := m.execCounts()
 		counts := ui.ApplyColor("green", fmt.Sprintf("✓%d", succeeded))
@@ -261,13 +260,18 @@ func (m *model) outputView() string {
 			counts += " " + ui.ApplyColor("red", fmt.Sprintf("✗%d", failed))
 		}
 
-		left = ui.MutedStyle().
-			Render(fmt.Sprintf(" %s [%d/%d]", bar, done, m.execTotal)) +
-			" " + counts
+		suffix := ui.MutedStyle().Render(fmt.Sprintf(" [%d/%d]", done, m.execTotal)) + " " + counts
 
 		if eta, ok := m.execETA(done); ok {
-			left += ui.MutedStyle().Render("  ETA " + formatETA(eta))
+			suffix += ui.MutedStyle().Render("  ETA " + formatETA(eta))
 		}
+
+		// Width adapts to the TUI's own tracked width (from
+		// tea.WindowSizeMsg) rather than a fixed constant, so the bar grows
+		// on a wide terminal instead of staying pinned at its initial size.
+		progressModel.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
+
+		left = " " + progressModel.View() + suffix
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}

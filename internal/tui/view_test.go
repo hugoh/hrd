@@ -148,6 +148,41 @@ func TestNewProgressBarUsesFullBlockGlyphs(t *testing.T) {
 	assert.NotContains(t, rendered, "▌", "must not use the library's disjointed half-block default")
 }
 
+// TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth guards against the
+// bar staying pinned at its initial fixed width (progressBarW) regardless
+// of the TUI's actual tracked width — it should grow on a wide terminal and
+// shrink on a narrow one, same as the CLI's live bar already does.
+func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
+	baseModel := func(width int) *model {
+		m := &model{
+			screen:    screenOutput,
+			width:     width,
+			height:    30,
+			executing: true,
+			execTotal: 5,
+			execResults: []execResult{
+				{name: "alpha", result: runner.Result{RepoName: "alpha"}},
+			},
+			output: viewport.New(viewport.WithWidth(width), viewport.WithHeight(10)),
+		}
+		m.ready = true
+
+		return m
+	}
+
+	wide := baseModel(172)
+	wide.outputView()
+	wideBarWidth := progressModel.Width()
+
+	assert.Greater(t, wideBarWidth, progressBarW, "bar should widen beyond its fixed initial default on a wide terminal")
+
+	narrow := baseModel(40)
+	narrow.outputView()
+	narrowBarWidth := progressModel.Width()
+
+	assert.Less(t, narrowBarWidth, wideBarWidth, "bar should shrink again on a narrower terminal")
+}
+
 func TestOutputViewExecuting(t *testing.T) {
 	m := &model{
 		screen:    screenOutput,

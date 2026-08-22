@@ -76,12 +76,11 @@ func TestTextWidth(t *testing.T) {
 
 func TestProgressBarWidth(t *testing.T) {
 	// GetTermWidth falls back to 80 when stdout isn't a real terminal, as
-	// is the case under `go test`.
+	// is the case under `go test` — which happens to equal progressBarMaxWidth,
+	// so ProgressBarWidth itself can never observe the max clamp engaging
+	// here. ProgressBarWidthFor (below) tests that path directly against an
+	// arbitrary width instead of the real terminal fallback.
 	const termWidth = 80
-
-	t.Run("clamped to max on plenty of room", func(t *testing.T) {
-		assert.Equal(t, progressBarMaxWidth, ProgressBarWidth(5))
-	})
 
 	t.Run("clamped to min on very little room", func(t *testing.T) {
 		assert.Equal(t, progressBarMinWidth, ProgressBarWidth(termWidth))
@@ -91,5 +90,20 @@ func TestProgressBarWidth(t *testing.T) {
 		reserved := 50
 		want := termWidth - reserved - 2 // ComputeRemainderWidth's separator accounting
 		assert.Equal(t, want, ProgressBarWidth(reserved))
+	})
+}
+
+func TestProgressBarWidthFor(t *testing.T) {
+	t.Run("clamped to max on a very wide terminal", func(t *testing.T) {
+		assert.Equal(t, progressBarMaxWidth, ProgressBarWidthFor(300, 5))
+	})
+
+	t.Run("clamped to min on very little room", func(t *testing.T) {
+		assert.Equal(t, progressBarMinWidth, ProgressBarWidthFor(80, 80))
+	})
+
+	t.Run("fills remaining space between bounds", func(t *testing.T) {
+		want := 80 - 50 - 2 // ComputeRemainderWidth's separator accounting
+		assert.Equal(t, want, ProgressBarWidthFor(80, 50))
 	})
 }
