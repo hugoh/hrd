@@ -609,6 +609,11 @@ func TestDispatch(t *testing.T) { //nolint:funlen
 	}
 }
 
+// clearLineSeq mirrors the unexported constant of the same name in
+// internal/ui/progress_osc.go — the ANSI "erase current line" sequence the
+// live progress bar redraws with.
+const clearLineSeq = "\r\x1b[2K"
+
 func TestDispatchReportsProgressOSC(t *testing.T) {
 	var buf bytes.Buffer
 
@@ -642,6 +647,29 @@ func TestDispatchReportsProgressOSC(t *testing.T) {
 		ansi.ResetProgressBar,
 		"progress indicator should be cleared when dispatch returns",
 	)
+
+	// The live progress bar shares the same TTY-gated writer as the OSC
+	// sequences above, so it's exercised by the same run.
+	assert.Contains(t, out, clearLineSeq, "bar line should be cleared/redrawn in place")
+	assert.Contains(t, out, "[1/2]", "bar should show progress after the first result")
+	assert.Contains(t, out, "[2/2]", "bar should show progress after the second result")
+	assert.Contains(t, out, "✓1", "should count the first, successful result")
+	assert.Contains(t, out, "✗1", "should count the second, failed result")
+}
+
+func TestDispatchNoLiveBarWhenNotTTY(t *testing.T) {
+	var buf bytes.Buffer
+
+	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
+	ui.SetProgressOutput(&buf, false)
+
+	names := []string{"repo1"}
+	err := dispatch(names, "test", func(resultCh chan<- runner.Result) {
+		resultCh <- makeDispatchResult("repo1", "ok", 0, nil)
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, buf.String(), "no OSC or live-bar output should be written when stdout isn't a terminal")
 }
 
 func TestFilterMatchingUnknownBackend(t *testing.T) {
@@ -1057,4 +1085,27 @@ func TestGatherStatusReportsProgressOSC(t *testing.T) {
 		ansi.ResetProgressBar,
 		"progress indicator should be cleared when gatherStatus returns",
 	)
+
+	// The live progress bar shares the same TTY-gated writer as the OSC
+	// sequences above, so it's exercised by the same run.
+	assert.Contains(t, out, clearLineSeq, "bar line should be cleared/redrawn in place")
+	assert.Contains(t, out, "[1/2]", "bar should show progress after the first result")
+	assert.Contains(t, out, "[2/2]", "bar should show progress after the second result")
+}
+
+func TestGatherStatusNoLiveBarWhenNotTTY(t *testing.T) {
+	var buf bytes.Buffer
+
+	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
+	ui.SetProgressOutput(&buf, false)
+
+	names := []string{"repo1"}
+	vcsByName := map[string]string{"repo1": "git"}
+
+	err := gatherStatus(names, vcsByName, false, func(resultCh chan<- runner.StatusResult) {
+		resultCh <- makeStatusResult("git", backend.RepoStatus{Ref: "main"})
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, buf.String(), "no OSC or live-bar output should be written when stdout isn't a terminal")
 }

@@ -286,23 +286,12 @@ func (m *model) execCounts() (int, int) {
 // in parallel. Returns false before enough progress has been made to give
 // a meaningful estimate, or once the run is complete.
 func (m *model) execETA(done int) (time.Duration, bool) {
-	if done == 0 || done >= m.execTotal || m.execStartTime.IsZero() {
-		return 0, false
-	}
-
-	elapsed := time.Since(m.execStartTime)
-	remaining := m.execTotal - done
-
-	return elapsed / time.Duration(done) * time.Duration(remaining), true
+	return ui.EstimateETA(m.execStartTime, done, m.execTotal)
 }
 
 // formatETA renders a duration as "m:ss", rounded to the nearest second.
 func formatETA(d time.Duration) string {
-	d = d.Round(time.Second)
-	mins := d / time.Minute
-	secs := (d % time.Minute) / time.Second
-
-	return fmt.Sprintf("%d:%02d", mins, secs)
+	return ui.FormatETA(d)
 }
 
 func (m *model) coloredSummary() string {

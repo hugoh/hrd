@@ -55,3 +55,37 @@ func TestProgressOSCNotATerminal(t *testing.T) {
 		t.Fatalf("expected no output when stdout isn't a terminal, got %q", buf.String())
 	}
 }
+
+func TestIsTTY(t *testing.T) {
+	withProgressOverrides(t, true)
+
+	if !IsTTY() {
+		t.Fatal("IsTTY() = false, want true")
+	}
+
+	withProgressOverrides(t, false)
+
+	if IsTTY() {
+		t.Fatal("IsTTY() = true, want false")
+	}
+}
+
+func TestClearLiveLine(t *testing.T) {
+	buf := withProgressOverrides(t, true)
+
+	ClearLiveLine()
+
+	if got, want := buf.String(), clearLineSeq; got != want {
+		t.Fatalf("ClearLiveLine() wrote %q, want %q", got, want)
+	}
+}
+
+func TestDrawLiveLine(t *testing.T) {
+	buf := withProgressOverrides(t, true)
+
+	DrawLiveLine("hello")
+
+	if got, want := buf.String(), clearLineSeq+"hello"; got != want {
+		t.Fatalf("DrawLiveLine(%q) wrote %q, want %q", "hello", got, want)
+	}
+}
