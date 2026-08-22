@@ -197,12 +197,14 @@ shell completion, and listed under `hrd --help`:
 [aliases]
 sync = "pull --rebase"
 mkclean = "!make clean"
+up = { git = "!git fetch --prune && git rebase @{u}", jj = "!jj util exec -- sh -c \"jj git fetch && jj rebase --skip-emptied -d 'trunk()'\"" }
 ```
 
 ```sh
 hrd sync @work          # git pull --rebase / jj git pull, per backend
 hrd mkclean --dirty     # make clean, only in dirty repos
 hrd sync -- --autostash # extra args append to the expansion
+hrd up                  # fetch + rebase, git or jj command per repo's backend
 ```
 
 The first word decides the routing: `git`/`jj` pins a backend, `!` (or
@@ -210,6 +212,14 @@ The first word decides the routing: `git`/`jj` pins a backend, `!` (or
 backend like the built-in subcommands. The TUI command bar completes and
 expands the same aliases. Aliases that would shadow a built-in command are
 ignored with a warning.
+
+An alias can also be a table of per-backend variants, keyed by backend
+name (`git`, `jj`), instead of a single plain string — useful when the
+right command genuinely differs by backend, as `up` does above. Each repo
+in the selection runs the variant matching its own active backend; repos
+whose backend has no variant defined are skipped with a warning. `up` ships
+as a built-in default alias (with the expansion shown above) so it works
+with no config at all — define your own `up` in `[aliases]` to override it.
 
 ### Exit codes
 
