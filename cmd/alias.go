@@ -129,13 +129,27 @@ func runAlias(
 	return runAliasPerBackend(ctx, &scope.cfg, names, extraArgs, spec.Backends, interactive)
 }
 
+// groupByActiveBackend buckets names by their repo's active backend — the
+// single one backend.Detect would pick (jj wins over git for colocated
+// repos) — not "any backend whose marker is present", which filterMatching
+// checks and would run both variants against a colocated jj repo.
+func groupByActiveBackend(names []string, repos map[string]config.Repo) map[string][]string {
+	groups := make(map[string][]string, len(names))
+
+	for _, n := range names {
+		if repo, ok := repos[n]; ok {
+			active := repo.ActiveBackend()
+			groups[active] = append(groups[active], n)
+		}
+	}
+
+	return groups
+}
+
 // runAliasPerBackend groups names by their repo's active backend and runs
 // each group against that backend's variant of the alias, one dispatch per
-// backend. A repo's active backend is the single one backend.Detect would
-// pick (jj wins over git for colocated repos) — not "any backend whose
-// marker is present", which filterMatching checks and would run both
-// variants against a colocated jj repo. Repos whose backend has no defined
-// variant are skipped with a warning rather than failing the whole run.
+// backend. Repos whose backend has no defined variant are skipped with a
+// warning rather than failing the whole run.
 func runAliasPerBackend(
 	ctx context.Context,
 	cfg *config.Config,
@@ -144,13 +158,7 @@ func runAliasPerBackend(
 	variants map[string]string,
 	interactive bool,
 ) error {
-	groups := make(map[string][]string, len(variants))
-	for _, n := range names {
-		if repo, ok := cfg.Repos[n]; ok {
-			active := repo.ActiveBackend()
-			groups[active] = append(groups[active], n)
-		}
-	}
+	groups := groupByActiveBackend(names, cfg.Repos)
 
 	backendNames := make([]string, 0, len(variants))
 	for name := range variants {

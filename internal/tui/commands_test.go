@@ -58,7 +58,13 @@ func TestExecCmdResetsProgressBar(t *testing.T) {
 
 	execCmd(m, nil, "", "status")
 
-	assert.InDelta(t, 0.0, progressModel.Percent(), 0.0001, "progress bar should reset to 0 for a new run")
+	assert.InDelta(
+		t,
+		0.0,
+		progressModel.Percent(),
+		0.0001,
+		"progress bar should reset to 0 for a new run",
+	)
 }
 
 func TestExecCmdSetsLabel(t *testing.T) {

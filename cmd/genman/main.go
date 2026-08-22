@@ -81,5 +81,5 @@ func anonymizeHomeDir() error {
 }
 
 func main() {
-	genutil.Main(run)
+	os.Exit(genutil.Main(run))
 }

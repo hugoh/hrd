@@ -160,11 +160,18 @@ func TestNewProgressBarUsesGradient(t *testing.T) {
 	solid := progress.New(
 		progress.WithWidth(progressBarW),
 		progress.WithoutPercentage(),
-		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
 	).ViewAs(1)
 
-	assert.Greater(t, len(gradient), len(solid),
-		"gradient fill should style each cell individually, rendering longer than a same-width solid fill")
+	assert.Greater(
+		t,
+		len(gradient),
+		len(solid),
+		"gradient fill should style each cell individually, rendering longer than a same-width solid fill",
+	)
 }
 
 // TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth guards against the
@@ -191,12 +198,19 @@ func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
 
 	wide := baseModel(172)
 	wide.outputView()
+
 	wideBarWidth := progressModel.Width()
 
-	assert.Greater(t, wideBarWidth, progressBarW, "bar should widen beyond its fixed initial default on a wide terminal")
+	assert.Greater(
+		t,
+		wideBarWidth,
+		progressBarW,
+		"bar should widen beyond its fixed initial default on a wide terminal",
+	)
 
 	narrow := baseModel(40)
 	narrow.outputView()
+
 	narrowBarWidth := progressModel.Width()
 
 	assert.Less(t, narrowBarWidth, wideBarWidth, "bar should shrink again on a narrower terminal")

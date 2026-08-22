@@ -669,7 +669,11 @@ func TestDispatchNoLiveBarWhenNotTTY(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Empty(t, buf.String(), "no OSC or live-bar output should be written when stdout isn't a terminal")
+	assert.Empty(
+		t,
+		buf.String(),
+		"no OSC or live-bar output should be written when stdout isn't a terminal",
+	)
 }
 
 func TestFilterMatchingUnknownBackend(t *testing.T) {
@@ -1107,5 +1111,9 @@ func TestGatherStatusNoLiveBarWhenNotTTY(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Empty(t, buf.String(), "no OSC or live-bar output should be written when stdout isn't a terminal")
+	assert.Empty(
+		t,
+		buf.String(),
+		"no OSC or live-bar output should be written when stdout isn't a terminal",
+	)
 }

@@ -229,5 +229,5 @@ func run() error {
 }
 
 func main() {
-	genutil.Main(run)
+	os.Exit(genutil.Main(run))
 }

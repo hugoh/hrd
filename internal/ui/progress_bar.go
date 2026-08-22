@@ -56,7 +56,10 @@ func RenderProgressBar(pct float64, width int) string {
 	return progress.New(
 		progress.WithWidth(width),
 		progress.WithoutPercentage(),
-		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
 		progress.WithDefaultBlend(),
 	).ViewAs(pct)
 }
@@ -75,7 +78,10 @@ func ProgressBarWidth(reservedWidth int) int {
 // WindowSizeMsg), where querying the terminal directly would be redundant
 // and, inside the TUI's raw-mode input handling, unsafe.
 func ProgressBarWidthFor(width, reservedWidth int) int {
-	return min(ComputeRemainderWidth(width, progressBarMinWidth, reservedWidth), progressBarMaxWidth)
+	return min(
+		ComputeRemainderWidth(width, progressBarMinWidth, reservedWidth),
+		progressBarMaxWidth,
+	)
 }
 
 // TextWidth returns the rendered terminal width of s, ignoring ANSI escape

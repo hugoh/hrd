@@ -31,7 +31,10 @@ func newProgressBar() progress.Model {
 	return progress.New(
 		progress.WithWidth(progressBarW),
 		progress.WithoutPercentage(),
-		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
 		progress.WithDefaultBlend(),
 	)
 }

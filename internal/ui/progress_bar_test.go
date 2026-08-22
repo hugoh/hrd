@@ -81,11 +81,18 @@ func TestRenderProgressBarUsesGradient(t *testing.T) {
 	solid := progress.New(
 		progress.WithWidth(width),
 		progress.WithoutPercentage(),
-		progress.WithFillCharacters(progress.DefaultFullCharFullBlock, progress.DefaultEmptyCharBlock),
+		progress.WithFillCharacters(
+			progress.DefaultFullCharFullBlock,
+			progress.DefaultEmptyCharBlock,
+		),
 	).ViewAs(1)
 
-	assert.Greater(t, len(gradient), len(solid),
-		"gradient fill should style each cell individually, rendering longer than a same-width solid fill")
+	assert.Greater(
+		t,
+		len(gradient),
+		len(solid),
+		"gradient fill should style each cell individually, rendering longer than a same-width solid fill",
+	)
 }
 
 func TestTextWidth(t *testing.T) {

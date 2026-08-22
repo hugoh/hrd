@@ -631,7 +631,12 @@ func TestHandleProgressFrameAdvancesBar(t *testing.T) {
 
 	_, nextCmd := m.handleProgressFrame(msg)
 
-	assert.NotEqual(t, before, progressModel.View(), "bar should have advanced after one animation frame")
+	assert.NotEqual(
+		t,
+		before,
+		progressModel.View(),
+		"bar should have advanced after one animation frame",
+	)
 	assert.NotNil(t, nextCmd, "still animating, so the next frame should be re-armed")
 }
 
@@ -663,7 +668,11 @@ func TestHandleExecResultSuccess(t *testing.T) {
 	// directly — run each sub-cmd and find the one that closed channel
 	// produces.
 	batch, ok := cmd().(tea.BatchMsg)
-	require.True(t, ok, "expected a batched cmd combining streamNextResult and the progress bar animation")
+	require.True(
+		t,
+		ok,
+		"expected a batched cmd combining streamNextResult and the progress bar animation",
+	)
 
 	var gotExecDone bool
 

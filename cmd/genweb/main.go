@@ -187,5 +187,5 @@ func writeFile(path string, content string) error {
 }
 
 func main() {
-	genutil.Main(run)
+	os.Exit(genutil.Main(run))
 }
