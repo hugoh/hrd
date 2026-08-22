@@ -893,6 +893,8 @@ func TestRunSteps_AllSucceed(t *testing.T) {
 }
 
 func TestRunSteps_AccumulatesOutput(t *testing.T) {
+	const stepOutput = "step-output\n"
+
 	dir := initJJRepo(t)
 
 	logStep := []string{
@@ -905,7 +907,7 @@ func TestRunSteps_AccumulatesOutput(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Zero(t, res.ExitCode)
-	assert.Equal(t, "step-output\nstep-output\n", res.Output,
+	assert.Equal(t, stepOutput+stepOutput, res.Output,
 		"output from every step should be returned, not dropped")
 }
 
