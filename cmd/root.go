@@ -214,6 +214,8 @@ $XDG_CONFIG_HOME/hrd/config.toml, falling back to ~/.config/hrd/config.toml.`,
 		},
 	}
 
+	root.ValidArgsFunction = repoGroupCompleter(&cfgPath)
+
 	root.PersistentFlags().
 		StringVarP(&cfgPath, flagConfig, flagConfigShort, cfgPath, "path to config file")
 
