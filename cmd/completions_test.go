@@ -5,6 +5,7 @@ import (
 
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/discover/discovertest"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -100,6 +101,29 @@ func TestReposOnlyCompleter(t *testing.T) {
 	got, _ := completer(nil, nil, "")
 
 	assert.Contains(t, got, "myrepo")
+}
+
+func TestReposOrDirsCompleter(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"myrepo": {Path: "/tmp/myrepo"},
+		},
+	})
+
+	got, directive := reposOrDirsCompleter(&cfgPath)(nil, nil, "")
+
+	assert.Contains(t, got, "myrepo")
+	assert.Equal(t, cobra.ShellCompDirectiveFilterDirs, directive)
+}
+
+func TestReposOrDirsCompleterBadPath(t *testing.T) {
+	dir := t.TempDir()
+	badPath := dir + "/"
+
+	got, directive := reposOrDirsCompleter(&badPath)(nil, nil, "")
+
+	assert.Nil(t, got)
+	assert.Equal(t, cobra.ShellCompDirectiveFilterDirs, directive)
 }
 
 func TestRepoGroupCompleterIncludesRootDiscoveredRepos(t *testing.T) {

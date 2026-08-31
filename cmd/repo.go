@@ -286,7 +286,7 @@ func completeFirstArgWithRepos(cfgPath *string) cobraCompleter {
 }
 
 // completeFirstArgWithGroups completes the first positional arg with group
-// names; every subsequent arg completes with repo names (see
+// names; every subsequent arg completes with repo names or directories (see
 // "hrd group add/rm <group> <repo>...").
 func completeFirstArgWithGroups(cfgPath *string) cobraCompleter {
 	return func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -294,7 +294,7 @@ func completeFirstArgWithGroups(cfgPath *string) cobraCompleter {
 			return groupsOnlyCompleter(cfgPath)(cmd, args, toComplete)
 		}
 
-		return reposOnlyCompleter(cfgPath)(cmd, args, toComplete)
+		return reposOrDirsCompleter(cfgPath)(cmd, args, toComplete)
 	}
 }
 
@@ -363,6 +363,21 @@ func displayGroup(name string) string {
 	return name
 }
 
+// resolveRepoArg maps a "group add/rm" repo argument to a configured repo
+// name. It accepts either the repo name directly or a filesystem path
+// (e.g. ".") pointing at a configured repo's root.
+func resolveRepoArg(cfg *config.Config, arg string) (string, error) {
+	if _, ok := cfg.Repos[arg]; ok {
+		return arg, nil
+	}
+
+	if name, ok := cfg.RepoNameForPath(arg); ok {
+		return name, nil
+	}
+
+	return "", fmt.Errorf("%w %q", errUnknownRepo, arg)
+}
+
 // groupMemberAction returns a RunE for "hrd group add/rm <group> <repo>...":
 // validates the group name, loads config, applies act to each repo in turn
 // (failing fast on an unknown repo), and saves once at the end.
@@ -387,9 +402,10 @@ func groupMemberAction(
 			return err
 		}
 
-		for _, repoName := range args[1:] {
-			if _, ok := cfg.Repos[repoName]; !ok {
-				return fmt.Errorf("%w %q", errUnknownRepo, repoName)
+		for _, repoArg := range args[1:] {
+			repoName, err := resolveRepoArg(&cfg, repoArg)
+			if err != nil {
+				return err
 			}
 
 			act(&cfg, repoName, group)

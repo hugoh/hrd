@@ -65,3 +65,17 @@ func reposOnlyCompleter(cfgPath *string) cobraCompleter {
 func groupsOnlyCompleter(cfgPath *string) cobraCompleter {
 	return makeCompleter(cfgPath, completeGroups)
 }
+
+// reposOrDirsCompleter completes with configured repo names and also lets the
+// shell offer directories, since "hrd group add/rm" accepts a repo path
+// (e.g. ".") in place of a name.
+func reposOrDirsCompleter(cfgPath *string) cobraCompleter {
+	return func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		cfg, _, err := config.LoadResolved(*cfgPath)
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveFilterDirs
+		}
+
+		return completeRepos(&cfg), cobra.ShellCompDirectiveFilterDirs
+	}
+}

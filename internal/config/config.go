@@ -540,6 +540,31 @@ func (c *Config) GroupRepos(name string) ([]string, bool) {
 	return nil, false
 }
 
+// RepoNameForPath returns the configured repo name whose path matches the
+// given directory (resolved to an absolute, symlink-free path), if any.
+func (c *Config) RepoNameForPath(path string) (string, bool) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", false
+	}
+
+	if resolved, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = resolved
+	}
+
+	for name, repo := range c.Repos {
+		if repo.Path == abs {
+			return name, true
+		}
+
+		if resolved, err := filepath.EvalSymlinks(repo.Path); err == nil && resolved == abs {
+			return name, true
+		}
+	}
+
+	return "", false
+}
+
 func (c *Config) rebuildGroupsCache() {
 	c.Groups = make(map[string]Group, len(c.Repos))
 
