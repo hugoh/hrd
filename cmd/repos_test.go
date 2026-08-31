@@ -205,6 +205,40 @@ func TestGroupAddUnknownRepo(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown repo")
 }
 
+func TestGroupAddResolvesDirectoryArg(t *testing.T) {
+	repoDir := t.TempDir()
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: repoDir},
+		},
+	})
+
+	err := runHRD(t, cfgPath, []string{"group", "add", "work", repoDir})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
+}
+
+func TestGroupAddResolvesDotArg(t *testing.T) {
+	repoDir := t.TempDir()
+	cfgPath := setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo1": {Path: repoDir},
+		},
+	})
+
+	t.Chdir(repoDir)
+
+	err := runHRD(t, cfgPath, []string{"group", "add", "work", "."})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"work"}, cfg.Repos["repo1"].Groups)
+}
+
 func TestGroupRm(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{

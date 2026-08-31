@@ -228,6 +228,18 @@ func TestResolveScope_UnknownRepo(t *testing.T) {
 	assert.Contains(t, err.Error(), "unknown repo")
 }
 
+func TestRepoNameForPath(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{Repos: map[string]Repo{"mine": {Path: dir}}}
+
+	name, ok := cfg.RepoNameForPath(dir)
+	require.True(t, ok)
+	assert.Equal(t, "mine", name)
+
+	_, ok = cfg.RepoNameForPath(filepath.Join(dir, "nope"))
+	assert.False(t, ok)
+}
+
 func TestUngroupedRepos(t *testing.T) {
 	cfg := &Config{
 		Repos: map[string]Repo{
