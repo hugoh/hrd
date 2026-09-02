@@ -143,7 +143,7 @@ type StatusLineParts struct {
 	Error    string
 }
 
-func FormatStatusLine(status backend.RepoStatus, symStr string, detail string) StatusLineParts {
+func FormatStatusLine(status backend.RepoStatus, symStr, detail string) StatusLineParts {
 	refStr := ""
 	hasRef := false
 
@@ -206,7 +206,7 @@ func Infof(msg string, args ...any) {
 	logLogger().Infof(msg, args...)
 }
 
-func ComputeRemainderWidth(termWidth int, minWidth int, usedWidths ...int) int {
+func ComputeRemainderWidth(termWidth, minWidth int, usedWidths ...int) int {
 	var total, numSeparators int
 
 	for _, w := range usedWidths {

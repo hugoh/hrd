@@ -252,7 +252,8 @@ func trunkLocalName(trunk string) string {
 func (b *Backend) resolveTrunkRef(ctx context.Context, path string) string {
 	args := append(
 		[]string{"for-each-ref", "--format=%(refname:short) %(symref:short)"},
-		trunkRefPatterns()...)
+		trunkRefPatterns()...,
+	)
 
 	out, err := b.runGit(ctx, path, args)
 	if err != nil {
