@@ -65,6 +65,8 @@ func TestRepoStatus_NeedsAttention(t *testing.T) {
 	}{
 		{"dirty", RepoStatus{Dirty: true}, true},
 		{"local ahead (jj working copy)", RepoStatus{LocalAhead: 1}, true},
+		{"trunk ahead (unmerged commits)", RepoStatus{TrunkAhead: 1}, true},
+		{"not on trunk (zero ahead)", RepoStatus{NotOnTrunk: true}, true},
 		{
 			"bookmark ahead",
 			RepoStatus{Bookmarks: []BookmarkStatus{{Name: "main", Ahead: 1}}},

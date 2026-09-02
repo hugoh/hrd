@@ -150,13 +150,21 @@ func TestGroupList(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestGroupAdd(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
+// twoRepoConfig writes a config with two ungrouped repos, for tests
+// exercising group membership commands.
+func twoRepoConfig(t *testing.T) string {
+	t.Helper()
+
+	return setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{
 			"repo1": {Path: "/tmp/repo1"},
 			"repo2": {Path: "/tmp/repo2"},
 		},
 	})
+}
+
+func TestGroupAdd(t *testing.T) {
+	cfgPath := twoRepoConfig(t)
 
 	err := runHRD(t, cfgPath, []string{"group", "add", "work", "repo1"})
 	require.NoError(t, err)
@@ -178,12 +186,7 @@ func TestGroupAdd(t *testing.T) {
 // TestGroupAddMultipleRepos verifies the group-first argument order allows
 // adding several repos to one group in a single invocation.
 func TestGroupAddMultipleRepos(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo1": {Path: "/tmp/repo1"},
-			"repo2": {Path: "/tmp/repo2"},
-		},
-	})
+	cfgPath := twoRepoConfig(t)
 
 	err := runHRD(t, cfgPath, []string{"group", "add", "work", "repo1", "repo2"})
 	require.NoError(t, err)

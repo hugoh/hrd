@@ -264,7 +264,9 @@ func TestUngroupedRepos_NoneUngrouped(t *testing.T) {
 	assert.Empty(t, cfg.UngroupedRepos())
 }
 
-func TestGroupRepos_ReservedNone(t *testing.T) {
+// groupedAndUngroupedConfig returns a Config with one repo in the "work"
+// group and one ungrouped, for tests exercising reserved-group resolution.
+func groupedAndUngroupedConfig() *Config {
 	cfg := &Config{
 		Repos: map[string]Repo{
 			"grouped":   {Path: "/g", Groups: []string{"work"}},
@@ -273,21 +275,17 @@ func TestGroupRepos_ReservedNone(t *testing.T) {
 	}
 	cfg.rebuildGroupsCache()
 
-	repos, ok := cfg.GroupRepos(ReservedNone)
+	return cfg
+}
+
+func TestGroupRepos_ReservedNone(t *testing.T) {
+	repos, ok := groupedAndUngroupedConfig().GroupRepos(ReservedNone)
 	require.True(t, ok)
 	assert.Equal(t, []string{"ungrouped"}, repos)
 }
 
 func TestGroupRepos_ReservedAttention(t *testing.T) {
-	cfg := &Config{
-		Repos: map[string]Repo{
-			"grouped":   {Path: "/g", Groups: []string{"work"}},
-			"ungrouped": {Path: "/u"},
-		},
-	}
-	cfg.rebuildGroupsCache()
-
-	repos, ok := cfg.GroupRepos(ReservedAttention)
+	repos, ok := groupedAndUngroupedConfig().GroupRepos(ReservedAttention)
 	require.True(t, ok)
 	assert.ElementsMatch(t, []string{"grouped", "ungrouped"}, repos)
 }

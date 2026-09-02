@@ -56,12 +56,7 @@ func TestCompleteGroupsNil(t *testing.T) {
 }
 
 func TestRepoGroupCompleterWritesReposAndGroups(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo-a": {Path: "/tmp/repo-a", Groups: []string{"work"}},
-			"repo-b": {Path: "/tmp/repo-b"},
-		},
-	})
+	cfgPath := twoRepoGroupConfig(t)
 
 	completer := repoGroupCompleter(&cfgPath)
 	got, _ := completer(nil, nil, "")

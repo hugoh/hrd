@@ -182,7 +182,7 @@ var mainBindings = []binding{
 			return m, nil
 		},
 		label:   "attention",
-		desc:    "Toggle needs-attention filter (dirty / out of sync)",
+		desc:    "Toggle needs-attention filter (dirty / out of sync / unmerged into trunk)",
 		hrd:     true,
 		section: secGeneral,
 		order:   17,

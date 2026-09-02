@@ -62,6 +62,10 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 
 	var remotes []string
 
+	var trunkRef string
+
+	var trunkAhead int
+
 	g, gctx := errgroup.WithContext(ctx)
 	g.Go(func() error {
 		var err error
@@ -75,12 +79,22 @@ func (b *Backend) Status(ctx context.Context, path string) (backend.RepoStatus, 
 
 		return nil
 	})
+	g.Go(func() error {
+		trunkRef, trunkAhead = b.trunkStatus(gctx, path)
+
+		return nil
+	})
 
 	if err := g.Wait(); err != nil {
 		return backend.RepoStatus{}, fmt.Errorf("git status: %w", err)
 	}
 
 	status := parseStatus(out, remotes)
+	status.TrunkAhead = trunkAhead
+
+	if trunkName := trunkLocalName(trunkRef); trunkName != "" && status.Ref != "" {
+		status.NotOnTrunk = status.Ref != trunkName
+	}
 
 	logOut, _ := b.runGit(
 		ctx,
@@ -175,6 +189,97 @@ func runGit(ctx context.Context, path string, args []string) (string, error) {
 	}
 
 	return buf.String(), nil
+}
+
+// trunkOriginHEAD is the short name for-each-ref reports for
+// refs/remotes/origin/HEAD.
+const trunkOriginHEAD = "origin/HEAD"
+
+// trunkRefPatterns are the refs resolveTrunkRef looks up in a single
+// for-each-ref call: origin/HEAD's symref target (authoritative when set),
+// plus candidate branch names tried in priority order as a fallback.
+func trunkRefPatterns() []string {
+	return []string{
+		"refs/remotes/origin/HEAD",
+		"refs/heads/main", "refs/heads/master",
+		"refs/remotes/origin/main", "refs/remotes/origin/master",
+	}
+}
+
+// trunkCandidates are tried in order when refs/remotes/origin/HEAD isn't set
+// (e.g. never fetched, or origin/HEAD wasn't configured).
+func trunkCandidates() []string {
+	return []string{"origin/main", "origin/master", "main", "master"}
+}
+
+// trunkStatus resolves the repo's trunk ref and how many commits on HEAD
+// aren't reachable from it, i.e. work not yet merged into trunk. Returns
+// ("", 0) if no trunk ref can be resolved, or on any git error.
+func (b *Backend) trunkStatus(ctx context.Context, path string) (string, int) {
+	trunk := b.resolveTrunkRef(ctx, path)
+	if trunk == "" {
+		return "", 0
+	}
+
+	out, err := b.runGit(ctx, path, []string{"rev-list", "--count", trunk + "..HEAD"})
+	if err != nil {
+		return trunk, 0
+	}
+
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return trunk, 0
+	}
+
+	return trunk, n
+}
+
+// trunkLocalName strips a remote prefix (e.g. "origin/") from a trunk ref
+// resolved by resolveTrunkRef, for comparison against the local branch name
+// git status reports.
+func trunkLocalName(trunk string) string {
+	_, name, found := strings.Cut(trunk, "/")
+	if !found {
+		return trunk
+	}
+
+	return name
+}
+
+// resolveTrunkRef finds the repo's trunk ref in a single for-each-ref call:
+// refs/remotes/origin/HEAD's symref target if set, otherwise the first of
+// trunkCandidates that exists.
+func (b *Backend) resolveTrunkRef(ctx context.Context, path string) string {
+	args := append(
+		[]string{"for-each-ref", "--format=%(refname:short) %(symref:short)"},
+		trunkRefPatterns()...)
+
+	out, err := b.runGit(ctx, path, args)
+	if err != nil {
+		return ""
+	}
+
+	found := make(map[string]bool)
+
+	for line := range strings.SplitSeq(strings.TrimSpace(out), "\n") {
+		name, symref, _ := strings.Cut(line, " ")
+
+		if name == trunkOriginHEAD && symref != "" {
+			return symref
+		}
+
+		if name != "" {
+			found[name] = true
+		}
+	}
+
+	for _, candidate := range trunkCandidates() {
+		if found[candidate] {
+			return candidate
+		}
+	}
+
+	return ""
 }
 
 // knownRemotesUsing returns configured remote names for the repo at path,

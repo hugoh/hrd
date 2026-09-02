@@ -137,13 +137,27 @@ type RepoStatus struct {
 	// Working copy (@) commits ahead of HEAD bookmark. Only populated by
 	// the jj backend (git's working copy is always at the branch tip).
 	LocalAhead int
+
+	// Commits reachable from the working copy/branch tip that trunk (jj's
+	// trunk() revset, or git's resolved default branch) doesn't have yet.
+	// Nonzero regardless of which bookmark/branch is checked out, so it
+	// catches unmerged work on a feature branch even when that branch is
+	// fully synced with its own remote.
+	TrunkAhead int
+
+	// True when the checked-out bookmark/branch is not trunk's, even if it
+	// points at the same commit as trunk (so TrunkAhead is 0). Left false
+	// when either name can't be determined.
+	NotOnTrunk bool
 }
 
-// NeedsAttention reports whether the repo has uncommitted changes or its
-// branch differs from its remote (ahead, behind, diverged, or gone).
-// Repos with no remote configured do not qualify on sync grounds alone.
+// NeedsAttention reports whether the repo has uncommitted changes, its
+// branch differs from its remote (ahead, behind, diverged, or gone), it has
+// commits not yet merged into trunk, or it's checked out on a bookmark/
+// branch other than trunk's. Repos with no remote configured do not qualify
+// on sync grounds alone.
 func (st RepoStatus) NeedsAttention() bool {
-	if st.Dirty || st.LocalAhead > 0 {
+	if st.Dirty || st.LocalAhead > 0 || st.TrunkAhead > 0 || st.NotOnTrunk {
 		return true
 	}
 

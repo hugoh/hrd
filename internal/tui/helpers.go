@@ -236,6 +236,25 @@ func (m *model) selectedNames() []string {
 	return names
 }
 
+// execResultNames returns the deduped repo names that produced an exec
+// result, in arrival order — the set a side-effecting command actually
+// touched, independent of what is selected once it finishes.
+func execResultNames(results []execResult) []string {
+	seen := make(map[string]bool, len(results))
+	names := make([]string, 0, len(results))
+
+	for _, er := range results {
+		if er.name == "" || seen[er.name] {
+			continue
+		}
+
+		seen[er.name] = true
+		names = append(names, er.name)
+	}
+
+	return names
+}
+
 func (m *model) selectedCount() int {
 	count := 0
 

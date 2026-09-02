@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -210,23 +211,13 @@ func TestBackend_Name(t *testing.T) {
 }
 
 func TestBackend_SubcommandArgs(t *testing.T) {
-	b := &Backend{}
-
-	tests := []struct {
-		op   string
-		want []string
-	}{
-		{"status", []string{"status"}},
-		{"fetch", []string{"fetch"}},
-		{"push", []string{"push"}},
-		{"pull", []string{"pull"}},
-		{"log", []string{"log"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.op, func(t *testing.T) {
-			assert.Equal(t, tt.want, b.SubcommandArgs(tt.op))
-		})
-	}
+	backendtest.AssertSubcommandArgs(t, &Backend{}, []backendtest.SubcommandArgsCase{
+		{Op: "status", Want: []string{"status"}},
+		{Op: "fetch", Want: []string{"fetch"}},
+		{Op: "push", Want: []string{"push"}},
+		{Op: "pull", Want: []string{"pull"}},
+		{Op: "log", Want: []string{"log"}},
+	})
 }
 
 func TestBackend_Detect(t *testing.T) {
@@ -329,15 +320,7 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
-	backend.ClearRegisteredBackends()
-
-	assert.NotPanics(t, func() {
-		Register()
-	})
-
-	assert.Panics(t, func() {
-		Register()
-	})
+	backendtest.AssertRegisterPanicsOnDouble(t, Register)
 }
 
 func TestBackend_Status(t *testing.T) {
@@ -367,13 +350,122 @@ func TestBackend_Status_NoRepo(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestBackend_Status_TrunkAhead_OriginHead(t *testing.T) {
+	origin := t.TempDir()
+	runGitCmd(t, origin, []string{"init", "--bare", "--initial-branch=main"})
+
+	dir := initGitRepoWithCommit(t)
+	runGitCmd(t, dir, []string{"branch", "-M", "main"})
+	runGitCmd(t, dir, []string{"remote", "add", "origin", origin})
+	runGitCmd(t, dir, []string{"push", "origin", "main"})
+	runGitCmd(t, dir, []string{"remote", "set-head", "origin", "main"})
+
+	runGitCmd(t, dir, []string{"checkout", "-b", "feature"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+	runGitCmd(t, dir, []string{"add", "a.txt"})
+	runGitCmd(t, dir, []string{"commit", "-m", "feature commit 1"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b"), 0o644))
+	runGitCmd(t, dir, []string{"add", "b.txt"})
+	runGitCmd(t, dir, []string{"commit", "-m", "feature commit 2"})
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 2, st.TrunkAhead)
+}
+
+func TestBackend_Status_TrunkAhead_LocalMainFallback(t *testing.T) {
+	dir := initGitRepoWithCommit(t)
+	runGitCmd(t, dir, []string{"branch", "-M", "main"})
+
+	runGitCmd(t, dir, []string{"checkout", "-b", "feature"})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a"), 0o644))
+	runGitCmd(t, dir, []string{"add", "a.txt"})
+	runGitCmd(t, dir, []string{"commit", "-m", "feature commit"})
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, st.TrunkAhead)
+}
+
+func TestBackend_Status_TrunkAhead_OnTrunk(t *testing.T) {
+	dir := initGitRepoWithCommit(t)
+	runGitCmd(t, dir, []string{"branch", "-M", "main"})
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 0, st.TrunkAhead)
+}
+
+func TestBackend_Status_NotOnTrunk_SameCommitDifferentBranch(t *testing.T) {
+	dir := initGitRepoWithCommit(t)
+	runGitCmd(t, dir, []string{"branch", "-M", "main"})
+	runGitCmd(t, dir, []string{"checkout", "-b", "feature"})
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 0, st.TrunkAhead)
+	assert.True(t, st.NotOnTrunk)
+}
+
+func TestBackend_Status_NotOnTrunk_OnTrunk(t *testing.T) {
+	dir := initGitRepoWithCommit(t)
+	runGitCmd(t, dir, []string{"branch", "-M", "main"})
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.False(t, st.NotOnTrunk)
+}
+
+func TestTrunkStatus_RevListErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		revListOut string
+		revListErr error
+	}{
+		{name: "rev-list fails", revListErr: errors.New("boom")},
+		{name: "rev-list returns non-numeric output", revListOut: "not-a-number"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Backend{}
+			b.runGitFn = func(_ context.Context, _ string, args []string) (string, error) {
+				if len(args) > 0 && args[0] == "for-each-ref" {
+					return "main \n", nil
+				}
+
+				if len(args) > 0 && args[0] == "rev-list" {
+					return tt.revListOut, tt.revListErr
+				}
+
+				return "", nil
+			}
+
+			trunk, ahead := b.trunkStatus(t.Context(), "/tmp")
+			assert.Equal(t, "main", trunk)
+			assert.Equal(t, 0, ahead)
+		})
+	}
+}
+
+func TestResolveTrunkRef_SymrefMatch(t *testing.T) {
+	b := &Backend{}
+	b.runGitFn = func(_ context.Context, _ string, _ []string) (string, error) {
+		return "origin/HEAD origin/main\nmaster \n", nil
+	}
+
+	assert.Equal(t, "origin/main", b.resolveTrunkRef(t.Context(), "/tmp"))
+}
+
 func TestBackend_Run(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"rev-parse", "HEAD"}, false)
-	require.NoError(t, err)
-	assert.NotEmpty(t, res.Output)
+	backendtest.AssertRunOutputNotEmpty(t, &Backend{}, dir, []string{"rev-parse", "HEAD"})
 }
 
 func TestBackend_Run_NoArgs(t *testing.T) {
@@ -384,10 +476,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := t.TempDir()
 	runGitCmd(t, dir, []string{"init"})
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"log", "--nonexistent-flag"}, false)
-	require.NoError(t, err)
-	assert.NotEqual(t, 0, res.ExitCode)
+	backendtest.AssertRunNonZeroExit(t, &Backend{}, dir, []string{"log", "--nonexistent-flag"})
 }
 
 func TestBackend_Run_OutputCapture(t *testing.T) {
@@ -454,9 +543,10 @@ func TestBackend_Status_MergesCommitMsgAndTimeQuery(t *testing.T) {
 	require.NoError(t, err)
 
 	lines := strings.Count(string(calls), "\n")
-	assert.Equal(t, 3, lines,
-		"Status should issue exactly 3 git calls (status, remote, log) — commit message and "+
-			"commit time must come from a single combined log call, not two")
+	assert.Equal(t, 5, lines,
+		"Status should issue exactly 5 git calls (status, remote, log, trunk resolution, "+
+			"trunk-ahead count) — commit message and commit time must come from a single "+
+			"combined log call, not two")
 }
 
 func TestBackend_Status_ParallelizesRemoteLookupWithStatus(t *testing.T) {
@@ -476,11 +566,6 @@ func TestBackend_Status_ParallelizesRemoteLookupWithStatus(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
-	_, err := b.Status(t.Context(), "/tmp")
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	assert.Less(t, elapsed, 3*delay,
+	backendtest.AssertStatusFasterThan(t, b, "/tmp", 3*delay,
 		"git status and the remote lookup should run concurrently, not sequentially")
 }

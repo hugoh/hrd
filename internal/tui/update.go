@@ -389,7 +389,12 @@ func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
 		m.execSideEffect = false
 		m.loading = true
 
-		cmd := loadStatusesCmd(m)
+		names := execResultNames(m.execResults)
+		if len(names) == 0 {
+			names = m.filteredRepos()
+		}
+
+		cmd := loadStatusesForCmd(m, names)
 		m.updateTableRows()
 
 		return m, cmd

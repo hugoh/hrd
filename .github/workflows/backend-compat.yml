@@ -1,0 +1,57 @@
+name: backend compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backends/**"
+      - "internal/backend/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/backend-compat.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backends/**"
+      - "internal/backend/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/backend-compat.yml"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC — catch jj releases landed between PRs
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  jj:
+    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@985fca4a10fb223804ddc27522487f35980dae88 # v1.20.0
+    permissions:
+      contents: read
+    with:
+      tool: jj
+      test-target: "./backends/jj/..."
+
+  git:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          cache: true
+      - name: git integration tests
+        env:
+          REQUIRE_INTEGRATION: "1"
+        run: |
+          set -euo pipefail
+          git --version
+          gotestsum -- -race -shuffle=on ./backends/git/...

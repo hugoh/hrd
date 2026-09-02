@@ -640,7 +640,12 @@ func TestHandleProgressFrameAdvancesBar(t *testing.T) {
 	assert.NotNil(t, nextCmd, "still animating, so the next frame should be re-armed")
 }
 
-func TestHandleExecResultSuccess(t *testing.T) {
+// newExecResultModel builds a model with a closed results channel and
+// progress output captured into a buffer, for tests exercising
+// handleExecResult.
+func newExecResultModel(t *testing.T, execTotal int) (*model, *bytes.Buffer) {
+	t.Helper()
+
 	resultsCh := make(chan runner.Result)
 	close(resultsCh)
 
@@ -651,10 +656,16 @@ func TestHandleExecResultSuccess(t *testing.T) {
 
 	m := &model{
 		execResults: []execResult{},
-		execTotal:   2,
+		execTotal:   execTotal,
 		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 		resultsCh:   resultsCh,
 	}
+
+	return m, &buf
+}
+
+func TestHandleExecResultSuccess(t *testing.T) {
+	m, buf := newExecResultModel(t, 2)
 
 	_, cmd := m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 0}},
@@ -689,20 +700,7 @@ func TestHandleExecResultSuccess(t *testing.T) {
 }
 
 func TestHandleExecResultFailureReportsErrorProgress(t *testing.T) {
-	resultsCh := make(chan runner.Result)
-	close(resultsCh)
-
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
-	m := &model{
-		execResults: []execResult{},
-		execTotal:   1,
-		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
-		resultsCh:   resultsCh,
-	}
+	m, buf := newExecResultModel(t, 1)
 
 	m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 1}},
@@ -759,4 +757,55 @@ func TestHandleExecDoneWithSideEffect(t *testing.T) {
 	assert.False(t, m.executing, "executing should be false after exec done")
 	assert.False(t, m.execSideEffect, "execSideEffect should be reset after exec done")
 	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) when execSideEffect is true")
+}
+
+func TestHandleExecDoneSideEffectRefreshesOnlyTouchedRepos(t *testing.T) {
+	m := &model{
+		ctx:            t.Context(),
+		executing:      true,
+		execSideEffect: true,
+		output:         viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+		repoOrder:      []string{"r1", "r2", "r3"},
+		selected:       map[string]bool{"r1": true, "r2": true, "r3": true},
+		statuses:       map[string]runner.StatusResult{},
+		execResults:    []execResult{{name: "r2"}},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"r1": {Path: t.TempDir()},
+				"r2": {Path: t.TempDir()},
+				"r3": {Path: t.TempDir()},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+	}
+
+	_, cmd := m.handleExecDone(execDoneMsg{})
+	require.NotNil(t, cmd)
+
+	assert.Equal(t, 1, m.statusTotal, "only the touched repo should be refreshed")
+	assert.Equal(t, map[string]bool{"r2": true}, m.pending)
+}
+
+func TestHandleExecDoneSideEffectNoResultsRefreshesAll(t *testing.T) {
+	m := &model{
+		ctx:            t.Context(),
+		executing:      true,
+		execSideEffect: true,
+		output:         viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+		repoOrder:      []string{"r1", "r2"},
+		selected:       map[string]bool{"r1": true, "r2": true},
+		statuses:       map[string]runner.StatusResult{},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"r1": {Path: t.TempDir()},
+				"r2": {Path: t.TempDir()},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+	}
+
+	_, cmd := m.handleExecDone(execDoneMsg{})
+	require.NotNil(t, cmd)
+
+	assert.Equal(t, 2, m.statusTotal, "with no exec results, fall back to a full refresh")
 }

@@ -21,17 +21,28 @@ func newTeaTestModel(t *testing.T) *teatest.TestModel {
 	)
 }
 
-func TestTeaScreenNavigation(t *testing.T) {
+// readyTeaTestModel skips the test in short mode, then builds a
+// newTeaTestModel and waits for its initial render (the loaded "testrepo"
+// row) before handing it back — the setup shared by every teatest
+// integration test in this file.
+func readyTeaTestModel(t *testing.T) *teatest.TestModel {
+	t.Helper()
+
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode")
 	}
 
 	tm := newTeaTestModel(t)
 
-	// Init() → loadStatusesCmd → statusUpdateMsg → handleStatusUpdate
 	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
 		return strings.Contains(string(bts), "testrepo")
 	})
+
+	return tm
+}
+
+func TestTeaScreenNavigation(t *testing.T) {
+	tm := readyTeaTestModel(t)
 
 	// '@' → Update → handleKeyMsg → handleMainKey → mainKeyHandlers["@"] → screenGroup
 	tm.Send(tea.KeyPressMsg{Code: '@'})
@@ -63,15 +74,7 @@ func TestTeaScreenNavigation(t *testing.T) {
 }
 
 func TestTeaCommandBar(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	tm := newTeaTestModel(t)
-
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return strings.Contains(string(bts), "testrepo")
-	})
+	tm := readyTeaTestModel(t)
 
 	// ':' → Update → handleKeyMsg → handleMainKey → mainKeyHandlers[":"] → commandOpen=true
 	tm.Send(tea.KeyPressMsg{Code: ':'})
@@ -122,15 +125,7 @@ func TestTeaWindowSize(t *testing.T) {
 }
 
 func TestTeaDispatchCtrlC(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	tm := newTeaTestModel(t)
-
-	teatest.WaitFor(t, tm.Output(), func(bts []byte) bool {
-		return strings.Contains(string(bts), "testrepo")
-	})
+	tm := readyTeaTestModel(t)
 
 	// Ctrl+C on main screen → Update → handleKeyMsg → handleCtrlC → quit
 	tm.Send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})

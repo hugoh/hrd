@@ -34,7 +34,14 @@ func waitForStatus(ch <-chan runner.StatusResult) tea.Cmd {
 }
 
 func loadStatusesCmd(m *model) tea.Cmd {
-	names := m.filteredRepos()
+	return loadStatusesForCmd(m, m.filteredRepos())
+}
+
+// loadStatusesForCmd refreshes status for exactly the named repos, merging
+// results into m.statuses without disturbing cached statuses for repos left
+// out. Callers pass m.filteredRepos() for a full refresh, or a subset (e.g.
+// the repos a command just ran on) for a scoped one.
+func loadStatusesForCmd(m *model, names []string) tea.Cmd {
 	if len(names) == 0 {
 		return func() tea.Msg { return statusDoneMsg{} }
 	}
