@@ -5,6 +5,7 @@ package backendtest
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,15 +18,52 @@ import (
 
 const markerDirPerm = 0o750
 
+// integrationRequired reports whether a missing external binary (or a failed
+// repo init) must fail the test instead of skipping it. CI sets
+// HRD_REQUIRE_INTEGRATION=1 to guarantee the integration tests actually run.
+func integrationRequired() bool {
+	return os.Getenv("HRD_REQUIRE_INTEGRATION") == "1"
+}
+
+// RequireExternalBinary skips the test when name is not on PATH, unless
+// HRD_REQUIRE_INTEGRATION=1, in which case the absence is a hard failure.
+func RequireExternalBinary(t *testing.T, name string) {
+	t.Helper()
+
+	if _, err := exec.LookPath(name); err != nil {
+		msg := name + " not found in PATH"
+		if integrationRequired() {
+			t.Fatalf("%s but HRD_REQUIRE_INTEGRATION=1", msg)
+		}
+
+		t.Skip(msg)
+	}
+}
+
+// RequireToolRepo asserts that dir is a working repo of the expected kind by
+// checking for marker (e.g. ".jj", ".git"). A missing marker skips the test,
+// unless HRD_REQUIRE_INTEGRATION=1, where it is a hard failure. detail is
+// surfaced in the message (e.g. combined output of the failed init command).
+func RequireToolRepo(t *testing.T, tool, dir, marker, detail string) {
+	t.Helper()
+
+	if _, err := os.Stat(filepath.Join(dir, marker)); err != nil {
+		msg := fmt.Sprintf("%s init did not create %s: %s", tool, marker, detail)
+		if integrationRequired() {
+			t.Fatal(msg)
+		}
+
+		t.Skip(msg)
+	}
+}
+
 // RequireIsolatedGit skips the test if git isn't on PATH, then points HOME
 // and GIT_CONFIG_GLOBAL at throwaway locations so a real `git` invocation in
 // the test never reads (or writes) the developer's actual git config.
 func RequireIsolatedGit(t *testing.T) {
 	t.Helper()
 
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not found in PATH")
-	}
+	RequireExternalBinary(t, "git")
 
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)

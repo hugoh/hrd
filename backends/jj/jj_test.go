@@ -84,9 +84,7 @@ func setupJJDir(t *testing.T) string {
 func isolateJJConfig(t *testing.T) {
 	t.Helper()
 
-	if _, err := exec.LookPath("jj"); err != nil {
-		t.Skip("jj not found in PATH")
-	}
+	backendtest.RequireExternalBinary(t, "jj")
 
 	cfgPath := filepath.Join(t.TempDir(), "jj-config.toml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(
@@ -115,11 +113,9 @@ func initJJRepo(t *testing.T) string {
 	dir := t.TempDir()
 	cmd := exec.CommandContext(t.Context(), "jj", "git", "init")
 	cmd.Dir = dir
-	_ = cmd.Run()
+	out, _ := cmd.CombinedOutput()
 
-	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skipf("jj git init did not create a .jj directory, skipping")
-	}
+	backendtest.RequireToolRepo(t, "jj git", dir, ".jj", string(out))
 
 	return dir
 }
@@ -454,9 +450,7 @@ func TestBackend_Detect_NonColocated(t *testing.T) {
 	cmd.Dir = dir
 	out, _ := cmd.CombinedOutput()
 
-	if _, err := os.Stat(filepath.Join(dir, ".jj")); err != nil {
-		t.Skipf("jj git init --no-colocate did not create a .jj directory: %s", string(out))
-	}
+	backendtest.RequireToolRepo(t, "jj git init --no-colocate", dir, ".jj", string(out))
 
 	t.Run("jj detects non-colocated repo", func(t *testing.T) {
 		b := &Backend{}
@@ -924,12 +918,12 @@ func TestRunSteps_InfraError(t *testing.T) {
 }
 
 func TestBackend_Subcommands(t *testing.T) {
+	backendtest.RequireExternalBinary(t, "jj")
+
 	b := &Backend{}
 
 	cmds, err := b.Subcommands(t.Context())
-	if err != nil {
-		t.Skipf("jj not available: %v", err)
-	}
+	require.NoError(t, err)
 
 	require.NotEmpty(t, cmds)
 

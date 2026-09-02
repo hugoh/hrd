@@ -1,0 +1,101 @@
+name: backend compatibility
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backends/**"
+      - "internal/backend/**"
+      - "internal/versionpick/**"
+      - "cmd/latestminors/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/backend-compat.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "backends/**"
+      - "internal/backend/**"
+      - "internal/versionpick/**"
+      - "cmd/latestminors/**"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/backend-compat.yml"
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC — catch jj releases landed between PRs
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  jj-versions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          cache: true
+      - id: pick
+        run: |
+          set -euo pipefail
+          matrix=$(mise ls-remote jj | go run ./cmd/latestminors -n 3)
+          echo "picked: $matrix"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  jj:
+    needs: jj-versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.jj-versions.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          cache: true
+      - name: jj ${{ matrix.version }} integration tests
+        env:
+          JJ_VERSION: ${{ matrix.version }}
+          HRD_REQUIRE_INTEGRATION: "1"
+        run: |
+          set -euo pipefail
+          mise use "jj@${JJ_VERSION}" # minor -> latest patch
+          mise exec -- jj --version
+          mise exec -- gotestsum -- -race -shuffle=on ./backends/jj/...
+
+  git:
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-22.04]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        with:
+          cache: true
+      - name: git integration tests
+        env:
+          HRD_REQUIRE_INTEGRATION: "1"
+        run: |
+          set -euo pipefail
+          git --version
+          gotestsum -- -race -shuffle=on ./backends/git/...

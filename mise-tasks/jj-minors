@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+#MISE description="Print the 3 newest jj minor-version series (as the CI matrix does)"
+set -euo pipefail
+mise ls-remote jj | go run ./cmd/latestminors -n "${1:-3}"
