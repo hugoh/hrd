@@ -17,8 +17,6 @@ on:
       - "go.mod"
       - "go.sum"
       - ".github/workflows/backend-compat.yml"
-  schedule:
-    - cron: "0 6 * * 1" # Mondays 06:00 UTC — catch jj releases landed between PRs
   workflow_dispatch:
 
 permissions: {}
