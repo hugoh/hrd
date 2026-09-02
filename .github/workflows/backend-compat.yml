@@ -23,7 +23,7 @@ permissions: {}
 
 jobs:
   jj:
-    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@985fca4a10fb223804ddc27522487f35980dae88 # v1.20.0
+    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@977317b2cb6a46b4d47c531556fbb991a9bbde52 # v1.23.0
     permissions:
       contents: read
     with:
@@ -53,3 +53,20 @@ jobs:
           set -euo pipefail
           git --version
           gotestsum -- -race -shuffle=on ./backends/git/...
+
+  # Stable check name for branch protection: the `git` matrix leg names carry
+  # the runner label, so they can't be pinned as required contexts.
+  git-gate:
+    if: always()
+    needs: [git]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require every git runner leg to have passed
+        env:
+          GIT_RESULT: ${{ needs.git.result }}
+        run: |
+          set -euo pipefail
+          echo "git=$GIT_RESULT"
+          [ "$GIT_RESULT" = success ] || exit 1
