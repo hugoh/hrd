@@ -119,7 +119,6 @@ Status symbols at a glance:
 | `*` | Dirty working copy |
 | `?` | Unknown remote state |
 
-
 ## Interactive TUI
 
 Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
