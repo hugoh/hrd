@@ -11,5 +11,4 @@ exclude:
   paths:
     - main\.go$ # Program entry point
     - cmd/genreadme/
-    - cmd/latestminors/ # thin CLI wrapper; logic covered in internal/versionpick
     - internal/backend/backendtest/ # shared test helpers, exercised only from other packages' tests

@@ -22,12 +22,12 @@ func TestIntegrationRequired(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("HRD_REQUIRE_INTEGRATION", "sentinel")
+			t.Setenv("REQUIRE_INTEGRATION", "sentinel")
 
 			if tt.set {
-				t.Setenv("HRD_REQUIRE_INTEGRATION", tt.env)
+				t.Setenv("REQUIRE_INTEGRATION", tt.env)
 			} else {
-				require.NoError(t, os.Unsetenv("HRD_REQUIRE_INTEGRATION"))
+				require.NoError(t, os.Unsetenv("REQUIRE_INTEGRATION"))
 			}
 
 			require.Equal(t, tt.want, integrationRequired())
