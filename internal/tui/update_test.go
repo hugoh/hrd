@@ -758,3 +758,54 @@ func TestHandleExecDoneWithSideEffect(t *testing.T) {
 	assert.False(t, m.execSideEffect, "execSideEffect should be reset after exec done")
 	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) when execSideEffect is true")
 }
+
+func TestHandleExecDoneSideEffectRefreshesOnlyTouchedRepos(t *testing.T) {
+	m := &model{
+		ctx:            t.Context(),
+		executing:      true,
+		execSideEffect: true,
+		output:         viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+		repoOrder:      []string{"r1", "r2", "r3"},
+		selected:       map[string]bool{"r1": true, "r2": true, "r3": true},
+		statuses:       map[string]runner.StatusResult{},
+		execResults:    []execResult{{name: "r2"}},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"r1": {Path: t.TempDir()},
+				"r2": {Path: t.TempDir()},
+				"r3": {Path: t.TempDir()},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+	}
+
+	_, cmd := m.handleExecDone(execDoneMsg{})
+	require.NotNil(t, cmd)
+
+	assert.Equal(t, 1, m.statusTotal, "only the touched repo should be refreshed")
+	assert.Equal(t, map[string]bool{"r2": true}, m.pending)
+}
+
+func TestHandleExecDoneSideEffectNoResultsRefreshesAll(t *testing.T) {
+	m := &model{
+		ctx:            t.Context(),
+		executing:      true,
+		execSideEffect: true,
+		output:         viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
+		repoOrder:      []string{"r1", "r2"},
+		selected:       map[string]bool{"r1": true, "r2": true},
+		statuses:       map[string]runner.StatusResult{},
+		cfg: config.Config{
+			Repos: map[string]config.Repo{
+				"r1": {Path: t.TempDir()},
+				"r2": {Path: t.TempDir()},
+			},
+			Settings: config.Settings{Concurrency: 1},
+		},
+	}
+
+	_, cmd := m.handleExecDone(execDoneMsg{})
+	require.NotNil(t, cmd)
+
+	assert.Equal(t, 2, m.statusTotal, "with no exec results, fall back to a full refresh")
+}
