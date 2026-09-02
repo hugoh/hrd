@@ -119,12 +119,13 @@ Status symbols at a glance:
 | `*` | Dirty working copy |
 | `?` | Unknown remote state |
 
+
 ## Interactive TUI
 
 Run `hrd` (or `hrd tui`) to open the full-screen terminal UI:
 
 - Browse all tracked repos in a sortable table.
-- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`. `[ungrouped]`/`[attention]` (alongside `[all]`) filter to repos in no group, or repos needing attention (dirty/out of sync), respectively. `*` toggles the attention filter directly without opening the picker.
+- Filter by group with `@` — type `@work` to show only work repos, or select individual repos with `Space`. `[ungrouped]`/`[attention]` (alongside `[all]`) filter to repos in no group, or repos needing attention (dirty / out of sync / unmerged into trunk), respectively. `*` toggles the attention filter directly without opening the picker.
 - Type-to-filter with `/` — fuzzy-match repos by name as you type; `Enter` keeps the filter, `Esc` clears it.
 - Run VCS commands (`status`, `diff`, `log`, `fetch`, `pull`, `push`) from a single key press — results stream in live as each repo completes.
 - The command palette (`:`) gives access to every subcommand without leaving the TUI.

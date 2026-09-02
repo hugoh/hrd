@@ -269,6 +269,12 @@ func (b *Backend) fillBookmarkTracking(
 ) {
 	var g errgroup.Group
 
+	g.Go(func() error {
+		b.fillTrunkStatus(ctx, path, headName, status)
+
+		return nil
+	})
+
 	if status.CommitMsg == "" {
 		g.Go(func() error {
 			b.fillCommitMsgFromAncestors(ctx, path, status)
@@ -301,6 +307,40 @@ func (b *Backend) fillBookmarkTracking(
 			return nil
 		})
 	}
+
+	_ = g.Wait()
+}
+
+// fillTrunkStatus computes TrunkAhead (commits on @ not reachable from
+// trunk()) and NotOnTrunk (whether headName differs from trunk's own
+// bookmark), running both queries concurrently.
+func (b *Backend) fillTrunkStatus(
+	ctx context.Context,
+	path, headName string,
+	status *backend.RepoStatus,
+) {
+	var g errgroup.Group
+
+	g.Go(func() error {
+		status.TrunkAhead = b.countRevs(ctx, path, "trunk()..@")
+		if status.TrunkAhead > 0 {
+			status.TrunkAhead--
+		}
+
+		return nil
+	})
+
+	g.Go(func() error {
+		trunkArgs := append([]string{}, logBaseArgs...)
+		trunkArgs = append(trunkArgs, "-r", "trunk()", "-n", "1", ignoreWorkingCopyArg,
+			templateFlag, "bookmarks.first().name()")
+
+		trunkOut, _ := b.runJJ(ctx, path, trunkArgs)
+		trunkName := strings.TrimSpace(trunkOut)
+		status.NotOnTrunk = headName != "" && trunkName != "" && headName != trunkName
+
+		return nil
+	})
 
 	_ = g.Wait()
 }

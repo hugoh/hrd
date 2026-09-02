@@ -839,6 +839,83 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 	}
 }
 
+func TestBackend_Status_TrunkAhead(t *testing.T) {
+	tests := []struct {
+		name          string
+		trunkCount    string
+		wantTrunkHead int
+	}{
+		{name: "on trunk, nothing unmerged", trunkCount: "1", wantTrunkHead: 0},
+		{name: "two unmerged commits", trunkCount: "3", wantTrunkHead: 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
+				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+					return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
+						`"description":"","ago":"2 hours ago"}`, nil
+				}
+
+				if slices.Contains(args, "bookmarks.first().name()") {
+					return "", nil
+				}
+
+				if slices.Contains(args, "trunk()..@") && slices.Contains(args, "--count") {
+					return tt.trunkCount, nil
+				}
+
+				return "", nil
+			}
+
+			st, err := b.Status(t.Context(), "/tmp")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantTrunkHead, st.TrunkAhead)
+		})
+	}
+}
+
+func TestBackend_Status_NotOnTrunk(t *testing.T) {
+	tests := []struct {
+		name           string
+		headName       string
+		trunkName      string
+		wantNotOnTrunk bool
+	}{
+		{name: "on trunk bookmark", headName: "main", trunkName: "main", wantNotOnTrunk: false},
+		{name: "on feature bookmark", headName: "feature", trunkName: "main", wantNotOnTrunk: true},
+		{name: "no bookmark under @", headName: "", trunkName: "main", wantNotOnTrunk: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &Backend{}
+			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
+				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
+					return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
+						`"description":"","ago":"2 hours ago"}`, nil
+				}
+
+				if slices.Contains(args, "bookmarks.first().name()") {
+					switch {
+					case slices.Contains(args, "::@ & bookmarks()"):
+						return tt.headName + "\n", nil
+					case slices.Contains(args, "trunk()"):
+						return tt.trunkName + "\n", nil
+					}
+				}
+
+				return "", nil
+			}
+
+			st, err := b.Status(t.Context(), "/tmp")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantNotOnTrunk, st.NotOnTrunk)
+		})
+	}
+}
+
 func TestMultiStepOps_Table(t *testing.T) {
 	steps, ok := multiStepOps["pull"]
 	require.True(t, ok, "pull must be a multi-step op")
