@@ -514,6 +514,34 @@ func TestHandleGroupEnterFilterModeAll(t *testing.T) {
 	assert.NotNil(t, cmd, "expected non-nil cmd (refresh) after group selection")
 }
 
+// modelWithGroupAddPopup builds a model over cfg/repoOrder/selected with the
+// group-add popup already open and its first entry selected, for tests
+// exercising handleGroupEnter in groupAddMode.
+func modelWithGroupAddPopup(
+	t *testing.T,
+	cfgPath string,
+	cfg config.Config,
+	repoOrder []string,
+	selected map[string]bool,
+) *model {
+	t.Helper()
+
+	m := &model{
+		ctx:       t.Context(),
+		cfg:       cfg,
+		opts:      Options{ConfigPath: cfgPath},
+		repoOrder: repoOrder,
+		selected:  selected,
+		groupMode: groupAddMode,
+	}
+	m.initTable()
+	m.initGroupList()
+	openGroupPopup(m, groupAddMode)
+	m.groupList.Select(0)
+
+	return m
+}
+
 func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	initialCfg := config.Config{
@@ -525,18 +553,13 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 	}
 	require.NoError(t, config.Save(cfgPath, initialCfg))
 
-	m := &model{
-		ctx:       t.Context(),
-		cfg:       initialCfg,
-		opts:      Options{ConfigPath: cfgPath},
-		repoOrder: []string{"repo1", "repo2"},
-		selected:  map[string]bool{"repo2": true},
-		groupMode: groupAddMode,
-	}
-	m.initTable()
-	m.initGroupList()
-	openGroupPopup(m, groupAddMode)
-	m.groupList.Select(0)
+	m := modelWithGroupAddPopup(
+		t,
+		cfgPath,
+		initialCfg,
+		[]string{"repo1", "repo2"},
+		map[string]bool{"repo2": true},
+	)
 
 	_, cmd := m.handleGroupEnter()
 
@@ -554,18 +577,13 @@ func TestHandleGroupEnterAddModeSaveFailure(t *testing.T) {
 	require.NoError(t, config.Save(cfgPath, initialCfg))
 	makeDirReadOnly(t, filepath.Dir(cfgPath))
 
-	m := &model{
-		ctx:       t.Context(),
-		cfg:       initialCfg,
-		opts:      Options{ConfigPath: cfgPath},
-		repoOrder: []string{"repo1"},
-		selected:  map[string]bool{"repo1": true},
-		groupMode: groupAddMode,
-	}
-	m.initTable()
-	m.initGroupList()
-	openGroupPopup(m, groupAddMode)
-	m.groupList.Select(0)
+	m := modelWithGroupAddPopup(
+		t,
+		cfgPath,
+		initialCfg,
+		[]string{"repo1"},
+		map[string]bool{"repo1": true},
+	)
 
 	_, cmd := m.handleGroupEnter()
 
@@ -594,6 +612,28 @@ func TestHandleGroupEnterAddModeNew(t *testing.T) {
 	assert.True(t, m.groupNewInput, "groupNewInput should be true after selecting [new...]")
 }
 
+// modelWithGroupNewInput builds a model over cfg/repoOrder/selected with the
+// "new group" input already open, for tests exercising
+// handleGroupNewInput.
+func modelWithGroupNewInput(
+	cfgPath string,
+	cfg config.Config,
+	repoOrder []string,
+	selected map[string]bool,
+) *model {
+	m := &model{
+		cfg:           cfg,
+		opts:          Options{ConfigPath: cfgPath},
+		repoOrder:     repoOrder,
+		selected:      selected,
+		groupNewInput: true,
+		screen:        screenGroup,
+	}
+	m.initInput()
+
+	return m
+}
+
 func TestHandleGroupNewInputEnter(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.toml")
 	initialCfg := config.Config{
@@ -605,15 +645,12 @@ func TestHandleGroupNewInputEnter(t *testing.T) {
 	}
 	require.NoError(t, config.Save(cfgPath, initialCfg))
 
-	m := &model{
-		cfg:           initialCfg,
-		opts:          Options{ConfigPath: cfgPath},
-		repoOrder:     []string{"repo1", "repo2"},
-		selected:      map[string]bool{"repo2": true},
-		groupNewInput: true,
-		screen:        screenGroup,
-	}
-	m.initInput()
+	m := modelWithGroupNewInput(
+		cfgPath,
+		initialCfg,
+		[]string{"repo1", "repo2"},
+		map[string]bool{"repo2": true},
+	)
 	m.input.SetValue("my-group")
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -631,15 +668,12 @@ func TestHandleGroupNewInputRejectsReservedName(t *testing.T) {
 	}
 	require.NoError(t, config.Save(cfgPath, initialCfg))
 
-	m := &model{
-		cfg:           initialCfg,
-		opts:          Options{ConfigPath: cfgPath},
-		repoOrder:     []string{"repo1"},
-		selected:      map[string]bool{"repo1": true},
-		groupNewInput: true,
-		screen:        screenGroup,
-	}
-	m.initInput()
+	m := modelWithGroupNewInput(
+		cfgPath,
+		initialCfg,
+		[]string{"repo1"},
+		map[string]bool{"repo1": true},
+	)
 	m.input.SetValue("@@none")
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -658,15 +692,12 @@ func TestHandleGroupNewInputEnterSaveFailure(t *testing.T) {
 	require.NoError(t, config.Save(cfgPath, initialCfg))
 	makeDirReadOnly(t, filepath.Dir(cfgPath))
 
-	m := &model{
-		cfg:           initialCfg,
-		opts:          Options{ConfigPath: cfgPath},
-		repoOrder:     []string{"repo1"},
-		selected:      map[string]bool{"repo1": true},
-		groupNewInput: true,
-		screen:        screenGroup,
-	}
-	m.initInput()
+	m := modelWithGroupNewInput(
+		cfgPath,
+		initialCfg,
+		[]string{"repo1"},
+		map[string]bool{"repo1": true},
+	)
 	m.input.SetValue("my-group")
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})

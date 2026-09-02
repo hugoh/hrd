@@ -42,11 +42,20 @@ func TestResolveRoots_DiscoversRepos(t *testing.T) {
 	assert.Equal(t, repoPath, cfg.Repos["foo"].Path)
 }
 
-func TestResolveRoots_DoesNotPersistToRoots(t *testing.T) {
+// rootWithOneFooRepo creates a temp root dir containing a single fake git
+// repo, "foo", for tests exercising ResolveRoots.
+func rootWithOneFooRepo(t *testing.T) string {
+	t.Helper()
 	backend.ResetDetectCache()
 
 	root := t.TempDir()
 	fakeGitRepo(t, filepath.Join(root, "foo"))
+
+	return root
+}
+
+func TestResolveRoots_DoesNotPersistToRoots(t *testing.T) {
+	root := rootWithOneFooRepo(t)
 
 	cfg := &Config{
 		Repos: map[string]Repo{},
@@ -134,10 +143,7 @@ func TestResolveRoots_SkipsWhenFallbackAlsoTaken(t *testing.T) {
 }
 
 func TestResolveRoots_InheritsGroupsFromRoot(t *testing.T) {
-	backend.ResetDetectCache()
-
-	root := t.TempDir()
-	fakeGitRepo(t, filepath.Join(root, "foo"))
+	root := rootWithOneFooRepo(t)
 
 	cfg := &Config{
 		Repos: map[string]Repo{},

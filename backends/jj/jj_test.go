@@ -206,6 +206,12 @@ func bookmarkRefJSON(
 	return string(b)
 }
 
+// cleanWCJSON is a detailTmpl JSON literal for a clean (non-dirty, no
+// conflict, no description) working copy — the `@` query stub shared by
+// tests that only care about downstream trunk-tracking queries.
+const cleanWCJSON = `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
+	`"description":"","ago":"2 hours ago"}`
+
 func TestParseBookmarkRefs_Empty(t *testing.T) {
 	result := parseBookmarkRefs("", nil)
 	assert.Nil(t, result)
@@ -419,24 +425,14 @@ func TestBackend_Name_JJ(t *testing.T) {
 }
 
 func TestBackend_SubcommandArgs_JJ(t *testing.T) {
-	b := &Backend{}
-
-	tests := []struct {
-		op   string
-		want []string
-	}{
-		{"status", []string{"status"}},
-		{"fetch", []string{"git", "fetch"}},
-		{"push", []string{"git", "push"}},
-		{"pull", []string{"pull"}},
-		{"log", []string{"log"}},
-		{"diff", []string{"diff"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.op, func(t *testing.T) {
-			assert.Equal(t, tt.want, b.SubcommandArgs(tt.op))
-		})
-	}
+	backendtest.AssertSubcommandArgs(t, &Backend{}, []backendtest.SubcommandArgsCase{
+		{Op: "status", Want: []string{"status"}},
+		{Op: "fetch", Want: []string{"git", "fetch"}},
+		{Op: "push", Want: []string{"git", "push"}},
+		{Op: "pull", Want: []string{"pull"}},
+		{Op: "log", Want: []string{"log"}},
+		{Op: "diff", Want: []string{"diff"}},
+	})
 }
 
 func TestBackend_Detect(t *testing.T) {
@@ -488,15 +484,7 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 }
 
 func TestRegister_JJ(t *testing.T) {
-	backend.ClearRegisteredBackends()
-
-	assert.NotPanics(t, func() {
-		Register()
-	})
-
-	assert.Panics(t, func() {
-		Register()
-	})
+	backendtest.AssertRegisterPanicsOnDouble(t, Register)
 }
 
 func TestBackend_Status(t *testing.T) {
@@ -597,14 +585,10 @@ func TestBackend_Status_ParallelizesIndependentCalls(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
-	_, err := b.Status(t.Context(), "/tmp")
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	assert.Less(
+	backendtest.AssertStatusFasterThan(
 		t,
-		elapsed,
+		b,
+		"/tmp",
 		3*delay,
 		"wc/head query and bookmark-list/local-ahead query should each run concurrently, not sequentially",
 	)
@@ -685,10 +669,7 @@ func TestBackend_Status_NotAJJRepo(t *testing.T) {
 func TestBackend_Run(t *testing.T) {
 	dir := setupJJDir(t)
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"log", "-r:", "-n1"}, false)
-	require.NoError(t, err)
-	assert.NotEmpty(t, res.Output)
+	backendtest.AssertRunOutputNotEmpty(t, &Backend{}, dir, []string{"log", "-r:", "-n1"})
 }
 
 func TestBackend_Run_NoArgs(t *testing.T) {
@@ -698,10 +679,7 @@ func TestBackend_Run_NoArgs(t *testing.T) {
 func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := setupJJDir(t)
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"nonexistent"}, false)
-	require.NoError(t, err)
-	assert.NotEqual(t, 0, res.ExitCode)
+	backendtest.AssertRunNonZeroExit(t, &Backend{}, dir, []string{"nonexistent"})
 }
 
 func TestBackend_Run_NoExecutable(t *testing.T) {
@@ -854,8 +832,7 @@ func TestBackend_Status_TrunkAhead(t *testing.T) {
 			b := &Backend{}
 			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
-					return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
-						`"description":"","ago":"2 hours ago"}`, nil
+					return cleanWCJSON, nil
 				}
 
 				if slices.Contains(args, "bookmarks.first().name()") {
@@ -893,8 +870,7 @@ func TestBackend_Status_NotOnTrunk(t *testing.T) {
 			b := &Backend{}
 			b.runJJFn = func(_ context.Context, _ string, args []string) (string, error) {
 				if slices.Contains(args, "@") && slices.Contains(args, "--template") {
-					return `{"changeId":"rlkvwrto","dirty":false,"conflict":false,` +
-						`"description":"","ago":"2 hours ago"}`, nil
+					return cleanWCJSON, nil
 				}
 
 				if slices.Contains(args, "bookmarks.first().name()") {

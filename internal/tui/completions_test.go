@@ -108,19 +108,55 @@ func newModelWithCompletions(gitCmds, jjCmds []string) *model {
 	return m
 }
 
-//nolint:funlen // multiple subtests for each prefix phase
+// matchedSuggestionsFor types input into a fresh model (built from gitCmds
+// and jjCmds), runs updateCompletions, and returns the resulting matches —
+// requiring that suggestions ended up shown.
+func matchedSuggestionsFor(t *testing.T, gitCmds, jjCmds []string, input string) []string {
+	t.Helper()
+
+	m := newModelWithCompletions(gitCmds, jjCmds)
+	m.input.SetValue(input)
+	m.input.ShowSuggestions = false
+	m.updateCompletions()
+
+	require.True(t, m.input.ShowSuggestions)
+
+	return m.input.MatchedSuggestions()
+}
+
+// assertSinglePrefixMatch asserts updateCompletions narrows input to
+// exactly one suggestion, want.
+func assertSinglePrefixMatch(t *testing.T, gitCmds, jjCmds []string, input, want string) {
+	t.Helper()
+
+	matches := matchedSuggestionsFor(t, gitCmds, jjCmds, input)
+	require.Len(t, matches, 1)
+	assert.Equal(t, want, matches[0])
+}
+
+// assertFullPrefixLoadsSubcommands asserts updateCompletions surfaces every
+// command in want among input's suggestions.
+func assertFullPrefixLoadsSubcommands(
+	t *testing.T,
+	gitCmds, jjCmds []string,
+	input string,
+	want []string,
+) {
+	t.Helper()
+
+	matches := matchedSuggestionsFor(t, gitCmds, jjCmds, input)
+	require.NotEmpty(t, matches)
+
+	for _, cmd := range want {
+		assert.Contains(t, matches, cmd)
+	}
+}
+
 func TestUpdateCompletions_PartialPrefixGit(t *testing.T) {
+	gitCmds := []string{"git status", "git log", "git pull", "git push"}
+
 	t.Run("single char g suggests git", func(t *testing.T) {
-		m := newModelWithCompletions([]string{"git status", "git log", "git pull", "git push"}, nil)
-		m.input.SetValue("g")
-		m.input.ShowSuggestions = false
-		m.updateCompletions()
-
-		require.True(t, m.input.ShowSuggestions)
-
-		matches := m.input.MatchedSuggestions()
-		require.Len(t, matches, 1)
-		assert.Equal(t, "git", matches[0])
+		assertSinglePrefixMatch(t, gitCmds, nil, "g", "git")
 	})
 
 	t.Run("two chars gi still suggests git", func(t *testing.T) {
@@ -135,19 +171,7 @@ func TestUpdateCompletions_PartialPrefixGit(t *testing.T) {
 	})
 
 	t.Run("full prefix git loads subcommands", func(t *testing.T) {
-		m := newModelWithCompletions([]string{"git status", "git log", "git pull", "git push"}, nil)
-		m.input.SetValue("git ")
-		m.input.ShowSuggestions = false
-		m.updateCompletions()
-
-		require.True(t, m.input.ShowSuggestions)
-
-		matches := m.input.MatchedSuggestions()
-		require.NotEmpty(t, matches)
-
-		for _, want := range []string{"git status", "git log", "git pull", "git push"} {
-			assert.Contains(t, matches, want)
-		}
+		assertFullPrefixLoadsSubcommands(t, gitCmds, nil, "git ", gitCmds)
 	})
 
 	t.Run("empty input does not trigger git", func(t *testing.T) {
@@ -176,33 +200,14 @@ func TestUpdateCompletions_PartialPrefixGit(t *testing.T) {
 }
 
 func TestUpdateCompletions_PartialPrefixJj(t *testing.T) {
+	jjCmds := []string{"jj status", "jj log", "jj new", "jj describe"}
+
 	t.Run("single char j suggests jj", func(t *testing.T) {
-		m := newModelWithCompletions(nil, []string{"jj status", "jj log", "jj new", "jj describe"})
-		m.input.SetValue("j")
-		m.input.ShowSuggestions = false
-		m.updateCompletions()
-
-		require.True(t, m.input.ShowSuggestions)
-
-		matches := m.input.MatchedSuggestions()
-		require.Len(t, matches, 1)
-		assert.Equal(t, "jj", matches[0])
+		assertSinglePrefixMatch(t, nil, jjCmds, "j", "jj")
 	})
 
 	t.Run("full prefix jj loads subcommands", func(t *testing.T) {
-		m := newModelWithCompletions(nil, []string{"jj status", "jj log", "jj new", "jj describe"})
-		m.input.SetValue("jj ")
-		m.input.ShowSuggestions = false
-		m.updateCompletions()
-
-		require.True(t, m.input.ShowSuggestions)
-
-		matches := m.input.MatchedSuggestions()
-		require.NotEmpty(t, matches)
-
-		for _, want := range []string{"jj status", "jj log", "jj new", "jj describe"} {
-			assert.Contains(t, matches, want)
-		}
+		assertFullPrefixLoadsSubcommands(t, nil, jjCmds, "jj ", jjCmds)
 	})
 }
 

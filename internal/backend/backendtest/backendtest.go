@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/stretchr/testify/assert"
@@ -110,6 +111,77 @@ func AssertRunNoArgs(t *testing.T, b backend.Backend) {
 
 	_, err := b.Run(t.Context(), dir, nil, false)
 	assert.ErrorIs(t, err, backend.ErrNoArgs)
+}
+
+// AssertRegisterPanicsOnDouble checks that register succeeds once against a
+// clean registry, then panics the second time it's called for the same
+// backend name.
+func AssertRegisterPanicsOnDouble(t *testing.T, register func()) {
+	t.Helper()
+
+	backend.ClearRegisteredBackends()
+
+	assert.NotPanics(t, register)
+	assert.Panics(t, register)
+}
+
+// SubcommandArgsCase is one op/expected-args pair for AssertSubcommandArgs.
+type SubcommandArgsCase struct {
+	Op   string
+	Want []string
+}
+
+// AssertSubcommandArgs checks Backend.SubcommandArgs(op) against want for
+// each case, as its own subtest.
+func AssertSubcommandArgs(t *testing.T, b backend.Backend, cases []SubcommandArgsCase) {
+	t.Helper()
+
+	for _, tt := range cases {
+		t.Run(tt.Op, func(t *testing.T) {
+			assert.Equal(t, tt.Want, b.SubcommandArgs(tt.Op))
+		})
+	}
+}
+
+// AssertStatusFasterThan calls Backend.Status(path) and asserts it completes
+// under bound and returns no error — used to verify independent status
+// queries run concurrently rather than sequentially.
+func AssertStatusFasterThan(
+	t *testing.T,
+	b backend.Backend,
+	path string,
+	bound time.Duration,
+	msg string,
+) {
+	t.Helper()
+
+	start := time.Now()
+	_, err := b.Status(t.Context(), path)
+	elapsed := time.Since(start)
+
+	require.NoError(t, err)
+	assert.Less(t, elapsed, bound, msg)
+}
+
+// AssertRunOutputNotEmpty checks that Backend.Run(args) in dir succeeds and
+// captures some output.
+func AssertRunOutputNotEmpty(t *testing.T, b backend.Backend, dir string, args []string) {
+	t.Helper()
+
+	res, err := b.Run(t.Context(), dir, args, false)
+	require.NoError(t, err)
+	assert.NotEmpty(t, res.Output)
+}
+
+// AssertRunNonZeroExit checks that Backend.Run(args) in dir succeeds at the
+// Go level (no error) but reports a non-zero exit code, e.g. for an invalid
+// subcommand or flag.
+func AssertRunNonZeroExit(t *testing.T, b backend.Backend, dir string, args []string) {
+	t.Helper()
+
+	res, err := b.Run(t.Context(), dir, args, false)
+	require.NoError(t, err)
+	assert.NotEqual(t, 0, res.ExitCode)
 }
 
 // AssertSubcommandsErrorsOnCanceledContext checks that Backend.Subcommands

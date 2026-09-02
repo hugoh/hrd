@@ -138,23 +138,34 @@ func TestAliasInteractiveBare(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// twoBackendRepos returns a Repos map with one fake git repo and one fake jj
+// repo, for tests exercising per-backend alias dispatch.
+func twoBackendRepos(t *testing.T) map[string]config.Repo {
+	t.Helper()
+
+	return map[string]config.Repo{
+		"gitrepo": {Path: setupFakeGitRepo(t)},
+		"jjrepo":  {Path: setupFakeJJRepo(t)},
+	}
+}
+
+// whoamiAliases is a per-backend alias, "whoami", with a distinct echo for
+// git and jj — used to verify which backend variant actually ran.
+func whoamiAliases() map[string]config.AliasSpec {
+	return map[string]config.AliasSpec{
+		"whoami": {Backends: map[string]string{
+			"git": "!echo it-was-git",
+			"jj":  "!echo it-was-jj",
+		}},
+	}
+}
+
 func TestAliasPerBackend_DispatchesMatchingVariant(t *testing.T) {
 	backend.ResetDetectCache()
 
-	gitDir := setupFakeGitRepo(t)
-	jjDir := setupFakeJJRepo(t)
-
 	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"gitrepo": {Path: gitDir},
-			"jjrepo":  {Path: jjDir},
-		},
-		Aliases: map[string]config.AliasSpec{
-			"whoami": {Backends: map[string]string{
-				"git": "!echo it-was-git",
-				"jj":  "!echo it-was-jj",
-			}},
-		},
+		Repos:   twoBackendRepos(t),
+		Aliases: whoamiAliases(),
 	})
 
 	out := runAppCapture(t, cfgPath, []string{"whoami"})
@@ -165,14 +176,8 @@ func TestAliasPerBackend_DispatchesMatchingVariant(t *testing.T) {
 func TestAliasPerBackend_SkipsReposWithNoVariant(t *testing.T) {
 	backend.ResetDetectCache()
 
-	gitDir := setupFakeGitRepo(t)
-	jjDir := setupFakeJJRepo(t)
-
 	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"gitrepo": {Path: gitDir},
-			"jjrepo":  {Path: jjDir},
-		},
+		Repos: twoBackendRepos(t),
 		Aliases: map[string]config.AliasSpec{
 			"gitonly": {Backends: map[string]string{
 				"git": "!echo only-git",
@@ -200,12 +205,7 @@ func TestAliasPerBackend_ColocatedRepoUsesActiveBackendOnly(t *testing.T) {
 		Repos: map[string]config.Repo{
 			"bothrepo": {Path: bothDir},
 		},
-		Aliases: map[string]config.AliasSpec{
-			"whoami": {Backends: map[string]string{
-				"git": "!echo it-was-git",
-				"jj":  "!echo it-was-jj",
-			}},
-		},
+		Aliases: whoamiAliases(),
 	})
 
 	out := runAppCapture(t, cfgPath, []string{"whoami"})

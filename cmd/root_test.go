@@ -4,18 +4,12 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/hugoh/hrd/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestRootCompletesReposAndGroups(t *testing.T) {
-	cfgPath := setupTestConfig(t, config.Config{
-		Repos: map[string]config.Repo{
-			"repo-a": {Path: "/tmp/repo-a", Groups: []string{"work"}},
-			"repo-b": {Path: "/tmp/repo-b"},
-		},
-	})
+	cfgPath := twoRepoGroupConfig(t)
 
 	app := NewApp()
 

@@ -34,6 +34,19 @@ func setupTestConfig(t *testing.T, cfg config.Config) string {
 	return cfgPath
 }
 
+// twoRepoGroupConfig writes a config with two repos, one in the "work"
+// group and one ungrouped, for tests exercising repo/group completion.
+func twoRepoGroupConfig(t *testing.T) string {
+	t.Helper()
+
+	return setupTestConfig(t, config.Config{
+		Repos: map[string]config.Repo{
+			"repo-a": {Path: "/tmp/repo-a", Groups: []string{"work"}},
+			"repo-b": {Path: "/tmp/repo-b"},
+		},
+	})
+}
+
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 

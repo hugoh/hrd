@@ -211,23 +211,13 @@ func TestBackend_Name(t *testing.T) {
 }
 
 func TestBackend_SubcommandArgs(t *testing.T) {
-	b := &Backend{}
-
-	tests := []struct {
-		op   string
-		want []string
-	}{
-		{"status", []string{"status"}},
-		{"fetch", []string{"fetch"}},
-		{"push", []string{"push"}},
-		{"pull", []string{"pull"}},
-		{"log", []string{"log"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.op, func(t *testing.T) {
-			assert.Equal(t, tt.want, b.SubcommandArgs(tt.op))
-		})
-	}
+	backendtest.AssertSubcommandArgs(t, &Backend{}, []backendtest.SubcommandArgsCase{
+		{Op: "status", Want: []string{"status"}},
+		{Op: "fetch", Want: []string{"fetch"}},
+		{Op: "push", Want: []string{"push"}},
+		{Op: "pull", Want: []string{"pull"}},
+		{Op: "log", Want: []string{"log"}},
+	})
 }
 
 func TestBackend_Detect(t *testing.T) {
@@ -330,15 +320,7 @@ func TestBackend_Run_InteractiveNonZero(t *testing.T) {
 }
 
 func TestRegister(t *testing.T) {
-	backend.ClearRegisteredBackends()
-
-	assert.NotPanics(t, func() {
-		Register()
-	})
-
-	assert.Panics(t, func() {
-		Register()
-	})
+	backendtest.AssertRegisterPanicsOnDouble(t, Register)
 }
 
 func TestBackend_Status(t *testing.T) {
@@ -483,10 +465,7 @@ func TestResolveTrunkRef_SymrefMatch(t *testing.T) {
 func TestBackend_Run(t *testing.T) {
 	dir := initGitRepoWithCommit(t)
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"rev-parse", "HEAD"}, false)
-	require.NoError(t, err)
-	assert.NotEmpty(t, res.Output)
+	backendtest.AssertRunOutputNotEmpty(t, &Backend{}, dir, []string{"rev-parse", "HEAD"})
 }
 
 func TestBackend_Run_NoArgs(t *testing.T) {
@@ -497,10 +476,7 @@ func TestBackend_Run_NonZeroExit(t *testing.T) {
 	dir := t.TempDir()
 	runGitCmd(t, dir, []string{"init"})
 
-	b := &Backend{}
-	res, err := b.Run(t.Context(), dir, []string{"log", "--nonexistent-flag"}, false)
-	require.NoError(t, err)
-	assert.NotEqual(t, 0, res.ExitCode)
+	backendtest.AssertRunNonZeroExit(t, &Backend{}, dir, []string{"log", "--nonexistent-flag"})
 }
 
 func TestBackend_Run_OutputCapture(t *testing.T) {
@@ -590,11 +566,6 @@ func TestBackend_Status_ParallelizesRemoteLookupWithStatus(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
-	_, err := b.Status(t.Context(), "/tmp")
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	assert.Less(t, elapsed, 3*delay,
+	backendtest.AssertStatusFasterThan(t, b, "/tmp", 3*delay,
 		"git status and the remote lookup should run concurrently, not sequentially")
 }

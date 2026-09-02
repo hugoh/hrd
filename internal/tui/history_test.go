@@ -146,6 +146,19 @@ func TestHistoryEntriesNoMatch(t *testing.T) {
 	assert.Nil(t, m.historyEntries())
 }
 
+// gitHistoryModel builds a model filtered to the "git" history prefix, with
+// entries and historyIdx as given — the fixture shared by tests exercising
+// historyPrev/historyNext.
+func gitHistoryModel(entries []HistoryEntry, historyIdx int) *model {
+	return &model{
+		input:               initInput(),
+		persState:           PersistentState{History: entries},
+		cmdPrefix:           prefixNone,
+		historyFilterPrefix: "git",
+		historyIdx:          historyIdx,
+	}
+}
+
 func TestHistoryPrev(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -159,18 +172,10 @@ func TestHistoryPrev(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &model{
-				input: initInput(),
-				persState: PersistentState{
-					History: []HistoryEntry{
-						{Prefix: "git", Command: "log"},
-						{Prefix: "git", Command: "status"},
-					},
-				},
-				cmdPrefix:           prefixNone,
-				historyFilterPrefix: "git",
-				historyIdx:          tt.historyIdx,
-			}
+			m := gitHistoryModel([]HistoryEntry{
+				{Prefix: "git", Command: "log"},
+				{Prefix: "git", Command: "status"},
+			}, tt.historyIdx)
 
 			m.historyPrev()
 
@@ -204,17 +209,9 @@ func TestHistoryNextEndsAtEmptyInput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := &model{
-				input: initInput(),
-				persState: PersistentState{
-					History: []HistoryEntry{
-						{Prefix: "git", Command: "log"},
-					},
-				},
-				cmdPrefix:           prefixNone,
-				historyFilterPrefix: "git",
-				historyIdx:          tt.historyIdx,
-			}
+			m := gitHistoryModel([]HistoryEntry{
+				{Prefix: "git", Command: "log"},
+			}, tt.historyIdx)
 
 			m.historyNext()
 
@@ -225,19 +222,11 @@ func TestHistoryNextEndsAtEmptyInput(t *testing.T) {
 }
 
 func TestHistoryNextCyclesBack(t *testing.T) {
-	m := &model{
-		input: initInput(),
-		persState: PersistentState{
-			History: []HistoryEntry{
-				{Prefix: "git", Command: "log"},
-				{Prefix: "git", Command: "status"},
-				{Prefix: "git", Command: "fetch"},
-			},
-		},
-		cmdPrefix:           prefixNone,
-		historyFilterPrefix: "git",
-		historyIdx:          2,
-	}
+	m := gitHistoryModel([]HistoryEntry{
+		{Prefix: "git", Command: "log"},
+		{Prefix: "git", Command: "status"},
+		{Prefix: "git", Command: "fetch"},
+	}, 2)
 
 	m.historyNext()
 

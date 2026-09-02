@@ -640,7 +640,12 @@ func TestHandleProgressFrameAdvancesBar(t *testing.T) {
 	assert.NotNil(t, nextCmd, "still animating, so the next frame should be re-armed")
 }
 
-func TestHandleExecResultSuccess(t *testing.T) {
+// newExecResultModel builds a model with a closed results channel and
+// progress output captured into a buffer, for tests exercising
+// handleExecResult.
+func newExecResultModel(t *testing.T, execTotal int) (*model, *bytes.Buffer) {
+	t.Helper()
+
 	resultsCh := make(chan runner.Result)
 	close(resultsCh)
 
@@ -651,10 +656,16 @@ func TestHandleExecResultSuccess(t *testing.T) {
 
 	m := &model{
 		execResults: []execResult{},
-		execTotal:   2,
+		execTotal:   execTotal,
 		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 		resultsCh:   resultsCh,
 	}
+
+	return m, &buf
+}
+
+func TestHandleExecResultSuccess(t *testing.T) {
+	m, buf := newExecResultModel(t, 2)
 
 	_, cmd := m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 0}},
@@ -689,20 +700,7 @@ func TestHandleExecResultSuccess(t *testing.T) {
 }
 
 func TestHandleExecResultFailureReportsErrorProgress(t *testing.T) {
-	resultsCh := make(chan runner.Result)
-	close(resultsCh)
-
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
-	m := &model{
-		execResults: []execResult{},
-		execTotal:   1,
-		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
-		resultsCh:   resultsCh,
-	}
+	m, buf := newExecResultModel(t, 1)
 
 	m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 1}},
