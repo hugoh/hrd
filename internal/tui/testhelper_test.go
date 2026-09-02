@@ -49,7 +49,8 @@ func newSingleRepoModel(t *testing.T) *model {
 	err := os.WriteFile(cfgPath, []byte(
 		`[repos.testrepo]
 path = "`+repoDir+`"
-backends = ["git"]`), 0o644)
+backends = ["git"]`,
+	), 0o644)
 	require.NoError(t, err)
 
 	m, err := newTestModel(t.Context(), t, Options{ConfigPath: cfgPath})

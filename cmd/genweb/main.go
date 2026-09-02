@@ -178,7 +178,7 @@ func anonymizeHomeDir(s string) string {
 	return strings.ReplaceAll(s, home, "~")
 }
 
-func writeFile(path string, content string) error {
+func writeFile(path, content string) error {
 	if err := os.WriteFile(path, []byte(content), filePerm); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}

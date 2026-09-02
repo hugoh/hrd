@@ -323,7 +323,7 @@ func pullCmd(cfgPath *string) *cobra.Command {
 	)
 }
 
-func vcsSubcmdCmd(cfgPath *string, subcmd string, usage string) *cobra.Command {
+func vcsSubcmdCmd(cfgPath *string, subcmd, usage string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   subcmd + " [repo|group...]",
 		Short: usage,

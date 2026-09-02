@@ -587,7 +587,8 @@ func formatDispatchResultLine(name string, res runner.Result, width int, dark bo
 		body := "error: " + res.Err.Error()
 		if res.Output != "" {
 			body += "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ")
+				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
+			)
 		}
 
 		return header + "\n" + body
@@ -595,14 +596,16 @@ func formatDispatchResultLine(name string, res runner.Result, width int, dark bo
 		body := fmt.Sprintf("exit %d", res.ExitCode)
 		if res.Output != "" {
 			body += "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ")
+				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
+			)
 		}
 
 		return header + "\n" + body
 	default:
 		if res.Output != "" {
 			return header + "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ")
+				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
+			)
 		}
 
 		return header
