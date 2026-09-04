@@ -46,8 +46,9 @@ matches unconditionally.`,
 		Example: `  hrd repo scan add ~/code
   hrd repo scan add ~/code --depth 2 --pattern 'api-*' -g backend
   hrd repo scan add ~/code -i`,
-		Args: cobra.ArbitraryArgs,
-		RunE: repoScanAddAction(cfgPath),
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: dirsOnlyCompleter,
+		RunE:              repoScanAddAction(cfgPath),
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
@@ -70,8 +71,9 @@ step.`,
 		Example: `  hrd repo scan ls ~/code
   hrd repo scan ls ~/code --untracked
   hrd repo scan ls ~/code --depth 2 --pattern 'api-*'`,
-		Args: cobra.ArbitraryArgs,
-		RunE: repoScanLsAction(cfgPath),
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: dirsOnlyCompleter,
+		RunE:              repoScanLsAction(cfgPath),
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")

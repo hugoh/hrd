@@ -52,7 +52,7 @@ func repoAddCmd(cfgPath *string) *cobra.Command {
 		Use:               cmdNameAdd + " <path>...",
 		Short:             "add one or more repositories",
 		Args:              cobra.ArbitraryArgs,
-		ValidArgsFunction: cobra.NoFileCompletions,
+		ValidArgsFunction: dirsOnlyCompleter,
 		RunE:              repoAddAction(cfgPath),
 	}
 	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single repo)")
