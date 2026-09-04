@@ -3,26 +3,42 @@ name: backend compatibility
 on:
   push:
     branches: [main]
-    paths:
-      - "backends/**"
-      - "internal/backend/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/backend-compat.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "backends/**"
-      - "internal/backend/**"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/backend-compat.yml"
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
+  # Always triggers (no path filter on the workflow itself) so the gate
+  # checks below post on every PR — GitHub never satisfies a required
+  # status check that a path-filtered trigger simply never runs. This job
+  # decides whether the expensive legs actually need to do anything.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - "backends/**"
+              - "internal/backend/**"
+              - "go.mod"
+              - "go.sum"
+              - ".github/workflows/backend-compat.yml"
+
   jj:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@977317b2cb6a46b4d47c531556fbb991a9bbde52 # v1.23.0
     permissions:
       contents: read
@@ -30,7 +46,35 @@ jobs:
       tool: jj
       test-target: "./backends/jj/..."
 
+  # Stable check name for branch protection: the reusable workflow's own
+  # "jj / versions" and "jj / gate" checks only get created once its jobs
+  # actually run, so a skipped `jj` job (unrelated paths) posts neither —
+  # leaving branch protection waiting forever. This wrapper always runs and
+  # passes trivially when `jj` was skipped, so it's what's pinned as the
+  # required context instead.
+  jj-gate:
+    if: always()
+    needs: [changes, jj]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require the jj compat matrix to have passed, when relevant
+        env:
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
+          JJ_RESULT: ${{ needs.jj.result }}
+        run: |
+          set -euo pipefail
+          echo "backend_changed=$BACKEND_CHANGED jj=$JJ_RESULT"
+          if [ "$BACKEND_CHANGED" != "true" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "no backend-relevant changes; skipping"
+            exit 0
+          fi
+          [ "$JJ_RESULT" = success ] || exit 1
+
   git:
+    needs: [changes]
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     permissions:
@@ -55,18 +99,24 @@ jobs:
           gotestsum -- -race -shuffle=on ./backends/git/...
 
   # Stable check name for branch protection: the `git` matrix leg names carry
-  # the runner label, so they can't be pinned as required contexts.
+  # the runner label, so they can't be pinned as required contexts. Also
+  # passes trivially when `git` was skipped for unrelated paths.
   git-gate:
     if: always()
-    needs: [git]
+    needs: [changes, git]
     timeout-minutes: 5
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Require every git runner leg to have passed
+      - name: Require every git runner leg to have passed, when relevant
         env:
+          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
           GIT_RESULT: ${{ needs.git.result }}
         run: |
           set -euo pipefail
-          echo "git=$GIT_RESULT"
+          echo "backend_changed=$BACKEND_CHANGED git=$GIT_RESULT"
+          if [ "$BACKEND_CHANGED" != "true" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "no backend-relevant changes; skipping"
+            exit 0
+          fi
           [ "$GIT_RESULT" = success ] || exit 1
