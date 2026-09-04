@@ -135,6 +135,49 @@ func TestRepoGroupCompleterIncludesRootDiscoveredRepos(t *testing.T) {
 	assert.Contains(t, got, "app")
 }
 
+func TestCompleteRoots(t *testing.T) {
+	cfg := &config.Config{
+		Roots: map[string]config.Root{
+			"z-root": {Path: "/tmp/z"},
+			"a-root": {Path: "/tmp/a"},
+			"m-root": {Path: "/tmp/m"},
+		},
+	}
+	got := completeRoots(cfg)
+	assert.Equal(t, []string{"a-root", "m-root", "z-root"}, got)
+}
+
+func TestCompleteRootsEmpty(t *testing.T) {
+	cfg := &config.Config{Roots: map[string]config.Root{}}
+	assert.Empty(t, completeRoots(cfg))
+}
+
+func TestCompleteRootsNil(t *testing.T) {
+	cfg := &config.Config{}
+	assert.Empty(t, completeRoots(cfg))
+}
+
+func TestRootsOnlyCompleter(t *testing.T) {
+	cfgPath := setupTestConfig(t, config.Config{
+		Roots: map[string]config.Root{
+			"myroot": {Path: "/tmp/myroot"},
+		},
+	})
+
+	completer := rootsOnlyCompleter(&cfgPath)
+	got, directive := completer(nil, nil, "")
+
+	assert.Contains(t, got, "myroot")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestDirsOnlyCompleter(t *testing.T) {
+	got, directive := dirsOnlyCompleter(nil, nil, "")
+
+	assert.Nil(t, got)
+	assert.Equal(t, cobra.ShellCompDirectiveFilterDirs, directive)
+}
+
 func TestGroupsOnlyCompleter(t *testing.T) {
 	cfgPath := setupTestConfig(t, config.Config{
 		Repos: map[string]config.Repo{

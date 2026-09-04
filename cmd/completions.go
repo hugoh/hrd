@@ -10,10 +10,32 @@ import (
 // cobraCompleter is the shape Cobra's ValidArgsFunction expects.
 type cobraCompleter func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
+// dirsOnlyCompleter offers directories for commands whose args are always
+// filesystem paths to walk (repo add, repo root add, repo scan add/ls).
+func dirsOnlyCompleter(
+	_ *cobra.Command,
+	_ []string,
+	_ string,
+) ([]string, cobra.ShellCompDirective) {
+	return nil, cobra.ShellCompDirectiveFilterDirs
+}
+
 func completeRepos(cfg *config.Config) []string {
 	names := make([]string, 0, len(cfg.Repos))
 
 	for name := range cfg.Repos {
+		names = append(names, name)
+	}
+
+	slices.Sort(names)
+
+	return names
+}
+
+func completeRoots(cfg *config.Config) []string {
+	names := make([]string, 0, len(cfg.Roots))
+
+	for name := range cfg.Roots {
 		names = append(names, name)
 	}
 
@@ -64,6 +86,10 @@ func reposOnlyCompleter(cfgPath *string) cobraCompleter {
 
 func groupsOnlyCompleter(cfgPath *string) cobraCompleter {
 	return makeCompleter(cfgPath, completeGroups)
+}
+
+func rootsOnlyCompleter(cfgPath *string) cobraCompleter {
+	return makeCompleter(cfgPath, completeRoots)
 }
 
 // reposOrDirsCompleter completes with configured repo names and also lets the

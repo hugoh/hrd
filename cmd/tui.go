@@ -20,7 +20,7 @@ func runTUIWithArgs(ctx context.Context, cfgPath string, args []string) error {
 // tuiCmd returns the `tui` subcommand — an explicit, discoverable synonym
 // for bare "hrd [repo|group...]".
 func tuiCmd(cfgPath *string) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:     "tui [repo|group...]",
 		Aliases: []string{"i"},
 		Short:   "interactive terminal UI for browsing and running commands across repos",
@@ -29,4 +29,7 @@ func tuiCmd(cfgPath *string) *cobra.Command {
 			return runTUIWithArgs(cmd.Context(), *cfgPath, args)
 		},
 	}
+	cmd.ValidArgsFunction = repoGroupCompleter(cfgPath)
+
+	return cmd
 }

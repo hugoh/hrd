@@ -54,8 +54,9 @@ persisted, so new repos added under dir appear automatically.`,
 		Example: `  hrd repo root add ~/my-repos
   hrd repo root add ~/my-repos --depth 2 -g personal
   hrd repo root add ~/work-repos ~/oss-repos`,
-		Args: cobra.ArbitraryArgs,
-		RunE: repoRootAddAction(cfgPath),
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: dirsOnlyCompleter,
+		RunE:              repoRootAddAction(cfgPath),
 	}
 	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single root)")
 	cmd.Flags().
@@ -129,9 +130,10 @@ func addRoot(cfg *config.Config, dir, explicitName, group string, depth int) err
 
 func repoRootRemoveCmd(cfgPath *string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "rm <name>...",
-		Short: "stop tracking one or more directory roots",
-		Args:  cobra.ArbitraryArgs,
+		Use:               "rm <name>...",
+		Short:             "stop tracking one or more directory roots",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: rootsOnlyCompleter(cfgPath),
 		RunE: func(_ *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return errAtLeastOneRootName
