@@ -200,9 +200,12 @@ type model struct {
 	execCancel     context.CancelFunc
 	execResults    []execResult
 	execOutputStr  string
-	execLabel      string
-	execStartTime  time.Time
-	resultsCh      <-chan runner.Result
+	// execResultOffsets holds the 0-based line offset in execOutputStr where
+	// each repo's result block begins, for ,/. navigation on the output screen.
+	execResultOffsets []int
+	execLabel         string
+	execStartTime     time.Time
+	resultsCh         <-chan runner.Result
 
 	statusCh <-chan runner.StatusResult
 

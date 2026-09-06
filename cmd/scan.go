@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/hugoh/hrd/internal/config"
@@ -195,7 +194,7 @@ func repoScanLsAction(cfgPath *string) func(cmd *cobra.Command, args []string) e
 			return nil
 		}
 
-		_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
+		ui.Print(ui.RenderTable(
 			header, rows, ui.EffectiveWidths(header, rows, maxWidths),
 		))
 

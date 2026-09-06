@@ -10,6 +10,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -49,27 +50,6 @@ func lipglossColor(colorName string) color.Color {
 	return lipgloss.Color(theme.ColorCode(colorName))
 }
 
-//nolint:gochecknoglobals // memoizes one terminal query for the process lifetime
-var (
-	darkBackground     bool
-	darkBackgroundOnce sync.Once
-)
-
-// HasDarkBackground reports whether the terminal has a dark background,
-// querying it once and caching the result for the process lifetime.
-//
-// Only call this outside the TUI (bubbletea already owns stdin there and
-// queries its own background color via tea.RequestBackgroundColor /
-// tea.BackgroundColorMsg — querying stdin directly here as well would race
-// with bubbletea's raw-mode input reader).
-func HasDarkBackground() bool {
-	darkBackgroundOnce.Do(func() {
-		darkBackground = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-	})
-
-	return darkBackground
-}
-
 func MutedStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(lipglossColor("gray"))
 }
@@ -90,48 +70,71 @@ func ApplyColor(colorName, symbol string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
 }
 
-func FormatDispatchHeader(name, vcs string) string {
-	return fmt.Sprintf(" %-15s %-3s", name, vcs)
+// RenderDispatchResult renders one repo's dispatch result as a delimited
+// block: a "=== <name> (<vcs>) ===" open line, the command output verbatim
+// (with the error message appended when the command could not run), and a
+// "=== <name> <status> ===" close line where status is "✓ exit 0",
+// "✗ exit N", or "✗ error". When there is no body the two lines collapse
+// into one. The delimiter lines are tinted by result status; ui.Print strips
+// the color when stdout is redirected. The TUI renders the same block via
+// RenderDispatchResultBar.
+func RenderDispatchResult(res runner.Result) string {
+	tier := theme.BarTierFor(res.Err, res.ExitCode)
+	style := lipgloss.NewStyle().Bold(true).Foreground(lipglossColor(theme.BarTierColor(tier)))
+
+	return renderDispatchBlock(res, func(s string) string { return style.Render(s) })
 }
 
-// RenderDispatchHeaderBar renders the "<repo> <vcs> <glyph>" separator bar
-// for a dispatch result, tinted by result tier (success/warning/error) and
-// stretched to width. It is a single Style.Render() call over unstyled
-// content so the background/foreground span the whole bar with no gaps.
-// dark selects the dark or light terminal-background color variant — pass
-// HasDarkBackground() from the CLI path, or the TUI's own
-// tea.BackgroundColorMsg-derived value.
-func RenderDispatchHeaderBar(res runner.Result, width int, dark bool) string {
+// RenderDispatchResultBar renders the same block as RenderDispatchResult with
+// the delimiter lines drawn as full-width status-tinted background bars,
+// resolved for a dark (dark=true) or light terminal background.
+func RenderDispatchResultBar(res runner.Result, width int, dark bool) string {
 	tier := theme.BarTierFor(res.Err, res.ExitCode)
-
 	style := lipgloss.NewStyle().
 		Background(lipgloss.Color(theme.BarBackground(tier, dark))).
 		Foreground(lipgloss.Color(theme.BarForeground(tier, dark))).
 		Width(width)
 
+	return renderDispatchBlock(res, func(s string) string { return style.Render(s) })
+}
+
+func renderDispatchBlock(res runner.Result, delim func(string) string) string {
+	label := res.RepoName
+	if res.VCS != "" {
+		label += " (" + res.VCS + ")"
+	}
+
+	body := strings.TrimRight(res.Output, "\n")
+	if res.Err != nil {
+		if body != "" {
+			body += "\n"
+		}
+
+		body += "error: " + res.Err.Error()
+	}
+
+	status := dispatchStatus(res)
+
+	if body == "" {
+		return delim(fmt.Sprintf("=== %s %s ===", label, status))
+	}
+
+	return delim(fmt.Sprintf("=== %s ===", label)) + "\n" +
+		body + "\n" +
+		delim(fmt.Sprintf("=== %s %s ===", res.RepoName, status))
+}
+
+func dispatchStatus(res runner.Result) string {
+	if res.Err != nil {
+		return "✗ error"
+	}
+
 	glyph := "✓"
-	if tier != theme.BarSuccess {
+	if res.ExitCode != 0 {
 		glyph = "✗"
 	}
 
-	return style.Render(fmt.Sprintf("%s %s ", FormatDispatchHeader(res.RepoName, res.VCS), glyph))
-}
-
-//nolint:gochecknoglobals // cached dispatch result detail-text style
-var dispatchErrorStyle = lipgloss.NewStyle().Foreground(lipglossColor("red"))
-
-func RenderDispatchResult(res runner.Result) string {
-	header := RenderDispatchHeaderBar(res, GetTermWidth(), HasDarkBackground())
-
-	if runner.ResultColor(res) == "red" {
-		if res.Err != nil {
-			return header + "\n" + dispatchErrorStyle.Render(res.Err.Error())
-		}
-
-		return header + "\n" + dispatchErrorStyle.Render("exit "+strconv.Itoa(res.ExitCode))
-	}
-
-	return header
+	return glyph + " exit " + strconv.Itoa(res.ExitCode)
 }
 
 type StatusLineParts struct {
@@ -185,13 +188,21 @@ func FormatDispatchStatusLine(status backend.RepoStatus, includeDetail bool) str
 }
 
 func Outf(format string, args ...any) {
-	_, _ = fmt.Fprintf(os.Stdout, format+"\n", args...)
+	Print(fmt.Sprintf(format, args...) + "\n")
 }
 
 // Out prints s followed by a newline. Unlike Outf it does not interpret
 // format verbs, so it is safe for dynamic strings (paths, command output).
 func Out(s string) {
-	_, _ = fmt.Fprintln(os.Stdout, s)
+	Print(s + "\n")
+}
+
+// Print writes s to stdout, downsampling or stripping ANSI color to match
+// the terminal's capabilities. Color is removed entirely when stdout is not
+// a TTY (e.g. piped into pbcopy or a file) or when NO_COLOR is set.
+func Print(s string) {
+	w := colorprofile.NewWriter(os.Stdout, os.Environ())
+	_, _ = w.WriteString(s)
 }
 
 func Errf(format string, args ...any) {

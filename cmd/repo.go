@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -257,7 +256,7 @@ func repoListCmd(cfgPath *string) *cobra.Command {
 			widths := []int{nameWidth, vcsWidth, pathWidth}
 			header := []string{NameLabel, VCSLabel, PathLabel}
 
-			_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
+			ui.Print(ui.RenderTable(
 				header, rows, ui.EffectiveWidths(header, rows, widths),
 			))
 
@@ -614,7 +613,7 @@ func renderReservedGroupMeanings() error {
 	header := []string{"GROUP", "MEANING"}
 	widths := ui.EffectiveWidths(header, rows, []int{nameWidth, ui.GetTermWidth()})
 
-	_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(header, rows, widths))
+	ui.Print(ui.RenderTable(header, rows, widths))
 
 	return nil
 }

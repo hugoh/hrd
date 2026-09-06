@@ -368,3 +368,35 @@ func TestMakeSelectedMap(t *testing.T) {
 	assert.True(t, got["b"])
 	assert.False(t, got["c"])
 }
+
+func TestAdjacentOffset(t *testing.T) {
+	offsets := []int{0, 5, 12, 30}
+
+	tests := []struct {
+		name    string
+		current int
+		dir     int
+		want    int
+		wantOK  bool
+	}{
+		{"next from top", 0, 1, 5, true},
+		{"next from between", 6, 1, 12, true},
+		{"next past last", 30, 1, 0, false},
+		{"prev from last", 30, -1, 12, true},
+		{"prev from between", 6, -1, 5, true},
+		{"prev before first", 0, -1, 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := adjacentOffset(offsets, tt.current, tt.dir)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestAdjacentOffsetEmpty(t *testing.T) {
+	_, ok := adjacentOffset(nil, 0, 1)
+	assert.False(t, ok)
+}
