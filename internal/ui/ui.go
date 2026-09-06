@@ -10,6 +10,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"charm.land/log/v2"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
@@ -47,27 +48,6 @@ func SetLogger(l *log.Logger) {
 
 func lipglossColor(colorName string) color.Color {
 	return lipgloss.Color(theme.ColorCode(colorName))
-}
-
-//nolint:gochecknoglobals // memoizes one terminal query for the process lifetime
-var (
-	darkBackground     bool
-	darkBackgroundOnce sync.Once
-)
-
-// HasDarkBackground reports whether the terminal has a dark background,
-// querying it once and caching the result for the process lifetime.
-//
-// Only call this outside the TUI (bubbletea already owns stdin there and
-// queries its own background color via tea.RequestBackgroundColor /
-// tea.BackgroundColorMsg — querying stdin directly here as well would race
-// with bubbletea's raw-mode input reader).
-func HasDarkBackground() bool {
-	darkBackgroundOnce.Do(func() {
-		darkBackground = lipgloss.HasDarkBackground(os.Stdin, os.Stdout)
-	})
-
-	return darkBackground
 }
 
 func MutedStyle() lipgloss.Style {
@@ -117,21 +97,46 @@ func RenderDispatchHeaderBar(res runner.Result, width int, dark bool) string {
 	return style.Render(fmt.Sprintf("%s %s ", FormatDispatchHeader(res.RepoName, res.VCS), glyph))
 }
 
-//nolint:gochecknoglobals // cached dispatch result detail-text style
-var dispatchErrorStyle = lipgloss.NewStyle().Foreground(lipglossColor("red"))
-
+// RenderDispatchResult renders one repo's dispatch result as a delimited
+// block for non-interactive output: a "=== <name> (<vcs>) ===" open line,
+// the command output verbatim, and a "=== <name> <status> ===" close line
+// where status is "✓ exit 0", "✗ exit N", or "✗ error". When the command
+// produced no output the two lines collapse into one. On a TTY the delimiter
+// lines are tinted by result status; ui.Print strips the color when stdout
+// is redirected. The TUI uses RenderDispatchHeaderBar instead.
 func RenderDispatchResult(res runner.Result) string {
-	header := RenderDispatchHeaderBar(res, GetTermWidth(), HasDarkBackground())
+	style := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipglossColor(theme.BarTierColor(theme.BarTierFor(res.Err, res.ExitCode))))
 
-	if runner.ResultColor(res) == "red" {
-		if res.Err != nil {
-			return header + "\n" + dispatchErrorStyle.Render(res.Err.Error())
-		}
-
-		return header + "\n" + dispatchErrorStyle.Render("exit "+strconv.Itoa(res.ExitCode))
+	label := res.RepoName
+	if res.VCS != "" {
+		label += " (" + res.VCS + ")"
 	}
 
-	return header
+	status := dispatchStatus(res)
+	output := strings.TrimRight(res.Output, "\n")
+
+	if output == "" {
+		return style.Render(fmt.Sprintf("=== %s %s ===", label, status))
+	}
+
+	return style.Render(fmt.Sprintf("=== %s ===", label)) + "\n" +
+		output + "\n" +
+		style.Render(fmt.Sprintf("=== %s %s ===", res.RepoName, status))
+}
+
+func dispatchStatus(res runner.Result) string {
+	if res.Err != nil {
+		return "✗ error"
+	}
+
+	glyph := "✓"
+	if res.ExitCode != 0 {
+		glyph = "✗"
+	}
+
+	return glyph + " exit " + strconv.Itoa(res.ExitCode)
 }
 
 type StatusLineParts struct {
@@ -185,13 +190,21 @@ func FormatDispatchStatusLine(status backend.RepoStatus, includeDetail bool) str
 }
 
 func Outf(format string, args ...any) {
-	_, _ = fmt.Fprintf(os.Stdout, format+"\n", args...)
+	Print(fmt.Sprintf(format, args...) + "\n")
 }
 
 // Out prints s followed by a newline. Unlike Outf it does not interpret
 // format verbs, so it is safe for dynamic strings (paths, command output).
 func Out(s string) {
-	_, _ = fmt.Fprintln(os.Stdout, s)
+	Print(s + "\n")
+}
+
+// Print writes s to stdout, downsampling or stripping ANSI color to match
+// the terminal's capabilities. Color is removed entirely when stdout is not
+// a TTY (e.g. piped into pbcopy or a file) or when NO_COLOR is set.
+func Print(s string) {
+	w := colorprofile.NewWriter(os.Stdout, os.Environ())
+	_, _ = w.WriteString(s)
 }
 
 func Errf(format string, args ...any) {

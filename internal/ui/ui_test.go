@@ -45,6 +45,34 @@ func TestRenderDispatchResult_EmptyVCS(t *testing.T) {
 	assert.NotContains(t, out, "jj")
 }
 
+func TestRenderDispatchResult_CollapsesWhenNoOutput(t *testing.T) {
+	res := runner.Result{RepoName: "repo1", VCS: "jj", ExitCode: 0}
+	out := capturer.CaptureStdout(func() { ui.Out(ui.RenderDispatchResult(res)) })
+
+	assert.Equal(t, "=== repo1 (jj) ✓ exit 0 ===\n", out)
+}
+
+func TestRenderDispatchResult_WrapsOutputInDelimiters(t *testing.T) {
+	res := runner.Result{RepoName: "repo1", VCS: "git", Output: "line one\nline two\n", ExitCode: 0}
+	out := capturer.CaptureStdout(func() { ui.Out(ui.RenderDispatchResult(res)) })
+
+	assert.Equal(t, "=== repo1 (git) ===\nline one\nline two\n=== repo1 ✓ exit 0 ===\n", out)
+}
+
+func TestRenderDispatchResult_NonZeroExitInCloseDelimiter(t *testing.T) {
+	res := runner.Result{RepoName: "repo1", VCS: "git", Output: "boom\n", ExitCode: 2}
+	out := capturer.CaptureStdout(func() { ui.Out(ui.RenderDispatchResult(res)) })
+
+	assert.Equal(t, "=== repo1 (git) ===\nboom\n=== repo1 ✗ exit 2 ===\n", out)
+}
+
+func TestRenderDispatchResult_OmitsVCSWhenEmpty(t *testing.T) {
+	res := runner.Result{RepoName: "bare", ExitCode: 0}
+	out := capturer.CaptureStdout(func() { ui.Out(ui.RenderDispatchResult(res)) })
+
+	assert.Equal(t, "=== bare ✓ exit 0 ===\n", out)
+}
+
 func TestFormatDispatchHeader(t *testing.T) {
 	t.Run("with name and vcs", func(t *testing.T) {
 		got := ui.FormatDispatchHeader("my-repo", "git")
@@ -260,6 +288,29 @@ func TestOut(t *testing.T) {
 		ui.Out("plain line %s")
 	})
 	assert.Equal(t, "plain line %s\n", out)
+}
+
+func TestOut_StripsANSIWhenNotTTY(t *testing.T) {
+	styled := ui.ApplyColor("red", "boom")
+	assert.Contains(t, styled, "\x1b[", "ApplyColor should emit ANSI so this test is meaningful")
+
+	out := capturer.CaptureStdout(func() {
+		ui.Out(styled)
+	})
+
+	assert.Equal(t, "boom\n", out)
+	assert.NotContains(t, out, "\x1b[")
+}
+
+func TestPrint_StripsANSIWhenNotTTY(t *testing.T) {
+	styled := ui.RenderHeader([]string{"name", "state"}, []int{4, 5})
+	assert.Contains(t, styled, "\x1b[", "RenderHeader should emit ANSI so this test is meaningful")
+
+	out := capturer.CaptureStdout(func() {
+		ui.Print(styled)
+	})
+
+	assert.NotContains(t, out, "\x1b[")
 }
 
 func TestWarnf(t *testing.T) {

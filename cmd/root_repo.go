@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -192,7 +191,7 @@ func repoRootListCmd(cfgPath *string) *cobra.Command {
 			header := []string{NameLabel, PathLabel, "DEPTH"}
 			widths := []int{nameWidth, pathWidth, depthWidth}
 
-			_, _ = fmt.Fprint(os.Stdout, ui.RenderTable(
+			ui.Print(ui.RenderTable(
 				header, rows, ui.EffectiveWidths(header, rows, widths),
 			))
 

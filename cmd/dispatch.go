@@ -909,10 +909,6 @@ func printDispatchResult(res runner.Result) {
 
 	if res.Err != nil {
 		ui.Errf("%s", res.Err)
-	} else if res.Output != "" {
-		for line := range strings.SplitSeq(strings.TrimRight(res.Output, "\n"), "\n") {
-			ui.Out("  " + line)
-		}
 	}
 
 	ui.Out("")

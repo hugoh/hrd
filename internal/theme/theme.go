@@ -32,6 +32,7 @@ var StatusSymbolDocs = []SymbolDoc{
 }
 
 const (
+	colorGreen   = "green"
 	colorYellow  = "yellow"
 	colorRed     = "red"
 	colorMagenta = "magenta"
@@ -121,6 +122,21 @@ func BarForeground(tier BarTier, dark bool) string {
 	return barColors[tier].fg.Resolve(dark)
 }
 
+// BarTierColor returns the semantic color name (green/yellow/red) for a
+// result tier, used to tint plain delimiter lines outside the TUI.
+func BarTierColor(tier BarTier) string {
+	switch tier {
+	case BarWarning:
+		return colorYellow
+	case BarError:
+		return colorRed
+	case BarSuccess:
+		return colorGreen
+	default:
+		return colorGreen
+	}
+}
+
 // BarTierFor classifies a dispatch result into a bar tier based on whether
 // it errored or exited non-zero.
 func BarTierFor(err error, exitCode int) BarTier {
@@ -162,7 +178,7 @@ var (
 func StateColor(state backend.RefState) string {
 	switch state {
 	case backend.RefStateSynced:
-		return "green"
+		return colorGreen
 	case backend.RefStateAhead:
 		return "blue"
 	case backend.RefStateBehind:
@@ -183,7 +199,7 @@ func BookmarkSymbols(bm backend.BookmarkStatus) []ColoredSymbol {
 
 	switch bm.State {
 	case backend.RefStateSynced:
-		syms = append(syms, "green", "✓")
+		syms = append(syms, colorGreen, "✓")
 	case backend.RefStateAhead:
 		syms = append(syms, "blue", fmt.Sprintf("↑%d", bm.Ahead))
 	case backend.RefStateBehind:
