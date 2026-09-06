@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"charm.land/bubbles/v2/list"
@@ -306,6 +307,35 @@ func TestOutputContentPreservedOnClose(t *testing.T) {
 			)
 		})
 	}
+}
+
+func TestHandleOutputKeyResultNavigation(t *testing.T) {
+	m := &model{
+		screen:            screenOutput,
+		output:            viewport.New(viewport.WithWidth(80), viewport.WithHeight(5)),
+		execResultOffsets: []int{0, 10, 20},
+	}
+	m.output.SetContent(strings.TrimRight(strings.Repeat("line\n", 40), "\n"))
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: '.'})
+	assert.Equal(t, 10, m.output.YOffset(), ". should jump to the next result")
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: '.'})
+	assert.Equal(t, 20, m.output.YOffset(), ". again should jump to the following result")
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: '.'})
+	assert.Equal(t, 20, m.output.YOffset(), ". past the last result is a no-op")
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: ','})
+	assert.Equal(t, 10, m.output.YOffset(), ", should jump to the previous result")
+
+	_, _ = m.handleOutputKey(tea.KeyPressMsg{Code: ','})
+	assert.Equal(t, 0, m.output.YOffset(), ", should reach the first result")
+
+	_, cmd := m.handleOutputKey(tea.KeyPressMsg{Code: ','})
+	assert.Equal(t, 0, m.output.YOffset(), ", before the first result is a no-op")
+	assert.Nil(t, cmd)
+	assert.Equal(t, screenOutput, m.screen, "navigation keys must not close the screen")
 }
 
 func TestHandleEscOutputPreservesContent(t *testing.T) {

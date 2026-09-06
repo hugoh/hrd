@@ -332,6 +332,29 @@ func resolveGroupFilter(optGroup, lastGroup string, cfg config.Config) (string, 
 	return "", nil
 }
 
+// adjacentOffset returns the nearest entry in offsets (ascending) strictly
+// before (dir < 0) or after (dir > 0) current, for stepping the output
+// viewport between repo result blocks.
+func adjacentOffset(offsets []int, current, dir int) (int, bool) {
+	if dir > 0 {
+		for _, o := range offsets {
+			if o > current {
+				return o, true
+			}
+		}
+
+		return 0, false
+	}
+
+	for _, offset := range slices.Backward(offsets) {
+		if offset < current {
+			return offset, true
+		}
+	}
+
+	return 0, false
+}
+
 func sortedGroupNames(groups map[string]config.Group) []string {
 	names := make([]string, 0, len(groups))
 	for name := range groups {

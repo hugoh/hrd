@@ -147,6 +147,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execTotal = len(selected)
 	m.execResults = nil
 	m.execOutputStr = ""
+	m.execResultOffsets = nil
 	m.execLabel = strings.TrimSpace(prefix + " " + cmdStr)
 	m.execStartTime = time.Now()
 	progressModel = newProgressBar()

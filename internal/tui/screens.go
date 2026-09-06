@@ -155,6 +155,17 @@ func (m *model) handleOutputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 			return m, nil
 		}
+	case ",", ".":
+		dir := 1
+		if msg.String() == "," {
+			dir = -1
+		}
+
+		if off, ok := adjacentOffset(m.execResultOffsets, m.output.YOffset(), dir); ok {
+			m.output.SetYOffset(off)
+		}
+
+		return m, nil
 	}
 
 	var cmd tea.Cmd
