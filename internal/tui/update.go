@@ -354,7 +354,7 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 		msg.result.result,
 		m.output.Width(),
 		m.darkBackground,
-	) + "\n"
+	) + "\n\n"
 	m.output.SetContent(m.execOutputStr)
 
 	var progressCmd tea.Cmd
@@ -572,7 +572,7 @@ func formatExecOutput(results []execResult, width int, dark bool) string {
 
 	for _, er := range results {
 		b.WriteString(formatDispatchResultLine(er.name, er.result, width, dark))
-		b.WriteString("\n")
+		b.WriteString("\n\n")
 	}
 
 	return b.String()
@@ -580,34 +580,6 @@ func formatExecOutput(results []execResult, width int, dark bool) string {
 
 func formatDispatchResultLine(name string, res runner.Result, width int, dark bool) string {
 	res.RepoName = name
-	header := ui.RenderDispatchHeaderBar(res, width, dark)
 
-	switch {
-	case res.Err != nil:
-		body := "error: " + res.Err.Error()
-		if res.Output != "" {
-			body += "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
-			)
-		}
-
-		return header + "\n" + body
-	case res.ExitCode != 0:
-		body := fmt.Sprintf("exit %d", res.ExitCode)
-		if res.Output != "" {
-			body += "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
-			)
-		}
-
-		return header + "\n" + body
-	default:
-		if res.Output != "" {
-			return header + "\n  " + strings.ReplaceAll(
-				strings.TrimRight(res.Output, "\n"), "\n", "\n  ",
-			)
-		}
-
-		return header
-	}
+	return ui.RenderDispatchResultBar(res, width, dark)
 }

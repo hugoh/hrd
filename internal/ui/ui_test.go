@@ -73,26 +73,15 @@ func TestRenderDispatchResult_OmitsVCSWhenEmpty(t *testing.T) {
 	assert.Equal(t, "=== bare ✓ exit 0 ===\n", out)
 }
 
-func TestFormatDispatchHeader(t *testing.T) {
-	t.Run("with name and vcs", func(t *testing.T) {
-		got := ui.FormatDispatchHeader("my-repo", "git")
-		assert.Equal(t, " my-repo         git", got)
+func TestRenderDispatchResultBar_UsesFullWidthAndKeepsStructure(t *testing.T) {
+	res := runner.Result{RepoName: "repo1", VCS: "git", Output: "boom\n", ExitCode: 2}
+	out := capturer.CaptureStdout(func() {
+		ui.Out(ui.RenderDispatchResultBar(res, 40, true))
 	})
 
-	t.Run("empty vcs", func(t *testing.T) {
-		got := ui.FormatDispatchHeader("my-repo", "")
-		assert.Equal(t, " my-repo            ", got)
-	})
-
-	t.Run("empty name", func(t *testing.T) {
-		got := ui.FormatDispatchHeader("", "jj")
-		assert.Equal(t, "                 jj ", got)
-	})
-
-	t.Run("long name exceeding field width", func(t *testing.T) {
-		got := ui.FormatDispatchHeader("very-long-repo-name", "jj")
-		assert.Equal(t, " very-long-repo-name jj ", got)
-	})
+	assert.Contains(t, out, "=== repo1 (git) ===")
+	assert.Contains(t, out, "\nboom\n")
+	assert.Contains(t, out, "=== repo1 ✗ exit 2 ===")
 }
 
 func TestComputeRemainderWidth(t *testing.T) {

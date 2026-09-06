@@ -906,11 +906,6 @@ func dispatch(
 
 func printDispatchResult(res runner.Result) {
 	ui.Out(ui.RenderDispatchResult(res))
-
-	if res.Err != nil {
-		ui.Errf("%s", res.Err)
-	}
-
 	ui.Out("")
 }
 

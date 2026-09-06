@@ -123,7 +123,7 @@ func BarForeground(tier BarTier, dark bool) string {
 }
 
 // BarTierColor returns the semantic color name (green/yellow/red) for a
-// result tier, used to tint plain delimiter lines outside the TUI.
+// result tier, used to tint dispatch result delimiter lines.
 func BarTierColor(tier BarTier) string {
 	switch tier {
 	case BarWarning:

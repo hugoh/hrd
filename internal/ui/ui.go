@@ -70,60 +70,58 @@ func ApplyColor(colorName, symbol string) string {
 	return lipgloss.NewStyle().Foreground(lipglossColor(colorName)).Render(symbol)
 }
 
-func FormatDispatchHeader(name, vcs string) string {
-	return fmt.Sprintf(" %-15s %-3s", name, vcs)
+// RenderDispatchResult renders one repo's dispatch result as a delimited
+// block: a "=== <name> (<vcs>) ===" open line, the command output verbatim
+// (with the error message appended when the command could not run), and a
+// "=== <name> <status> ===" close line where status is "✓ exit 0",
+// "✗ exit N", or "✗ error". When there is no body the two lines collapse
+// into one. The delimiter lines are tinted by result status; ui.Print strips
+// the color when stdout is redirected. The TUI renders the same block via
+// RenderDispatchResultBar.
+func RenderDispatchResult(res runner.Result) string {
+	tier := theme.BarTierFor(res.Err, res.ExitCode)
+	style := lipgloss.NewStyle().Bold(true).Foreground(lipglossColor(theme.BarTierColor(tier)))
+
+	return renderDispatchBlock(res, func(s string) string { return style.Render(s) })
 }
 
-// RenderDispatchHeaderBar renders the "<repo> <vcs> <glyph>" separator bar
-// for a dispatch result, tinted by result tier (success/warning/error) and
-// stretched to width. It is a single Style.Render() call over unstyled
-// content so the background/foreground span the whole bar with no gaps.
-// dark selects the dark or light terminal-background color variant — pass
-// HasDarkBackground() from the CLI path, or the TUI's own
-// tea.BackgroundColorMsg-derived value.
-func RenderDispatchHeaderBar(res runner.Result, width int, dark bool) string {
+// RenderDispatchResultBar renders the same block as RenderDispatchResult with
+// the delimiter lines drawn as full-width status-tinted background bars,
+// resolved for a dark (dark=true) or light terminal background.
+func RenderDispatchResultBar(res runner.Result, width int, dark bool) string {
 	tier := theme.BarTierFor(res.Err, res.ExitCode)
-
 	style := lipgloss.NewStyle().
 		Background(lipgloss.Color(theme.BarBackground(tier, dark))).
 		Foreground(lipgloss.Color(theme.BarForeground(tier, dark))).
 		Width(width)
 
-	glyph := "✓"
-	if tier != theme.BarSuccess {
-		glyph = "✗"
-	}
-
-	return style.Render(fmt.Sprintf("%s %s ", FormatDispatchHeader(res.RepoName, res.VCS), glyph))
+	return renderDispatchBlock(res, func(s string) string { return style.Render(s) })
 }
 
-// RenderDispatchResult renders one repo's dispatch result as a delimited
-// block for non-interactive output: a "=== <name> (<vcs>) ===" open line,
-// the command output verbatim, and a "=== <name> <status> ===" close line
-// where status is "✓ exit 0", "✗ exit N", or "✗ error". When the command
-// produced no output the two lines collapse into one. On a TTY the delimiter
-// lines are tinted by result status; ui.Print strips the color when stdout
-// is redirected. The TUI uses RenderDispatchHeaderBar instead.
-func RenderDispatchResult(res runner.Result) string {
-	style := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipglossColor(theme.BarTierColor(theme.BarTierFor(res.Err, res.ExitCode))))
-
+func renderDispatchBlock(res runner.Result, delim func(string) string) string {
 	label := res.RepoName
 	if res.VCS != "" {
 		label += " (" + res.VCS + ")"
 	}
 
-	status := dispatchStatus(res)
-	output := strings.TrimRight(res.Output, "\n")
+	body := strings.TrimRight(res.Output, "\n")
+	if res.Err != nil {
+		if body != "" {
+			body += "\n"
+		}
 
-	if output == "" {
-		return style.Render(fmt.Sprintf("=== %s %s ===", label, status))
+		body += "error: " + res.Err.Error()
 	}
 
-	return style.Render(fmt.Sprintf("=== %s ===", label)) + "\n" +
-		output + "\n" +
-		style.Render(fmt.Sprintf("=== %s %s ===", res.RepoName, status))
+	status := dispatchStatus(res)
+
+	if body == "" {
+		return delim(fmt.Sprintf("=== %s %s ===", label, status))
+	}
+
+	return delim(fmt.Sprintf("=== %s ===", label)) + "\n" +
+		body + "\n" +
+		delim(fmt.Sprintf("=== %s %s ===", res.RepoName, status))
 }
 
 func dispatchStatus(res runner.Result) string {
