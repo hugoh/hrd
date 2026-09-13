@@ -88,12 +88,13 @@ func RunCommand(
 	args []string,
 	interactive bool,
 ) (RunResult, error) {
-	return runCommand(ctx, binary, path, args, interactive, defaultNonInteractiveTimeout)
+	return runCommandTimeout(ctx, binary, path, args, interactive, defaultNonInteractiveTimeout)
 }
 
-// runCommand is RunCommand with the non-interactive timeout overridable,
-// for tests that need it shorter than defaultNonInteractiveTimeout.
-func runCommand(
+// runCommandTimeout is RunCommand with the non-interactive timeout
+// overridable, for tests that need it shorter than
+// defaultNonInteractiveTimeout.
+func runCommandTimeout(
 	ctx context.Context,
 	binary string,
 	path string,

@@ -123,7 +123,7 @@ func TestRunCommand_InteractiveDoesNotSetPromptEnv(t *testing.T) {
 }
 
 func TestRunCommand_NonInteractiveTimesOut(t *testing.T) {
-	_, err := runCommand(
+	_, err := runCommandTimeout(
 		t.Context(),
 		"sh",
 		"",
@@ -145,7 +145,7 @@ func TestRunCommand_NonInteractiveDoesNotHangOnOrphanedChild(t *testing.T) {
 	// full lifetime even though the context deadline fired immediately.
 	start := time.Now()
 
-	_, err := runCommand(
+	_, err := runCommandTimeout(
 		t.Context(),
 		"sh",
 		"",
