@@ -21,22 +21,6 @@ var ErrNoArgs = errors.New("no arguments provided")
 // stuck repo can't stall an entire bulk operation forever.
 const defaultNonInteractiveTimeout = 2 * time.Minute
 
-// commandOptions holds RunCommand tuning knobs, set via Option funcs.
-type commandOptions struct {
-	timeout time.Duration
-}
-
-// Option configures RunCommand behavior beyond its required parameters.
-type Option func(*commandOptions)
-
-// WithTimeout overrides the default non-interactive subprocess timeout.
-// Ignored when interactive is true.
-func WithTimeout(d time.Duration) Option {
-	return func(o *commandOptions) {
-		o.timeout = d
-	}
-}
-
 // gitSSHCommandEnv returns the GIT_SSH_COMMAND value to use for
 // non-interactive runs: ssh's own -oBatchMode=yes, which makes ssh fail
 // immediately on a passphrase prompt or an unknown/changed host key
@@ -93,9 +77,8 @@ func ExtractExitCode(err error) (int, bool) {
 // (GIT_TERMINAL_PROMPT=0, GIT_SSH_COMMAND with -oBatchMode=yes) so a repo
 // needing auth fails fast instead of blocking on /dev/tty — which callers
 // running many repos concurrently (or under a TUI that owns the terminal)
-// could never satisfy anyway. A bounded timeout (defaultNonInteractiveTimeout,
-// override via WithTimeout) backstops any prompt path these env vars don't
-// cover.
+// could never satisfy anyway. A bounded timeout (defaultNonInteractiveTimeout)
+// backstops any prompt path these env vars don't cover.
 // ExitError is unwrapped: the exit code is set on the result and the error is
 // cleared (non-zero exit is not considered an infrastructure failure).
 func RunCommand(
@@ -104,17 +87,24 @@ func RunCommand(
 	path string,
 	args []string,
 	interactive bool,
-	opts ...Option,
 ) (RunResult, error) {
-	options := commandOptions{timeout: defaultNonInteractiveTimeout}
-	for _, opt := range opts {
-		opt(&options)
-	}
+	return runCommand(ctx, binary, path, args, interactive, defaultNonInteractiveTimeout)
+}
 
+// runCommand is RunCommand with the non-interactive timeout overridable,
+// for tests that need it shorter than defaultNonInteractiveTimeout.
+func runCommand(
+	ctx context.Context,
+	binary string,
+	path string,
+	args []string,
+	interactive bool,
+	timeout time.Duration,
+) (RunResult, error) {
 	if !interactive {
 		var cancel context.CancelFunc
 
-		ctx, cancel = context.WithTimeout(ctx, options.timeout)
+		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
 
@@ -131,7 +121,7 @@ func RunCommand(
 		// that pipe for the grandchild's entire lifetime, regardless of
 		// ctx cancellation — WaitDelay bounds that drain the same way the
 		// context above bounds the process itself.
-		cmd.WaitDelay = options.timeout
+		cmd.WaitDelay = timeout
 	}
 
 	var buf bytes.Buffer
