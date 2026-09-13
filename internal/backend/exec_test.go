@@ -123,13 +123,13 @@ func TestRunCommand_InteractiveDoesNotSetPromptEnv(t *testing.T) {
 }
 
 func TestRunCommand_NonInteractiveTimesOut(t *testing.T) {
-	_, err := RunCommand(
+	_, err := runCommandTimeout(
 		t.Context(),
 		"sh",
 		"",
 		[]string{"-c", "sleep 60"},
 		false,
-		WithTimeout(50*time.Millisecond),
+		50*time.Millisecond,
 	)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
@@ -145,13 +145,13 @@ func TestRunCommand_NonInteractiveDoesNotHangOnOrphanedChild(t *testing.T) {
 	// full lifetime even though the context deadline fired immediately.
 	start := time.Now()
 
-	_, err := RunCommand(
+	_, err := runCommandTimeout(
 		t.Context(),
 		"sh",
 		"",
 		[]string{"-c", "sleep 3 &"},
 		false,
-		WithTimeout(50*time.Millisecond),
+		50*time.Millisecond,
 	)
 	elapsed := time.Since(start)
 
