@@ -6,12 +6,13 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"html/template"
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/hugoh/hrd/backends/git"
@@ -159,7 +160,7 @@ func collectFlags(c *cobra.Command) []flagDoc {
 		})
 	})
 
-	sort.Slice(flags, func(i, j int) bool { return flags[i].Name < flags[j].Name })
+	slices.SortFunc(flags, func(a, b flagDoc) int { return cmp.Compare(a.Name, b.Name) })
 
 	return flags
 }
