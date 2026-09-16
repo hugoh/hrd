@@ -16,6 +16,10 @@ var (
 
 	styleBold = lipgloss.NewStyle().
 			Bold(true)
+
+	styleHintKey = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color(theme.ColorCode("cyan")))
 )
 
 const (
