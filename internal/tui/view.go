@@ -174,6 +174,12 @@ func (m *model) renderHeader() string {
 	return left + strings.Repeat(" ", pad) + right
 }
 
+// renderHint renders a "key:label" hint with the key highlighted and the
+// label muted.
+func renderHint(key, label string) string {
+	return styleHintKey.Render(key) + ui.MutedStyle().Render(":"+label)
+}
+
 func (m *model) renderHeaderRight() string {
 	var right string
 
@@ -197,14 +203,14 @@ func (m *model) renderHeaderRight() string {
 			dk = b.key
 		}
 
-		parts = append(parts, dk+":"+b.label)
+		parts = append(parts, renderHint(dk, b.label))
 	}
 
 	if m.screen == screenMain {
-		parts = append(parts, "q:quit")
+		parts = append(parts, renderHint("q", "quit"))
 	}
 
-	return right + ui.Muted(" "+strings.Join(parts, " "))
+	return right + " " + strings.Join(parts, " ")
 }
 
 func (m *model) renderInputLine() string {
@@ -228,10 +234,10 @@ func (*model) renderFooter() string {
 			dk = b.key
 		}
 
-		parts = append(parts, dk+":"+b.label)
+		parts = append(parts, renderHint(dk, b.label))
 	}
 
-	return ui.MutedStyle().Render(strings.Join(parts, " "))
+	return strings.Join(parts, " ")
 }
 
 func (m *model) outputView() string {
@@ -347,7 +353,16 @@ func (m *model) helpView() string {
 
 	header := styleHeader.Render(" Help ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	footer := ui.MutedStyle().Render(" ↑/↓:scroll  j/k:scroll  Esc/q:close")
+	footer := " " + renderHint(
+		"↑/↓",
+		"scroll",
+	) + "  " + renderHint(
+		"j/k",
+		"scroll",
+	) + "  " + renderHint(
+		"Esc/q",
+		"close",
+	)
 
 	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.helpViewport.View(), sep, footer)
 }
@@ -432,7 +447,7 @@ func buildHelp(bindings []binding) string {
 		bld.WriteString(":\n")
 
 		for _, e := range grouped[sec] {
-			fmt.Fprintf(&bld, "  %-6s %s\n", e.key, e.desc)
+			fmt.Fprintf(&bld, "  %s %s\n", styleHintKey.Render(fmt.Sprintf("%-6s", e.key)), e.desc)
 		}
 
 		bld.WriteString("\n")
@@ -446,8 +461,16 @@ func buildHelp(bindings []binding) string {
 
 	bld.WriteString("\n")
 	bld.WriteString("General:\n")
-	bld.WriteString("  q      Quit (or go back from screens)\n")
-	bld.WriteString("  Ctrl+C Cancel execution / Quit")
+	fmt.Fprintf(
+		&bld,
+		"  %s Quit (or go back from screens)\n",
+		styleHintKey.Render(fmt.Sprintf("%-6s", "q")),
+	)
+	fmt.Fprintf(
+		&bld,
+		"  %s Cancel execution / Quit",
+		styleHintKey.Render(fmt.Sprintf("%-6s", "Ctrl+C")),
+	)
 
 	return bld.String()
 }
