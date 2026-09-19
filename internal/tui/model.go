@@ -218,6 +218,10 @@ type model struct {
 
 	statusCh <-chan runner.StatusResult
 
+	// layout is the geometry last applied to the sized components; see
+	// syncLayout.
+	layout layoutKey
+
 	output viewport.Model
 
 	// progress is the animated exec-progress bar. execCmd resets it at the
@@ -229,6 +233,8 @@ type model struct {
 
 	stateFile string
 	persState PersistentState
+	stateSeq  uint64
+	statePipe *stateWriter
 }
 
 //nolint:funlen // model initialization with many setup steps
@@ -440,13 +446,33 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
+// quit flushes state synchronously: unlike every other save it must finish
+// before the program exits.
 func (m *model) quit() {
 	m.pushSelectionHistory()
-	m.savePersState()
+
+	snap, seq := m.snapshotState()
+	_ = m.stateOut().write(m.stateFile, seq, snap)
+
 	m.execCancelAll()
 }
 
-func (m *model) savePersState() {
+// savePersState returns a Cmd that persists the current selection and
+// history, so the disk write happens off the Update goroutine.
+func (m *model) savePersState() tea.Cmd {
+	snap, seq := m.snapshotState()
+	w, path := m.stateOut(), m.stateFile
+
+	return func() tea.Msg {
+		_ = w.write(path, seq, snap)
+
+		return nil
+	}
+}
+
+// snapshotState refreshes the persisted selection fields and returns a copy
+// safe to hand to another goroutine (history slices are edited in place).
+func (m *model) snapshotState() (PersistentState, uint64) {
 	repos := make([]string, 0, len(m.selected))
 	for _, name := range m.repoOrder {
 		if m.selected[name] {
@@ -457,7 +483,22 @@ func (m *model) savePersState() {
 	slices.Sort(repos)
 	m.persState.LastRepos = repos
 	m.persState.LastGroup = m.groupFilter
-	_ = saveState(m.stateFile, m.persState)
+
+	snap := m.persState
+	snap.History = slices.Clone(snap.History)
+	snap.SelectionHistory = slices.Clone(snap.SelectionHistory)
+
+	m.stateSeq++
+
+	return snap, m.stateSeq
+}
+
+func (m *model) stateOut() *stateWriter {
+	if m.statePipe == nil {
+		m.statePipe = &stateWriter{}
+	}
+
+	return m.statePipe
 }
 
 func (m *model) execCancelAll() {
@@ -486,6 +527,39 @@ func (m *model) contentHeight() int {
 	}
 
 	return h
+}
+
+// layoutKey is everything the components' sizes depend on.
+type layoutKey struct {
+	width, height int
+	inputLine     bool
+}
+
+// syncLayout resizes every sized component to the current terminal size and
+// input-line state. It runs at the end of Update so View stays a pure
+// function of the model; it is a no-op until the geometry changes.
+func (m *model) syncLayout() {
+	key := layoutKey{m.width, m.height, m.commandOpen || m.filterOpen}
+	if !m.ready || key == m.layout {
+		return
+	}
+
+	m.layout = key
+
+	h := m.contentHeight()
+
+	m.repoTable.SetHeight(h)
+	m.repoTable.SetWidth(m.width)
+	m.output.SetWidth(m.width)
+	m.output.SetHeight(h)
+	m.helpViewport.SetWidth(m.width)
+	m.helpViewport.SetHeight(h)
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(h)
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(h)
+	m.input.SetWidth(m.inputWidth())
+	m.filterInput.SetWidth(m.inputWidth())
 }
 
 // inputWidth returns the usable width for the command input field.

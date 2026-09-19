@@ -3,20 +3,58 @@ package tui
 import (
 	"fmt"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/hugoh/hrd/internal/config"
 )
 
-// reloadConfig re-reads config from disk. New repos are auto-selected only
-// if the whole prior selection was "all" — treating that as a standing
-// mode rather than a frozen snapshot — otherwise a refresh could silently
-// expand a curated selection. On a read error, m and its derived state are
-// left untouched.
-func (m *model) reloadConfig() error {
-	fresh, _, err := config.LoadResolved(m.opts.ConfigPath)
-	if err != nil {
-		return fmt.Errorf("reloading config: %w", err)
+// The config file is read and written from Cmd goroutines, never from
+// Update, so a slow disk can't freeze the UI.
+
+// configLoadedMsg delivers a config re-read from disk.
+type configLoadedMsg struct {
+	cfg config.Config
+	err error
+}
+
+// groupSavedMsg reports the outcome of adding the selection to a group; cfg
+// is the merged config that was written.
+type groupSavedMsg struct {
+	cfg config.Config
+	err error
+}
+
+func loadConfigCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		fresh, _, err := config.LoadResolved(path)
+		if err != nil {
+			return configLoadedMsg{err: fmt.Errorf("reloading config: %w", err)}
+		}
+
+		return configLoadedMsg{cfg: fresh}
+	}
+}
+
+func (m *model) handleConfigLoaded(msg configLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.modal = modalAlert
+		m.alertMsg = "reload config failed: " + msg.err.Error()
+	} else {
+		m.applyConfig(msg.cfg)
 	}
 
+	m.loading = true
+
+	cmd := loadStatusesCmd(m)
+	m.updateTableRows()
+
+	return m, cmd
+}
+
+// applyConfig swaps in a freshly loaded config. New repos are auto-selected
+// only if the whole prior selection was "all" — treating that as a standing
+// mode rather than a frozen snapshot — otherwise a refresh could silently
+// expand a curated selection.
+func (m *model) applyConfig(fresh config.Config) {
 	newSelected := m.rebuildSelection(fresh)
 
 	newGroupFilter := m.groupFilter
@@ -40,8 +78,6 @@ func (m *model) reloadConfig() error {
 	m.updateTableRows()
 
 	m.restoreCursorByName(cursorName)
-
-	return nil
 }
 
 func (m *model) rebuildSelection(fresh config.Config) map[string]bool {
@@ -89,34 +125,31 @@ func (m *model) restoreCursorByName(name string) {
 	}
 }
 
-// mutateConfig reloads, mutates, and saves — the only safe way for the TUI
-// to persist a change without clobbering a concurrent external write (e.g.
-// a `hrd repo add` run while the TUI was open) with a stale in-memory copy.
-// mutate must guard against names no longer present in the freshly loaded
-// config rather than assuming the caller's selection is still valid.
-func (m *model) mutateConfig(mutate func(cfg *config.Config)) error {
-	fresh, err := config.Load(m.opts.ConfigPath)
+// mutateConfigFile reloads the config, applies mutate, and saves — the only
+// safe way for the TUI to persist a change without clobbering a concurrent
+// external write (e.g. a `hrd repo add` run while the TUI was open) with a
+// stale in-memory copy. mutate must guard against names no longer present in
+// the freshly loaded config rather than assuming the caller's selection is
+// still valid. It returns the merged config that was written.
+func mutateConfigFile(path string, mutate func(cfg *config.Config)) (config.Config, error) {
+	fresh, err := config.Load(path)
 	if err != nil {
-		return fmt.Errorf("reloading config: %w", err)
+		return config.Config{}, fmt.Errorf("reloading config: %w", err)
 	}
 
 	mutate(&fresh)
 
-	if err := config.Save(m.opts.ConfigPath, fresh); err != nil {
-		return fmt.Errorf("saving config: %w", err)
+	if err := config.Save(path, fresh); err != nil {
+		return config.Config{}, fmt.Errorf("saving config: %w", err)
 	}
 
-	m.cfg = fresh
-
-	return nil
+	return fresh, nil
 }
 
-// addSelectedToGroup tags the currently selected repos into group, via
-// mutateConfig so a repo removed concurrently isn't resurrected.
-func (m *model) addSelectedToGroup(group string) error {
-	names := m.selectedNames()
-
-	return m.mutateConfig(func(cfg *config.Config) {
+// addToGroup tags names into group, skipping any repo removed concurrently
+// so it isn't resurrected.
+func addToGroup(names []string, group string) func(cfg *config.Config) {
+	return func(cfg *config.Config) {
 		for _, repoName := range names {
 			if _, ok := cfg.Repos[repoName]; !ok {
 				continue
@@ -124,5 +157,34 @@ func (m *model) addSelectedToGroup(group string) error {
 
 			cfg.AddRepoToGroup(repoName, group)
 		}
-	})
+	}
+}
+
+// saveGroupCmd adds the currently selected repos to group in the config file.
+func (m *model) saveGroupCmd(group string) tea.Cmd {
+	path, names := m.opts.ConfigPath, m.selectedNames()
+
+	return func() tea.Msg {
+		fresh, err := mutateConfigFile(path, addToGroup(names, group))
+
+		return groupSavedMsg{cfg: fresh, err: err}
+	}
+}
+
+func (m *model) handleGroupSaved(msg groupSavedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.modal = modalAlert
+		m.alertMsg = "save failed: " + msg.err.Error()
+
+		return m, nil
+	}
+
+	m.cfg = msg.cfg
+
+	if m.screen == screenGroup {
+		m.groupNewInput = false
+		m.screen = screenMain
+	}
+
+	return m, nil
 }

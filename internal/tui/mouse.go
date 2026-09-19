@@ -85,7 +85,8 @@ func (m *model) handleMainScreenClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd
 		name := names[m.cursor]
 		m.selected[name] = !m.selected[name]
 		m.updateTableRows()
-		m.savePersState()
+
+		return m, m.savePersState()
 	}
 
 	return m, nil

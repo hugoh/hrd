@@ -593,7 +593,9 @@ func TestHandleGroupEnterAddModeExistingGroup(t *testing.T) {
 
 	_, cmd := m.handleGroupEnter()
 
-	assert.Nil(t, cmd, "expected nil cmd after adding to existing group")
+	require.NotNil(t, cmd, "expected a save cmd after adding to existing group")
+	feed(m, cmd)
+
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.Len(t, m.cfg.Groups["work"].Repos, 2, "expected 2 repos in work group")
 }
@@ -617,7 +619,9 @@ func TestHandleGroupEnterAddModeSaveFailure(t *testing.T) {
 
 	_, cmd := m.handleGroupEnter()
 
-	assert.Nil(t, cmd, "expected nil cmd on save failure")
+	require.NotNil(t, cmd, "expected a save cmd")
+	feed(m, cmd)
+
 	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert on save failure")
 	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set on save failure")
 }
@@ -685,7 +689,9 @@ func TestHandleGroupNewInputEnter(t *testing.T) {
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	assert.Nil(t, cmd, "expected nil cmd after creating new group")
+	require.NotNil(t, cmd, "expected a save cmd after creating new group")
+	feed(m, cmd)
+
 	assert.False(t, m.groupNewInput, "groupNewInput should be false after Enter")
 	assert.Equal(t, screenMain, m.screen, "screen")
 	assert.Contains(t, m.cfg.Groups, "my-group", "my-group should exist in config after creation")
@@ -732,7 +738,9 @@ func TestHandleGroupNewInputEnterSaveFailure(t *testing.T) {
 
 	_, cmd := m.handleGroupNewInput(tea.KeyPressMsg{Code: tea.KeyEnter})
 
-	assert.Nil(t, cmd, "expected nil cmd on save failure")
+	require.NotNil(t, cmd, "expected a save cmd")
+	feed(m, cmd)
+
 	assert.True(t, m.groupNewInput, "groupNewInput should remain true on save failure")
 	assert.Equal(t, modalAlert, m.modal, "modal should be modalAlert on save failure")
 	assert.NotEmpty(t, m.alertMsg, "alertMsg should be set on save failure")

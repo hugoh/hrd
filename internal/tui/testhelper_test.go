@@ -101,6 +101,8 @@ func baseModel(repoOrder []string, selected map[string]bool) *model {
 // tea.Msg through Update().
 func readyModel(repoOrder []string, selected map[string]bool) *model {
 	m := baseModel(repoOrder, selected)
+	m.initHistoryList()
+	m.initGroupList()
 	m.ready = true
 
 	return m

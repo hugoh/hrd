@@ -17,6 +17,13 @@ import (
 )
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	m.syncLayout()
+
+	return next, cmd
+}
+
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
@@ -55,6 +62,18 @@ func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	return m.handleDiskMsg(msg)
+}
+
+// handleDiskMsg dispatches the results of config-file Cmds.
+func (m *model) handleDiskMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case configLoadedMsg:
+		return m.handleConfigLoaded(msg)
+	case groupSavedMsg:
+		return m.handleGroupSaved(msg)
+	}
+
 	return m, nil
 }
 
@@ -71,19 +90,6 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 	m.ready = true
-
-	m.repoTable.SetHeight(m.contentHeight())
-	m.repoTable.SetWidth(m.width)
-	m.output.SetWidth(msg.Width)
-	m.output.SetHeight(m.contentHeight())
-	m.helpViewport.SetWidth(m.width)
-	m.helpViewport.SetHeight(m.contentHeight())
-	m.historyList.SetWidth(m.width)
-	m.historyList.SetHeight(m.contentHeight())
-	m.groupList.SetWidth(m.width)
-	m.groupList.SetHeight(m.contentHeight())
-	m.input.SetWidth(m.inputWidth())
-	m.filterInput.SetWidth(m.inputWidth())
 
 	const (
 		statusWPad = 6

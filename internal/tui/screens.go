@@ -73,12 +73,12 @@ func (m *model) handleGroupFilterSelect(selected string) (tea.Model, tea.Cmd) {
 	m.screen = screenMain
 	m.loading = true
 	m.pushSelectionHistory()
-	m.savePersState()
+	save := m.savePersState()
 
 	cmd := loadStatusesCmd(m)
 	m.updateTableRows()
 
-	return m, cmd
+	return m, tea.Batch(save, cmd)
 }
 
 func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
@@ -92,16 +92,7 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if err := m.addSelectedToGroup(selected); err != nil {
-		m.modal = modalAlert
-		m.alertMsg = "save failed: " + err.Error()
-
-		return m, nil
-	}
-
-	m.screen = screenMain
-
-	return m, nil
+	return m, m.saveGroupCmd(selected)
 }
 
 func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -123,17 +114,7 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if err := m.addSelectedToGroup(name); err != nil {
-			m.modal = modalAlert
-			m.alertMsg = "save failed: " + err.Error()
-
-			return m, nil
-		}
-
-		m.groupNewInput = false
-		m.screen = screenMain
-
-		return m, nil
+		return m, m.saveGroupCmd(name)
 	case keyEsc:
 		m.groupNewInput = false
 
@@ -227,13 +208,13 @@ func (m *model) handleSelHistoryRestore(repos []string) (tea.Model, tea.Cmd) {
 	m.mode = modeNormal
 	m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
 	m.pushSelectionHistory()
-	m.savePersState()
+	save := m.savePersState()
 	m.screen = screenMain
 
 	cmd := loadStatusesCmd(m)
 	m.updateTableRows()
 
-	return m, cmd
+	return m, tea.Batch(save, cmd)
 }
 
 func openGroupPopup(m *model, mode groupMode) {

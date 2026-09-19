@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,6 +15,37 @@ func writeConfigFile(t *testing.T, path, toml string) {
 	t.Helper()
 
 	require.NoError(t, os.WriteFile(path, []byte(toml), 0o600))
+}
+
+// reloadConfig is a synchronous stand-in for the loadConfigCmd +
+// handleConfigLoaded round trip, so the selection/cursor rebuild logic can
+// be tested without a runtime.
+func (m *model) reloadConfig() error {
+	fresh, _, err := config.LoadResolved(m.opts.ConfigPath)
+	if err != nil {
+		return fmt.Errorf("reloading config: %w", err)
+	}
+
+	m.applyConfig(fresh)
+
+	return nil
+}
+
+// mutateConfig is a synchronous stand-in for the Cmd that runs
+// mutateConfigFile, applying the merged result the way handleGroupSaved does.
+func (m *model) mutateConfig(mutate func(cfg *config.Config)) error {
+	fresh, err := mutateConfigFile(m.opts.ConfigPath, mutate)
+	if err != nil {
+		return err
+	}
+
+	m.cfg = fresh
+
+	return nil
+}
+
+func (m *model) addSelectedToGroup(group string) error {
+	return m.mutateConfig(addToGroup(m.selectedNames(), group))
 }
 
 // newAlphaModel creates a model backed by a config file with a single repo

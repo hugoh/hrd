@@ -120,9 +120,6 @@ func newTerminalProgress(done, total int, failed bool) *tea.ProgressBar {
 func (m *model) mainView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 
-	m.repoTable.SetHeight(m.contentHeight())
-	m.repoTable.SetWidth(m.width)
-
 	var tableContent string
 
 	switch {
@@ -361,8 +358,6 @@ func (m *model) outputView() string {
 	}
 
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	m.output.SetWidth(m.width)
-	m.output.SetHeight(m.contentHeight())
 
 	var left, right string
 
@@ -390,9 +385,11 @@ func (m *model) outputView() string {
 		// Width adapts to the TUI's own tracked width (from
 		// tea.WindowSizeMsg) rather than a fixed constant, so the bar grows
 		// on a wide terminal instead of staying pinned at its initial size.
-		m.progress.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
+		// Sized on a copy: View must not mutate the model.
+		bar := m.progress
+		bar.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
 
-		left = " " + m.progress.View() + suffix
+		left = " " + bar.View() + suffix
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}
@@ -455,9 +452,6 @@ func (m *model) coloredSummary() string {
 // --- Full-screen views ------------------------------------------------------
 
 func (m *model) helpView() string {
-	m.helpViewport.SetWidth(m.width)
-	m.helpViewport.SetHeight(m.contentHeight())
-
 	header := styleHeader.Render(" Help ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := " " + renderHint(
@@ -478,9 +472,6 @@ func (m *model) groupView() string {
 	if m.groupNewInput {
 		return m.groupNewInputView()
 	}
-
-	m.groupList.SetWidth(m.width)
-	m.groupList.SetHeight(m.contentHeight())
 
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
@@ -518,9 +509,6 @@ func (m *model) selHistoryView() string {
 	if len(m.persState.SelectionHistory) == 0 {
 		return ""
 	}
-
-	m.historyList.SetWidth(m.width)
-	m.historyList.SetHeight(m.contentHeight())
 
 	header := styleHeader.Render(" Selection History ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
