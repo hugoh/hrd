@@ -17,13 +17,13 @@ import (
 )
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	next, cmd := m.update(msg)
+	next, cmd := m.route(msg)
 	m.syncLayout()
 
 	return next, cmd
 }
 
-func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) route(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
@@ -150,7 +150,6 @@ func (m *model) handleProgressFrame(msg progress.FrameMsg) (tea.Model, tea.Cmd) 
 	return m, cmd
 }
 
-//nolint:cyclop // key dispatch with multiple screens
 func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c":
@@ -159,38 +158,47 @@ func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Suspend
 	}
 
-	if m.modal == modalAlert {
-		key := msg.String()
-
-		m.dismissAlert()
-
-		// Esc, and q outside a text input, only dismiss; any other key also
-		// acts normally so an alert never costs the user a keypress.
-		if key == keyEsc || (key == "q" && !m.textInputFocused()) {
-			return m, nil
-		}
+	if m.modal == modalAlert && m.dismissAlertForKey(msg.String()) {
+		return m, nil
 	}
 
-	if m.commandOpen {
-		return m.handleInputKey(msg)
+	if m.textInputFocused() {
+		return m.handleFocusedInputKey(msg)
 	}
 
-	if m.filterOpen {
-		return m.handleFilterKey(msg)
-	}
-
-	if m.groupNewInput {
-		return m.handleGroupNewInput(msg)
-	}
-
-	if msg.String() == "q" {
+	switch msg.String() {
+	case "q":
 		return m.handleQKey()
-	}
-
-	if msg.String() == keyEsc {
+	case keyEsc:
 		return m.handleEscKey()
 	}
 
+	return m.handleScreenKey(msg)
+}
+
+// dismissAlertForKey clears the alert on any key and reports whether the key
+// was consumed by doing so. Esc, and q outside a text input, only dismiss;
+// any other key also acts normally so an alert never costs the user a
+// keypress.
+func (m *model) dismissAlertForKey(key string) bool {
+	m.dismissAlert()
+
+	return key == keyEsc || (key == "q" && !m.textInputFocused())
+}
+
+// handleFocusedInputKey routes a key to whichever text input has focus.
+func (m *model) handleFocusedInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case m.commandOpen:
+		return m.handleInputKey(msg)
+	case m.filterOpen:
+		return m.handleFilterKey(msg)
+	default:
+		return m.handleGroupNewInput(msg)
+	}
+}
+
+func (m *model) handleScreenKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case screenMain:
 		return m.handleMainKey(msg)

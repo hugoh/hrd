@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func tickOf(t *testing.T, s spinner.Model) spinner.TickMsg {
+func tickOf(t *testing.T, s *spinner.Model) spinner.TickMsg {
 	t.Helper()
 
 	tick, ok := s.Tick().(spinner.TickMsg)
@@ -61,7 +61,7 @@ func TestSpinnerTickReArmsOnlyWhileAnimating(t *testing.T) {
 			m.executing = tt.executing
 			m.pending = tt.pending
 
-			_, cmd := m.handleSpinnerTick(tickOf(t, m.spinner))
+			_, cmd := m.handleSpinnerTick(tickOf(t, &m.spinner))
 
 			if tt.wantCmd {
 				require.NotNil(t, cmd)
@@ -80,7 +80,7 @@ func TestRowSpinnerRedrawsPendingRowsOnTick(t *testing.T) {
 	m.updateTableRows()
 	before := m.repoTable.Rows()[0][0]
 
-	m.handleSpinnerTick(tickOf(t, m.rowSpinner))
+	m.handleSpinnerTick(tickOf(t, &m.rowSpinner))
 
 	require.NotEqual(t, before, m.repoTable.Rows()[0][0], "row spinner frame should advance")
 }

@@ -83,7 +83,9 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	m.updateTableRows()
 	m.pushSelectionHistory()
 
-	return m, m.savePersState()
+	save := m.savePersState()
+
+	return m, save
 }
 
 func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {

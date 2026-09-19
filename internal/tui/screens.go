@@ -92,7 +92,9 @@ func (m *model) handleGroupAddSelect(selected string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	return m, m.saveGroupCmd(selected)
+	save := m.saveGroupCmd(selected)
+
+	return m, save
 }
 
 func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -114,7 +116,9 @@ func (m *model) handleGroupNewInput(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		return m, m.saveGroupCmd(name)
+		save := m.saveGroupCmd(name)
+
+		return m, save
 	case keyEsc:
 		m.groupNewInput = false
 
