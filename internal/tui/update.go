@@ -17,6 +17,13 @@ import (
 )
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.route(msg)
+	m.syncLayout()
+
+	return next, cmd
+}
+
+func (m *model) route(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleWindowSize(msg)
@@ -38,7 +45,7 @@ func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusUpdateMsg:
 		return m.handleStatusUpdate(msg)
 	case statusDoneMsg:
-		return m.handleStatusDone()
+		return m.handleStatusDone(msg)
 	case spinner.TickMsg:
 		return m.handleSpinnerTick(msg)
 	case progress.FrameMsg:
@@ -50,31 +57,39 @@ func (m *model) handleAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vcsCompletionsMsg:
 		return m.handleVCSCompletions(msg)
 	case tea.BackgroundColorMsg:
-		m.darkBackground = msg.IsDark()
+		m.applyBackground(msg.IsDark())
 
 		return m, nil
 	}
 
+	return m.handleDiskMsg(msg)
+}
+
+// handleDiskMsg dispatches the results of config-file Cmds.
+func (m *model) handleDiskMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case configLoadedMsg:
+		return m.handleConfigLoaded(msg)
+	case groupSavedMsg:
+		return m.handleGroupSaved(msg)
+	}
+
 	return m, nil
+}
+
+// applyBackground re-derives every light/dark-dependent style built at
+// startup, since the terminal's real background only arrives after Init.
+func (m *model) applyBackground(dark bool) {
+	m.darkBackground = dark
+	m.repoTable.SetStyles(tableStyles(m.mode != modeNormal, dark))
+	m.historyList.SetDelegate(defaultItemDelegate(dark))
+	m.groupList.SetDelegate(defaultItemDelegate(dark))
 }
 
 func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 	m.ready = true
-
-	m.repoTable.SetHeight(m.contentHeight())
-	m.repoTable.SetWidth(m.width)
-	m.output.SetWidth(msg.Width)
-	m.output.SetHeight(m.contentHeight())
-	m.helpViewport.SetWidth(m.width)
-	m.helpViewport.SetHeight(m.contentHeight())
-	m.historyList.SetWidth(m.width)
-	m.historyList.SetHeight(m.contentHeight())
-	m.groupList.SetWidth(m.width)
-	m.groupList.SetHeight(m.contentHeight())
-	m.input.SetWidth(m.inputWidth())
-	m.filterInput.SetWidth(m.inputWidth())
 
 	const (
 		statusWPad = 6
@@ -93,51 +108,97 @@ func (m *model) handleWindowSize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleSpinnerTick advances the spinners. Each spinner re-arms its own tick
+// chain through the Cmd its Update returns, so dropping that Cmd once nothing
+// is animating stops the idle redraws; spinnerTicks restarts them.
 func (m *model) handleSpinnerTick(msg spinner.TickMsg) (tea.Model, tea.Cmd) {
 	var headerCmd, rowCmd tea.Cmd
 
 	m.spinner, headerCmd = m.spinner.Update(msg)
 	m.rowSpinner, rowCmd = m.rowSpinner.Update(msg)
 
+	if !m.animating() {
+		return m, nil
+	}
+
+	if len(m.pending) > 0 {
+		m.updateTableRows()
+	}
+
 	return m, tea.Batch(headerCmd, rowCmd)
 }
 
+func (m *model) animating() bool {
+	return m.loading || m.executing || len(m.pending) > 0
+}
+
+// spinnerTicks (re)starts both spinner tick chains. Bubbles drops ticks
+// carrying a stale tag, so starting one while a chain is still alive is
+// harmless.
+func (m *model) spinnerTicks() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, m.rowSpinner.Tick)
+}
+
 // handleProgressFrame advances the exec-progress bar's spring animation one
-// step. progressModel self-perpetuates its own tick chain (the returned Cmd
-// re-arms the next frame) until it settles at its target percent.
+// step. The progress model self-perpetuates its own tick chain (the returned
+// Cmd re-arms the next frame) until it settles at its target percent.
 func (m *model) handleProgressFrame(msg progress.FrameMsg) (tea.Model, tea.Cmd) {
-	updated, cmd := progressModel.Update(msg)
-	progressModel = updated
+	var cmd tea.Cmd
+
+	m.progress, cmd = m.progress.Update(msg)
 
 	return m, cmd
 }
 
-//nolint:cyclop // key dispatch with multiple screens
 func (m *model) handleKeyMsg(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	if msg.String() == "ctrl+c" {
+	switch msg.String() {
+	case "ctrl+c":
 		return m.handleCtrlC()
+	case "ctrl+z":
+		return m, tea.Suspend
 	}
 
-	if m.commandOpen {
-		return m.handleInputKey(msg)
+	if m.modal == modalAlert && m.dismissAlertForKey(msg.String()) {
+		return m, nil
 	}
 
-	if m.filterOpen {
-		return m.handleFilterKey(msg)
+	if m.textInputFocused() {
+		return m.handleFocusedInputKey(msg)
 	}
 
-	if m.groupNewInput {
-		return m.handleGroupNewInput(msg)
-	}
-
-	if msg.String() == "q" {
+	switch msg.String() {
+	case "q":
 		return m.handleQKey()
-	}
-
-	if msg.String() == keyEsc {
+	case keyEsc:
 		return m.handleEscKey()
 	}
 
+	return m.handleScreenKey(msg)
+}
+
+// dismissAlertForKey clears the alert on any key and reports whether the key
+// was consumed by doing so. Esc, and q outside a text input, only dismiss;
+// any other key also acts normally so an alert never costs the user a
+// keypress.
+func (m *model) dismissAlertForKey(key string) bool {
+	m.dismissAlert()
+
+	return key == keyEsc || (key == "q" && !m.textInputFocused())
+}
+
+// handleFocusedInputKey routes a key to whichever text input has focus.
+func (m *model) handleFocusedInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case m.commandOpen:
+		return m.handleInputKey(msg)
+	case m.filterOpen:
+		return m.handleFilterKey(msg)
+	default:
+		return m.handleGroupNewInput(msg)
+	}
+}
+
+func (m *model) handleScreenKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch m.screen {
 	case screenMain:
 		return m.handleMainKey(msg)
@@ -258,15 +319,17 @@ func (m *model) handleCtrlC() (tea.Model, tea.Cmd) {
 	return m, tea.Quit
 }
 
+func (m *model) dismissAlert() {
+	m.modal = modalNone
+	m.alertMsg = ""
+}
+
+func (m *model) textInputFocused() bool {
+	return m.commandOpen || m.filterOpen || m.groupNewInput
+}
+
 func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 	if m.commandOpen {
-		return m, nil
-	}
-
-	if m.modal == modalAlert {
-		m.modal = modalNone
-		m.alertMsg = ""
-
 		return m, nil
 	}
 
@@ -291,15 +354,7 @@ func (m *model) handleQKey() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	// Clear alert on any key.
-	if m.modal == modalAlert {
-		m.modal = modalNone
-		m.alertMsg = ""
-	}
-
-	key := msg.String()
-
-	handler, ok := getKeyHandlers()[key]
+	handler, ok := getKeyHandlers()[msg.String()]
 	if ok {
 		return handler(m)
 	}
@@ -310,24 +365,27 @@ func (m *model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // --- Custom messages --------------------------------------------------------
 
 func (m *model) handleStatusUpdate(msg statusUpdateMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.statusGen {
+		return m, nil
+	}
+
 	m.statuses[msg.result.RepoName] = msg.result
 	delete(m.pending, msg.result.RepoName)
 	m.updateTableRows()
 
-	if m.statusTotal > 0 {
-		m.statusAnyErr = m.statusAnyErr || msg.result.Err != nil
-		done := m.statusTotal - len(m.pending)
-		ui.ProgressOSC(done*progressPercentMax/m.statusTotal, m.statusAnyErr)
-	}
+	m.statusAnyErr = m.statusAnyErr || msg.result.Err != nil
 
 	return m, streamNextStatusCmd(m)
 }
 
-func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
+func (m *model) handleStatusDone(msg statusDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.statusGen {
+		return m, nil
+	}
+
 	m.loading = false
 	m.statusCh = nil
 	clear(m.pending)
-	ui.ProgressOSCDone()
 
 	total := m.totalCount()
 	if m.cursor >= total && total > 0 {
@@ -340,6 +398,10 @@ func (m *model) handleStatusDone() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.execGen {
+		return m, nil
+	}
+
 	if msg.err != nil {
 		m.executing = false
 		m.screen = screenOutput
@@ -361,30 +423,20 @@ func (m *model) handleExecResult(msg execResultMsg) (tea.Model, tea.Cmd) {
 	var progressCmd tea.Cmd
 
 	if m.execTotal > 0 {
-		anyFailed := false
-
-		for _, er := range m.execResults {
-			if er.result.Err != nil || er.result.ExitCode != 0 {
-				anyFailed = true
-
-				break
-			}
-		}
-
-		ui.ProgressOSC(len(m.execResults)*progressPercentMax/m.execTotal, anyFailed)
-
 		pct := float64(len(m.execResults)) / float64(m.execTotal)
-		progressCmd = progressModel.SetPercent(pct)
+		progressCmd = m.progress.SetPercent(pct)
 	}
 
 	return m, tea.Batch(streamNextResult(m), progressCmd)
 }
 
-func (m *model) handleExecDone(_ execDoneMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleExecDone(msg execDoneMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.execGen {
+		return m, nil
+	}
+
 	m.executing = false
 	m.resultsCh = nil
-
-	ui.ProgressOSCDone()
 
 	if m.execSideEffect {
 		m.execSideEffect = false
@@ -424,6 +476,10 @@ func (m *model) handleVCSCompletions(msg vcsCompletionsMsg) (tea.Model, tea.Cmd)
 // --- Internal helpers -------------------------------------------------------
 
 func shortcutCmd(m *model, subcmd string, sideEffect bool) tea.Cmd {
+	if m.executing {
+		return nil
+	}
+
 	selected := m.selectedNames()
 	if len(selected) == 0 {
 		m.modal = modalAlert

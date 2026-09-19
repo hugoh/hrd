@@ -46,12 +46,14 @@ func (m *model) handleSelectToggle() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
+	var save tea.Cmd
+
 	names := m.tableRepos()
 	if m.cursor < len(names) {
 		name := names[m.cursor]
 		m.selected[name] = !m.selected[name]
 		m.updateTableRows()
-		m.savePersState()
+		save = m.savePersState()
 	}
 
 	if m.cursor < len(names)-1 {
@@ -59,7 +61,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 		m.repoTable.SetCursor(m.cursor)
 	}
 
-	return m, nil
+	return m, save
 }
 
 func (m *model) handleSingleToggle() (tea.Model, tea.Cmd) {
@@ -80,9 +82,10 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 
 	m.updateTableRows()
 	m.pushSelectionHistory()
-	m.savePersState()
 
-	return m, nil
+	save := m.savePersState()
+
+	return m, save
 }
 
 func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {

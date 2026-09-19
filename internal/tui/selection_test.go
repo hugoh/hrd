@@ -72,7 +72,7 @@ func TestMainKeyXTogglesSelectMode(t *testing.T) {
 		"mode should remain modeSelect after another x (stays in select mode)",
 	)
 	assert.False(t, m.selected["a"], "repo 'a' should be deselected after x in select mode")
-	assert.Nil(t, cmd, "expected nil cmd")
+	assert.NotNil(t, cmd, "selecting persists state via a save cmd")
 
 	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyEnter})
 	assert.NotEqual(
@@ -92,11 +92,11 @@ func TestMainKeyXSelectsOne(t *testing.T) {
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	assert.False(t, m.selected["a"], "repo 'a' should be deselected after x in select mode")
 	assert.Equal(t, 1, m.cursor, "cursor")
-	assert.Nil(t, cmd, "expected nil cmd")
+	assert.NotNil(t, cmd, "selecting persists state via a save cmd")
 
 	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: 'x'})
 	assert.True(t, m.selected["b"], "repo 'b' should be selected after second x")
-	assert.Nil(t, cmd, "expected nil cmd")
+	assert.NotNil(t, cmd, "selecting persists state via a save cmd")
 }
 
 func TestMainKeySpaceSelectsOne(t *testing.T) {
@@ -107,11 +107,11 @@ func TestMainKeySpaceSelectsOne(t *testing.T) {
 	_, cmd := m.handleMainKey(tea.KeyPressMsg{Code: ' '})
 	assert.False(t, m.selected["a"], "repo 'a' should be deselected after space in select mode")
 	assert.Equal(t, 1, m.cursor, "cursor should advance after space")
-	assert.Nil(t, cmd, "expected nil cmd")
+	assert.NotNil(t, cmd, "selecting persists state via a save cmd")
 
 	_, cmd = m.handleMainKey(tea.KeyPressMsg{Code: ' '})
 	assert.True(t, m.selected["b"], "repo 'b' should be selected after second space")
-	assert.Nil(t, cmd, "expected nil cmd")
+	assert.NotNil(t, cmd, "selecting persists state via a save cmd")
 }
 
 func TestMainKeySSingleToggle(t *testing.T) {

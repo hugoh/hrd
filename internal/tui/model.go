@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
@@ -93,8 +94,11 @@ const (
 	defaultViewW  = 80
 	minInputWidth = 10
 	minContentH   = 3
-	initTableH    = 10
-	initOutputH   = 10
+	// minViewH fits header, two separators, footer and minContentH rows.
+	minViewH    = layoutHeaderH + layoutSepH + minContentH + layoutSepH + layoutFooterH
+	minViewW    = 30
+	initTableH  = 10
+	initOutputH = 10
 
 	listVCSWidth = 3
 	checkboxColW = 2
@@ -104,6 +108,8 @@ const (
 	colStatus = "STATUS"
 
 	initInputW = 40
+
+	cmdPlaceholder = "type a command..."
 
 	labelAll = "all"
 	labelNew = "[new...]"
@@ -179,6 +185,8 @@ type model struct {
 	vcsCache     map[string]string
 	statusTotal  int // repos requested by the current loadStatusesCmd run, for OSC progress
 	statusAnyErr bool
+	statusGen    int
+	statusCancel context.CancelFunc
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -198,6 +206,7 @@ type model struct {
 	execSideEffect bool
 	execTotal      int
 	execCancel     context.CancelFunc
+	execGen        int
 	execResults    []execResult
 	execOutputStr  string
 	// execResultOffsets holds the 0-based line offset in execOutputStr where
@@ -209,12 +218,23 @@ type model struct {
 
 	statusCh <-chan runner.StatusResult
 
+	// layout is the geometry last applied to the sized components; see
+	// syncLayout.
+	layout layoutKey
+
 	output viewport.Model
+
+	// progress is the animated exec-progress bar. execCmd resets it at the
+	// start of every run so it starts at 0 instead of animating backwards
+	// from the previous run's ending value.
+	progress progress.Model
 
 	helpViewport viewport.Model
 
 	stateFile string
 	persState PersistentState
+	stateSeq  uint64
+	statePipe *stateWriter
 }
 
 //nolint:funlen // model initialization with many setup steps
@@ -273,6 +293,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithSpinner(spinner.Jump),
 			spinner.WithStyle(ui.MutedStyle()),
 		),
+		progress:    newProgressBar(),
 		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
 		pending:     make(map[string]bool, len(cfg.Repos)),
 		vcsCache:    make(map[string]string, len(cfg.Repos)),
@@ -300,8 +321,6 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		loadStatusesCmd(m),
-		m.spinner.Tick,
-		m.rowSpinner.Tick,
 		tea.RequestBackgroundColor,
 	)
 }
@@ -345,7 +364,7 @@ func tableStyles(cursorVisible, dark bool) table.Styles {
 
 func (m *model) initInput() {
 	ti := textinput.New()
-	ti.Placeholder = "type a command..."
+	ti.Placeholder = cmdPlaceholder
 	ti.CharLimit = 512
 	ti.SetWidth(initInputW)
 	m.input = ti
@@ -391,7 +410,7 @@ func (m *model) initHelpViewport() {
 
 func (m *model) initHistoryList() {
 	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, m.allRepoSet())
-	m.historyList = initList(defaultItemDelegate(0, m.darkBackground), items, defaultViewW)
+	m.historyList = initList(defaultItemDelegate(m.darkBackground), items, defaultViewW)
 }
 
 // allRepoSet returns the set of all configured repo names.
@@ -405,12 +424,12 @@ func (m *model) allRepoSet() map[string]struct{} {
 }
 
 func (m *model) initGroupList() {
-	m.groupList = initList(defaultItemDelegate(0, m.darkBackground), nil, defaultViewW)
+	m.groupList = initList(defaultItemDelegate(m.darkBackground), nil, defaultViewW)
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.
 func Run(ctx context.Context, opts Options) error {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return errNoTTY
 	}
 
@@ -419,7 +438,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithContext(ctx))
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("bubbletea app: %w", err)
 	}
@@ -427,13 +446,33 @@ func Run(ctx context.Context, opts Options) error {
 	return nil
 }
 
+// quit flushes state synchronously: unlike every other save it must finish
+// before the program exits.
 func (m *model) quit() {
 	m.pushSelectionHistory()
-	m.savePersState()
+
+	snap, seq := m.snapshotState()
+	_ = m.stateOut().write(m.stateFile, seq, snap)
+
 	m.execCancelAll()
 }
 
-func (m *model) savePersState() {
+// savePersState returns a Cmd that persists the current selection and
+// history, so the disk write happens off the Update goroutine.
+func (m *model) savePersState() tea.Cmd {
+	snap, seq := m.snapshotState()
+	w, path := m.stateOut(), m.stateFile
+
+	return func() tea.Msg {
+		_ = w.write(path, seq, snap)
+
+		return nil
+	}
+}
+
+// snapshotState refreshes the persisted selection fields and returns a copy
+// safe to hand to another goroutine (history slices are edited in place).
+func (m *model) snapshotState() (PersistentState, uint64) {
 	repos := make([]string, 0, len(m.selected))
 	for _, name := range m.repoOrder {
 		if m.selected[name] {
@@ -444,15 +483,28 @@ func (m *model) savePersState() {
 	slices.Sort(repos)
 	m.persState.LastRepos = repos
 	m.persState.LastGroup = m.groupFilter
-	_ = saveState(m.stateFile, m.persState)
+
+	snap := m.persState
+	snap.History = slices.Clone(snap.History)
+	snap.SelectionHistory = slices.Clone(snap.SelectionHistory)
+
+	m.stateSeq++
+
+	return snap, m.stateSeq
+}
+
+func (m *model) stateOut() *stateWriter {
+	if m.statePipe == nil {
+		m.statePipe = &stateWriter{}
+	}
+
+	return m.statePipe
 }
 
 func (m *model) execCancelAll() {
 	if m.execCancel != nil {
 		m.execCancel()
 		m.executing = false
-
-		ui.ProgressOSCDone()
 	}
 }
 
@@ -475,6 +527,39 @@ func (m *model) contentHeight() int {
 	}
 
 	return h
+}
+
+// layoutKey is everything the components' sizes depend on.
+type layoutKey struct {
+	width, height int
+	inputLine     bool
+}
+
+// syncLayout resizes every sized component to the current terminal size and
+// input-line state. It runs at the end of Update so View stays a pure
+// function of the model; it is a no-op until the geometry changes.
+func (m *model) syncLayout() {
+	key := layoutKey{m.width, m.height, m.commandOpen || m.filterOpen}
+	if !m.ready || key == m.layout {
+		return
+	}
+
+	m.layout = key
+
+	h := m.contentHeight()
+
+	m.repoTable.SetHeight(h)
+	m.repoTable.SetWidth(m.width)
+	m.output.SetWidth(m.width)
+	m.output.SetHeight(h)
+	m.helpViewport.SetWidth(m.width)
+	m.helpViewport.SetHeight(h)
+	m.historyList.SetWidth(m.width)
+	m.historyList.SetHeight(h)
+	m.groupList.SetWidth(m.width)
+	m.groupList.SetHeight(h)
+	m.input.SetWidth(m.inputWidth())
+	m.filterInput.SetWidth(m.inputWidth())
 }
 
 // inputWidth returns the usable width for the command input field.

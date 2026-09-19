@@ -2,12 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/progress"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/hugoh/hrd/internal/theme"
 	"github.com/hugoh/hrd/internal/ui"
 )
@@ -16,7 +18,7 @@ const (
 	progressBarW = 30
 
 	// progressPercentMax converts a done/total ratio to the 0-100 scale
-	// expected by ui.ProgressOSC.
+	// expected by tea.ProgressBar.
 	progressPercentMax = 100
 )
 
@@ -39,19 +41,38 @@ func newProgressBar() progress.Model {
 	)
 }
 
-// progressModel is the animated exec-progress bar. It's reset fresh (see
-// execCmd) at the start of every exec run so percentShown starts at 0
-// instantly rather than animating backwards from the previous run's ending
-// value.
-//
-//nolint:gochecknoglobals // mutable animation state, reset per exec run
-var progressModel = newProgressBar()
-
 func (m *model) View() tea.View {
 	if !m.ready {
 		return tea.NewView("")
 	}
 
+	var content string
+
+	switch {
+	case m.tooSmall():
+		content = m.tooSmallView()
+	default:
+		content = m.screenView()
+	}
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	v.ProgressBar = m.progressBar()
+
+	return v
+}
+
+func (m *model) tooSmall() bool {
+	return m.width < minViewW || m.height < minViewH
+}
+
+func (m *model) tooSmallView() string {
+	return fmt.Sprintf("Terminal too small (%dx%d)\nneed at least %dx%d",
+		m.width, m.height, minViewW, minViewH)
+}
+
+func (m *model) screenView() string {
 	var content string
 
 	switch m.screen {
@@ -67,29 +88,43 @@ func (m *model) View() tea.View {
 		content = m.selHistoryView()
 	}
 
-	v := tea.NewView(content)
-	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	return content
+}
 
-	return v
+// progressBar reports run progress to terminals that show it in their
+// tab/taskbar (OSC 9;4). It returns nil when nothing is running, which
+// clears the indicator. Declaring it on the View lets the renderer emit it
+// in step with frames instead of writing to stdout behind its back.
+func (m *model) progressBar() *tea.ProgressBar {
+	switch {
+	case m.executing && m.execTotal > 0:
+		_, failed := m.execCounts()
+
+		return newTerminalProgress(len(m.execResults), m.execTotal, failed > 0)
+	case len(m.pending) > 0 && m.statusTotal > 0:
+		return newTerminalProgress(m.statusTotal-len(m.pending), m.statusTotal, m.statusAnyErr)
+	}
+
+	return nil
+}
+
+func newTerminalProgress(done, total int, failed bool) *tea.ProgressBar {
+	state := tea.ProgressBarDefault
+	if failed {
+		state = tea.ProgressBarError
+	}
+
+	return tea.NewProgressBar(state, done*progressPercentMax/total)
 }
 
 func (m *model) mainView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 
-	m.repoTable.SetHeight(m.contentHeight())
-	m.repoTable.SetWidth(m.width)
-
 	var tableContent string
 
 	switch {
 	case m.modal == modalAlert:
-		tableContent = lipgloss.NewStyle().
-			Width(m.width).
-			Height(m.contentHeight()).
-			Align(lipgloss.Center).
-			AlignVertical(lipgloss.Center).
-			Render(m.alertContent())
+		tableContent = m.alertBox()
 	case len(m.repoTable.Rows()) == 0 && m.mode != modeSelect:
 		tableContent = m.emptyTableView()
 	default:
@@ -123,6 +158,17 @@ func (m *model) emptyTableView() string {
 		Render(msg)
 }
 
+// alertBox renders the alert centered over the whole content area, for
+// screens to show in place of their usual body.
+func (m *model) alertBox() string {
+	return lipgloss.NewStyle().
+		Width(m.width).
+		Height(m.contentHeight()).
+		Align(lipgloss.Center).
+		AlignVertical(lipgloss.Center).
+		Render(m.alertContent())
+}
+
 func (m *model) alertContent() string {
 	if m.alertMsg != "" {
 		return ui.WarnStyle().Render(m.alertMsg)
@@ -132,7 +178,8 @@ func (m *model) alertContent() string {
 		ui.Muted("Select a group with @ or specific repos with x")
 }
 
-func (m *model) renderHeader() string {
+// renderHeaderLeft renders the title plus the active filter/mode/count chips.
+func (m *model) renderHeaderLeft() string {
 	left := styleHeader.Render(" hrd")
 
 	if gl := m.groupLabel(); gl != "" && gl != labelAll {
@@ -166,12 +213,23 @@ func (m *model) renderHeader() string {
 		left += ui.WarnStyle().Render(" " + repoCount)
 	}
 
-	right := m.renderHeaderRight()
+	return left
+}
+
+func (m *model) renderHeader() string {
+	left := m.renderHeaderLeft()
+
+	right := m.renderHeaderRight(lipgloss.Width(left) + 1) // +1: minimum gap
 
 	pad := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	pad = max(pad, 1)
 
-	return left + strings.Repeat(" ", pad) + right
+	line := left + strings.Repeat(" ", pad) + right
+	if m.width > 0 {
+		line = ansi.Truncate(line, m.width, "")
+	}
+
+	return line
 }
 
 // renderHint renders a "key:label" hint with the key highlighted and the
@@ -180,14 +238,57 @@ func renderHint(key, label string) string {
 	return styleHintKey.Render(key) + ui.MutedStyle().Render(":"+label)
 }
 
-func (m *model) renderHeaderRight() string {
-	var right string
+// headerHint is one right-hand header hint; essential hints survive when the
+// terminal is too narrow to show them all.
+type headerHint struct {
+	text      string
+	essential bool
+}
+
+// renderHeaderRight renders the right-hand hint list, dropping the
+// least-essential hints (latest first) until it fits beside leftWidth cells
+// of left-hand content.
+func (m *model) renderHeaderRight(leftWidth int) string {
+	var spin string
 
 	if m.loading {
-		right = ui.Muted(" " + m.spinner.View())
+		spin = ui.Muted(" " + m.spinner.View())
 	}
 
-	var parts []string
+	hints := m.headerHints()
+
+	for {
+		texts := make([]string, len(hints))
+		for i, h := range hints {
+			texts[i] = h.text
+		}
+
+		right := spin + " " + strings.Join(texts, " ")
+
+		if m.width <= 0 || leftWidth+lipgloss.Width(right) <= m.width {
+			return right
+		}
+
+		drop := -1
+
+		for i, hint := range slices.Backward(hints) {
+			if !hint.essential {
+				drop = i
+
+				break
+			}
+		}
+
+		if drop < 0 {
+			return right
+		}
+
+		hints = slices.Delete(hints, drop, drop+1)
+	}
+}
+
+func (m *model) headerHints() []headerHint {
+	var hints []headerHint
 
 	for _, b := range mainBindings {
 		if !b.hrd || b.label == "" {
@@ -203,14 +304,17 @@ func (m *model) renderHeaderRight() string {
 			dk = b.key
 		}
 
-		parts = append(parts, renderHint(dk, b.label))
+		hints = append(hints, headerHint{
+			text:      renderHint(dk, b.label),
+			essential: b.key == "?" || b.key == ":",
+		})
 	}
 
 	if m.screen == screenMain {
-		parts = append(parts, renderHint("q", "quit"))
+		hints = append(hints, headerHint{text: renderHint("q", "quit"), essential: true})
 	}
 
-	return right + " " + strings.Join(parts, " ")
+	return hints
 }
 
 func (m *model) renderInputLine() string {
@@ -254,8 +358,6 @@ func (m *model) outputView() string {
 	}
 
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
-	m.output.SetWidth(m.width)
-	m.output.SetHeight(m.contentHeight())
 
 	var left, right string
 
@@ -283,9 +385,11 @@ func (m *model) outputView() string {
 		// Width adapts to the TUI's own tracked width (from
 		// tea.WindowSizeMsg) rather than a fixed constant, so the bar grows
 		// on a wide terminal instead of staying pinned at its initial size.
-		progressModel.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
+		// Sized on a copy: View must not mutate the model.
+		bar := m.progress
+		bar.SetWidth(ui.ProgressBarWidthFor(m.width, lipgloss.Width(suffix)+1))
 
-		left = " " + progressModel.View() + suffix
+		left = " " + bar.View() + suffix
 	} else if len(m.execResults) > 0 {
 		left = m.coloredSummary()
 	}
@@ -348,9 +452,6 @@ func (m *model) coloredSummary() string {
 // --- Full-screen views ------------------------------------------------------
 
 func (m *model) helpView() string {
-	m.helpViewport.SetWidth(m.width)
-	m.helpViewport.SetHeight(m.contentHeight())
-
 	header := styleHeader.Render(" Help ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := " " + renderHint(
@@ -372,9 +473,6 @@ func (m *model) groupView() string {
 		return m.groupNewInputView()
 	}
 
-	m.groupList.SetWidth(m.width)
-	m.groupList.SetHeight(m.contentHeight())
-
 	headerTxt := " Select group "
 	if m.groupMode == groupAddMode {
 		headerTxt = " Add to group "
@@ -384,7 +482,12 @@ func (m *model) groupView() string {
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))
 	footer := ui.MutedStyle().Render(" ↑/↓:navigate  Enter:select  Esc/q:close")
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, sep, m.groupList.View(), sep, footer)
+	body := m.groupList.View()
+	if m.modal == modalAlert {
+		body = m.alertBox()
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, body, sep, footer)
 }
 
 func (m *model) groupNewInputView() string {
@@ -393,18 +496,19 @@ func (m *model) groupNewInputView() string {
 	footer := ui.MutedStyle().Render(" Enter:confirm  Esc:back")
 
 	prompt := ui.WarnStyle().Render("name: ")
-	inputLine := prompt + m.input.View()
 
-	return lipgloss.JoinVertical(lipgloss.Top, header, sep, inputLine, sep, footer)
+	body := prompt + m.input.View()
+	if m.modal == modalAlert {
+		body = m.alertBox()
+	}
+
+	return lipgloss.JoinVertical(lipgloss.Top, header, sep, body, sep, footer)
 }
 
 func (m *model) selHistoryView() string {
 	if len(m.persState.SelectionHistory) == 0 {
 		return ""
 	}
-
-	m.historyList.SetWidth(m.width)
-	m.historyList.SetHeight(m.contentHeight())
 
 	header := styleHeader.Render(" Selection History ")
 	sep := styleSeparator.Render(strings.Repeat(separatorChar, m.width))

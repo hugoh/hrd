@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	renameio "github.com/google/renameio/v2/maybe"
@@ -111,4 +112,25 @@ func saveState(path string, state PersistentState) error {
 	}
 
 	return nil
+}
+
+// stateWriter serializes state-file writes issued from Cmd goroutines. Each
+// snapshot carries a sequence number so a slow, older write can never land
+// after (and clobber) a newer one.
+type stateWriter struct {
+	mu      sync.Mutex
+	written uint64
+}
+
+func (w *stateWriter) write(path string, seq uint64, state PersistentState) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if seq <= w.written {
+		return nil
+	}
+
+	w.written = seq
+
+	return saveState(path, state)
 }

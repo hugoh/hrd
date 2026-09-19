@@ -1,15 +1,12 @@
 package tui
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/hugoh/hrd/internal/config"
-	"github.com/hugoh/hrd/internal/ui"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,11 +41,6 @@ func TestExecCancelAllNoCancel(t *testing.T) {
 }
 
 func TestExecCancelAllWithCancel(t *testing.T) {
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
 	ctx, cancel := context.WithCancel(t.Context())
 	m := &model{
 		execCancel: cancel,
@@ -58,12 +50,6 @@ func TestExecCancelAllWithCancel(t *testing.T) {
 	m.execCancelAll()
 
 	assert.False(t, m.executing)
-	assert.Contains(
-		t,
-		buf.String(),
-		ansi.ResetProgressBar,
-		"progress indicator should be cleared on cancel",
-	)
 
 	select {
 	case <-ctx.Done():

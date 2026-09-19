@@ -42,13 +42,11 @@ func TestExecCmd(t *testing.T) {
 
 // TestExecCmdResetsProgressBar guards against percentShown animating
 // backwards when a new exec run starts while the previous run's bar is
-// still sitting near 100%: execCmd must replace the shared progressModel
+// still sitting near 100%: execCmd must replace the model's progress bar
 // with a fresh instance (percent 0) rather than reuse the old one.
 func TestExecCmdResetsProgressBar(t *testing.T) {
-	progressModel.SetPercent(1)
-	require.InDelta(t, 1.0, progressModel.Percent(), 0.0001)
-
 	m := &model{
+		progress: newProgressBar(),
 		cfg:      config.Config{Settings: config.Settings{Concurrency: 1}},
 		selected: map[string]bool{},
 		persState: PersistentState{
@@ -56,12 +54,15 @@ func TestExecCmdResetsProgressBar(t *testing.T) {
 		},
 	}
 
+	m.progress.SetPercent(1)
+	require.InDelta(t, 1.0, m.progress.Percent(), 0.0001)
+
 	execCmd(m, nil, "", "status")
 
 	assert.InDelta(
 		t,
 		0.0,
-		progressModel.Percent(),
+		m.progress.Percent(),
 		0.0001,
 		"progress bar should reset to 0 for a new run",
 	)
@@ -154,9 +155,15 @@ func TestLoadStatusesCmdStreaming(t *testing.T) {
 	cmd := loadStatusesCmd(m)
 	require.NotNil(t, cmd)
 
-	msg := cmd()
-	_, ok := msg.(statusUpdateMsg)
-	require.True(t, ok)
+	var gotUpdate bool
+
+	for _, msg := range flattenMsgs(cmd) {
+		if _, ok := msg.(statusUpdateMsg); ok {
+			gotUpdate = true
+		}
+	}
+
+	require.True(t, gotUpdate)
 }
 
 func TestStreamNextStatusCmdNilChannel(t *testing.T) {
@@ -181,7 +188,7 @@ func TestStreamNextStatusCmdClosedChannel(t *testing.T) {
 
 	// The cmd closure must not touch the model; handleStatusDone
 	// (running on the Update goroutine) clears the channel.
-	m.handleStatusDone()
+	m.handleStatusDone(statusDoneMsg{})
 	assert.Nil(t, m.statusCh)
 }
 

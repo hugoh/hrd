@@ -236,6 +236,7 @@ func openCommandBar(m *model) {
 	m.cmdPrefix = prefixNone
 	m.commandOpen = true
 	m.input.SetValue("")
+	m.input.Placeholder = cmdPlaceholder
 	m.input.ShowSuggestions = false
 	m.input.Focus()
 	m.input.SetWidth(m.inputWidth())

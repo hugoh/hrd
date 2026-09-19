@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -15,7 +14,6 @@ import (
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/hugoh/hrd/backends/git"
 	"github.com/hugoh/hrd/backends/jj"
 	"github.com/hugoh/hrd/internal/backend"
@@ -23,7 +21,6 @@ import (
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/hugoh/hrd/internal/theme"
-	"github.com/hugoh/hrd/internal/ui"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
@@ -139,18 +136,13 @@ func TestHandleStatusUpdateUnknownRepo(t *testing.T) {
 	assert.Nil(t, cmd, "handleStatusUpdate with no filtered repos should return nil cmd")
 }
 
-func TestHandleStatusUpdateReportsProgressOSC(t *testing.T) {
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
+func TestHandleStatusUpdateAdvancesProgressBar(t *testing.T) {
 	m := &model{
-		repoOrder:   []string{"alpha", "beta"},
-		selected:    map[string]bool{"alpha": true, "beta": true},
+		repoOrder:   []string{"alpha", "beta", "gamma"},
+		selected:    map[string]bool{"alpha": true, "beta": true, "gamma": true},
 		statuses:    make(map[string]runner.StatusResult),
-		pending:     map[string]bool{"alpha": true, "beta": true},
-		statusTotal: 2,
+		pending:     map[string]bool{"alpha": true, "beta": true, "gamma": true},
+		statusTotal: 3,
 	}
 	m.initTable()
 	m.updateTableRows()
@@ -158,40 +150,35 @@ func TestHandleStatusUpdateReportsProgressOSC(t *testing.T) {
 	m.handleStatusUpdate(statusUpdateMsg{
 		result: runner.StatusResult{RepoName: "alpha", Status: backend.RepoStatus{Ref: "main"}},
 	})
-	assert.Contains(t, buf.String(), ansi.SetProgressBar(50), "1/2 done should report 50%%")
-
-	buf.Reset()
+	assert.Equal(t, tea.NewProgressBar(tea.ProgressBarDefault, 33), m.progressBar())
 
 	m.handleStatusUpdate(statusUpdateMsg{
 		result: runner.StatusResult{RepoName: "beta", Err: errors.New("boom")},
 	})
-	assert.Contains(
+	assert.Equal(
 		t,
-		buf.String(),
-		ansi.SetErrorProgressBar(100),
+		tea.NewProgressBar(tea.ProgressBarError, 66),
+		m.progressBar(),
 		"errored result should switch to error state",
 	)
 }
 
 func TestHandleStatusDone(t *testing.T) {
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
 	m := &model{
-		loading:   true,
-		statusCh:  make(chan runner.StatusResult),
-		repoOrder: []string{"alpha"},
-		selected:  map[string]bool{"alpha": true},
+		loading:     true,
+		statusCh:    make(chan runner.StatusResult),
+		repoOrder:   []string{"alpha"},
+		selected:    map[string]bool{"alpha": true},
+		statusTotal: 1,
+		pending:     map[string]bool{"alpha": true},
 	}
 	m.initTable()
 
-	_, cmd := m.handleStatusDone()
+	_, cmd := m.handleStatusDone(statusDoneMsg{})
 	assert.Nil(t, cmd, "handleStatusDone should return nil cmd")
 	assert.False(t, m.loading, "loading should be false after handleStatusDone")
 	assert.Nil(t, m.statusCh, "statusCh should be nil after handleStatusDone")
-	assert.Contains(t, buf.String(), ansi.ResetProgressBar, "progress indicator should be cleared")
+	assert.Nil(t, m.progressBar(), "progress indicator should be cleared")
 }
 
 func TestRefColumnWidthAfterWindowSize(t *testing.T) {
@@ -617,14 +604,12 @@ func TestHandleKeyMsgQQuit(t *testing.T) {
 // handleProgressFrame -> Cmd -> ...) and checks it actually moves
 // percentShown toward the target rather than snapping or staying put.
 func TestHandleProgressFrameAdvancesBar(t *testing.T) {
-	progressModel = newProgressBar()
+	m := &model{progress: newProgressBar()}
 
-	before := progressModel.ViewAs(0) // baseline: an all-empty bar string
+	before := m.progress.ViewAs(0) // baseline: an all-empty bar string
 
-	cmd := progressModel.SetPercent(1)
+	cmd := m.progress.SetPercent(1)
 	require.NotNil(t, cmd)
-
-	m := &model{}
 
 	msg, ok := cmd().(progress.FrameMsg)
 	require.True(t, ok, "expected SetPercent's cmd to produce a progress.FrameMsg")
@@ -634,7 +619,7 @@ func TestHandleProgressFrameAdvancesBar(t *testing.T) {
 	assert.NotEqual(
 		t,
 		before,
-		progressModel.View(),
+		m.progress.View(),
 		"bar should have advanced after one animation frame",
 	)
 	assert.NotNil(t, nextCmd, "still animating, so the next frame should be re-armed")
@@ -643,29 +628,25 @@ func TestHandleProgressFrameAdvancesBar(t *testing.T) {
 // newExecResultModel builds a model with a closed results channel and
 // progress output captured into a buffer, for tests exercising
 // handleExecResult.
-func newExecResultModel(t *testing.T, execTotal int) (*model, *bytes.Buffer) {
+func newExecResultModel(t *testing.T, execTotal int) *model {
 	t.Helper()
 
 	resultsCh := make(chan runner.Result)
 	close(resultsCh)
 
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
 	m := &model{
+		executing:   true,
 		execResults: []execResult{},
 		execTotal:   execTotal,
 		output:      viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 		resultsCh:   resultsCh,
 	}
 
-	return m, &buf
+	return m
 }
 
 func TestHandleExecResultSuccess(t *testing.T) {
-	m, buf := newExecResultModel(t, 2)
+	m := newExecResultModel(t, 2)
 
 	_, cmd := m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 0}},
@@ -674,7 +655,7 @@ func TestHandleExecResultSuccess(t *testing.T) {
 	require.NotNil(t, cmd, "expected non-nil cmd after exec result")
 
 	// handleExecResult now batches streamNextResult's cmd together with the
-	// progress bar's animation-frame cmd (see progressModel.SetPercent), so
+	// progress bar's animation-frame cmd (see model.progress.SetPercent), so
 	// the returned cmd yields a tea.BatchMsg rather than execDoneMsg
 	// directly — run each sub-cmd and find the one that closed channel
 	// produces.
@@ -696,20 +677,20 @@ func TestHandleExecResultSuccess(t *testing.T) {
 	}
 
 	assert.True(t, gotExecDone, "expected execDoneMsg from streamNextResult with closed channel")
-	assert.Contains(t, buf.String(), ansi.SetProgressBar(50), "1/2 done should report 50%%")
+	assert.Equal(t, tea.NewProgressBar(tea.ProgressBarDefault, 50), m.progressBar())
 }
 
 func TestHandleExecResultFailureReportsErrorProgress(t *testing.T) {
-	m, buf := newExecResultModel(t, 1)
+	m := newExecResultModel(t, 1)
 
 	m.handleExecResult(execResultMsg{
 		result: execResult{name: "repo1", result: runner.Result{ExitCode: 1}},
 	})
 
-	assert.Contains(
+	assert.Equal(
 		t,
-		buf.String(),
-		ansi.SetErrorProgressBar(100),
+		tea.NewProgressBar(tea.ProgressBarError, 100),
+		m.progressBar(),
 		"failed result should report error state",
 	)
 }
@@ -728,13 +709,9 @@ func TestHandleExecResultError(t *testing.T) {
 }
 
 func TestHandleExecDone(t *testing.T) {
-	var buf bytes.Buffer
-
-	t.Cleanup(func() { ui.SetProgressOutput(nil, false) })
-	ui.SetProgressOutput(&buf, true)
-
 	m := &model{
 		executing: true,
+		execTotal: 2,
 		output:    viewport.New(viewport.WithWidth(80), viewport.WithHeight(10)),
 	}
 
@@ -742,7 +719,7 @@ func TestHandleExecDone(t *testing.T) {
 
 	assert.False(t, m.executing, "executing should be false after exec done")
 	assert.Nil(t, cmd, "expected nil cmd after exec done")
-	assert.Contains(t, buf.String(), ansi.ResetProgressBar, "progress indicator should be cleared")
+	assert.Nil(t, m.progressBar(), "progress indicator should be cleared")
 }
 
 func TestHandleExecDoneWithSideEffect(t *testing.T) {

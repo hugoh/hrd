@@ -156,17 +156,9 @@ var mainBindings = []binding{
 
 		m.vcsCache = make(map[string]string)
 
-		if err := m.reloadConfig(); err != nil {
-			m.modal = modalAlert
-			m.alertMsg = "reload config failed: " + err.Error()
-		}
-
 		m.loading = true
 
-		cmd := loadStatusesCmd(m)
-		m.updateTableRows()
-
-		return m, cmd
+		return m, loadConfigCmd(m.opts.ConfigPath)
 	}, label: "refresh", desc: "Refresh repo statuses and config", hrd: true, section: secGeneral, order: 10},
 	{key: "/", handler: func(m *model) (tea.Model, tea.Cmd) {
 		m.openNameFilter()
