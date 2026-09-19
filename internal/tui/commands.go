@@ -12,7 +12,6 @@ import (
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
-	"github.com/hugoh/hrd/internal/ui"
 )
 
 var errEmptyCommand = errors.New("empty command")
@@ -22,14 +21,14 @@ var errEmptyCommand = errors.New("empty command")
 // only read from a captured channel and return messages; all model
 // mutation happens in Update handlers.
 
-func waitForStatus(ch <-chan runner.StatusResult) tea.Cmd {
+func waitForStatus(ch <-chan runner.StatusResult, gen int) tea.Cmd {
 	return func() tea.Msg {
 		res, ok := <-ch
 		if !ok {
-			return statusDoneMsg{}
+			return statusDoneMsg{gen: gen}
 		}
 
-		return statusUpdateMsg{result: res}
+		return statusUpdateMsg{gen: gen, result: res}
 	}
 }
 
@@ -42,8 +41,16 @@ func loadStatusesCmd(m *model) tea.Cmd {
 // out. Callers pass m.filteredRepos() for a full refresh, or a subset (e.g.
 // the repos a command just ran on) for a scoped one.
 func loadStatusesForCmd(m *model, names []string) tea.Cmd {
+	if m.statusCancel != nil {
+		m.statusCancel()
+		m.statusCancel = nil
+	}
+
+	m.statusGen++
+	gen := m.statusGen
+
 	if len(names) == 0 {
-		return func() tea.Msg { return statusDoneMsg{} }
+		return func() tea.Msg { return statusDoneMsg{gen: gen} }
 	}
 
 	m.pending = make(map[string]bool, len(names))
@@ -54,16 +61,17 @@ func loadStatusesForCmd(m *model, names []string) tea.Cmd {
 	m.statusTotal = len(names)
 	m.statusAnyErr = false
 
-	ui.ProgressOSC(0, false)
+	ctx, cancel := context.WithCancel(m.ctx)
+	m.statusCancel = cancel
 
 	m.statusCh = runner.GatherStatus(
-		m.ctx,
+		ctx,
 		m.cfg.Repos,
 		names,
 		m.cfg.Settings.Concurrency,
 	)
 
-	return waitForStatus(m.statusCh)
+	return tea.Batch(waitForStatus(m.statusCh, gen), m.spinnerTicks())
 }
 
 func streamNextStatusCmd(m *model) tea.Cmd {
@@ -71,7 +79,7 @@ func streamNextStatusCmd(m *model) tea.Cmd {
 		return nil
 	}
 
-	return waitForStatus(m.statusCh)
+	return waitForStatus(m.statusCh, m.statusGen)
 }
 
 func startExec(
@@ -122,14 +130,14 @@ func splitSubcmd(cmdStr string) (string, []string, error) {
 	return tokens[0], tokens[1:], nil
 }
 
-func waitForResult(ch <-chan runner.Result) tea.Cmd {
+func waitForResult(ch <-chan runner.Result, gen int) tea.Cmd {
 	return func() tea.Msg {
 		res, ok := <-ch
 		if !ok {
-			return execDoneMsg{}
+			return execDoneMsg{gen: gen}
 		}
 
-		return execResultMsg{result: execResult{name: res.RepoName, result: res}}
+		return execResultMsg{gen: gen, result: execResult{name: res.RepoName, result: res}}
 	}
 }
 
@@ -142,6 +150,9 @@ func waitForResult(ch <-chan runner.Result) tea.Cmd {
 func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execCancelAll()
 
+	m.execGen++
+	gen := m.execGen
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.execCancel = cancel
 	m.execTotal = len(selected)
@@ -150,7 +161,7 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 	m.execResultOffsets = nil
 	m.execLabel = strings.TrimSpace(prefix + " " + cmdStr)
 	m.execStartTime = time.Now()
-	progressModel = newProgressBar()
+	m.progress = newProgressBar()
 
 	concurrency := m.cfg.Settings.Concurrency
 
@@ -159,15 +170,13 @@ func execCmd(m *model, selected []string, prefix, cmdStr string) tea.Cmd {
 		m.executing = false
 		m.resultsCh = nil
 
-		return func() tea.Msg { return execResultMsg{err: err} }
+		return func() tea.Msg { return execResultMsg{gen: gen, err: err} }
 	}
 
 	m.executing = true
 	m.resultsCh = resultsCh
 
-	ui.ProgressOSC(0, false)
-
-	return waitForResult(resultsCh)
+	return tea.Batch(waitForResult(resultsCh, gen), m.spinnerTicks())
 }
 
 func streamNextResult(m *model) tea.Cmd {
@@ -175,5 +184,5 @@ func streamNextResult(m *model) tea.Cmd {
 		return nil
 	}
 
-	return waitForResult(m.resultsCh)
+	return waitForResult(m.resultsCh, m.execGen)
 }

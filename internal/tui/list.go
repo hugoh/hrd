@@ -105,11 +105,11 @@ func buildGroupItems(
 	return items
 }
 
-func defaultItemDelegate(spacing int, dark bool) list.DefaultDelegate {
+func defaultItemDelegate(dark bool) list.DefaultDelegate {
 	delegate := list.NewDefaultDelegate()
 	delegate.ShowDescription = true
 	delegate.SetHeight(itemH)
-	delegate.SetSpacing(spacing)
+	delegate.SetSpacing(0)
 
 	title := lipgloss.NewStyle().PaddingLeft(itemIndent).Foreground(lipgloss.Color("12"))
 	desc := lipgloss.NewStyle().PaddingLeft(itemIndent)

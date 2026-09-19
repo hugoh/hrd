@@ -255,7 +255,7 @@ func openGroupPopup(m *model, mode groupMode) {
 	}
 
 	m.groupMode = mode
-	m.groupList = initList(defaultItemDelegate(0, m.darkBackground), nil, m.width)
+	m.groupList = initList(defaultItemDelegate(m.darkBackground), nil, m.width)
 	m.groupList.SetHeight(m.contentHeight())
 
 	items := buildGroupItems(

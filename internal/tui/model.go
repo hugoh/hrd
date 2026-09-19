@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/progress"
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/table"
 	"charm.land/bubbles/v2/textinput"
@@ -93,8 +94,11 @@ const (
 	defaultViewW  = 80
 	minInputWidth = 10
 	minContentH   = 3
-	initTableH    = 10
-	initOutputH   = 10
+	// minViewH fits header, two separators, footer and minContentH rows.
+	minViewH    = layoutHeaderH + layoutSepH + minContentH + layoutSepH + layoutFooterH
+	minViewW    = 30
+	initTableH  = 10
+	initOutputH = 10
 
 	listVCSWidth = 3
 	checkboxColW = 2
@@ -104,6 +108,8 @@ const (
 	colStatus = "STATUS"
 
 	initInputW = 40
+
+	cmdPlaceholder = "type a command..."
 
 	labelAll = "all"
 	labelNew = "[new...]"
@@ -179,6 +185,8 @@ type model struct {
 	vcsCache     map[string]string
 	statusTotal  int // repos requested by the current loadStatusesCmd run, for OSC progress
 	statusAnyErr bool
+	statusGen    int
+	statusCancel context.CancelFunc
 
 	groupList     list.Model
 	groupMode     groupMode
@@ -198,6 +206,7 @@ type model struct {
 	execSideEffect bool
 	execTotal      int
 	execCancel     context.CancelFunc
+	execGen        int
 	execResults    []execResult
 	execOutputStr  string
 	// execResultOffsets holds the 0-based line offset in execOutputStr where
@@ -210,6 +219,11 @@ type model struct {
 	statusCh <-chan runner.StatusResult
 
 	output viewport.Model
+
+	// progress is the animated exec-progress bar. execCmd resets it at the
+	// start of every run so it starts at 0 instead of animating backwards
+	// from the previous run's ending value.
+	progress progress.Model
 
 	helpViewport viewport.Model
 
@@ -273,6 +287,7 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithSpinner(spinner.Jump),
 			spinner.WithStyle(ui.MutedStyle()),
 		),
+		progress:    newProgressBar(),
 		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
 		pending:     make(map[string]bool, len(cfg.Repos)),
 		vcsCache:    make(map[string]string, len(cfg.Repos)),
@@ -300,8 +315,6 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 func (m *model) Init() tea.Cmd {
 	return tea.Batch(
 		loadStatusesCmd(m),
-		m.spinner.Tick,
-		m.rowSpinner.Tick,
 		tea.RequestBackgroundColor,
 	)
 }
@@ -345,7 +358,7 @@ func tableStyles(cursorVisible, dark bool) table.Styles {
 
 func (m *model) initInput() {
 	ti := textinput.New()
-	ti.Placeholder = "type a command..."
+	ti.Placeholder = cmdPlaceholder
 	ti.CharLimit = 512
 	ti.SetWidth(initInputW)
 	m.input = ti
@@ -391,7 +404,7 @@ func (m *model) initHelpViewport() {
 
 func (m *model) initHistoryList() {
 	items := buildHistoryItems(m.persState.SelectionHistory, m.cfg.Groups, m.allRepoSet())
-	m.historyList = initList(defaultItemDelegate(0, m.darkBackground), items, defaultViewW)
+	m.historyList = initList(defaultItemDelegate(m.darkBackground), items, defaultViewW)
 }
 
 // allRepoSet returns the set of all configured repo names.
@@ -405,12 +418,12 @@ func (m *model) allRepoSet() map[string]struct{} {
 }
 
 func (m *model) initGroupList() {
-	m.groupList = initList(defaultItemDelegate(0, m.darkBackground), nil, defaultViewW)
+	m.groupList = initList(defaultItemDelegate(m.darkBackground), nil, defaultViewW)
 }
 
 // Run starts the Bubble Tea event loop and blocks until the user quits.
 func Run(ctx context.Context, opts Options) error {
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return errNoTTY
 	}
 
@@ -419,7 +432,7 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithContext(ctx))
 	if _, err := p.Run(); err != nil {
 		return fmt.Errorf("bubbletea app: %w", err)
 	}
@@ -451,8 +464,6 @@ func (m *model) execCancelAll() {
 	if m.execCancel != nil {
 		m.execCancel()
 		m.executing = false
-
-		ui.ProgressOSCDone()
 	}
 }
 

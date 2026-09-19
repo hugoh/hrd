@@ -189,7 +189,8 @@ func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
 			execResults: []execResult{
 				{name: "alpha", result: runner.Result{RepoName: "alpha"}},
 			},
-			output: viewport.New(viewport.WithWidth(width), viewport.WithHeight(10)),
+			output:   viewport.New(viewport.WithWidth(width), viewport.WithHeight(10)),
+			progress: newProgressBar(),
 		}
 		m.ready = true
 
@@ -199,7 +200,7 @@ func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
 	wide := baseModel(172)
 	wide.outputView()
 
-	wideBarWidth := progressModel.Width()
+	wideBarWidth := wide.progress.Width()
 
 	assert.Greater(
 		t,
@@ -211,7 +212,7 @@ func TestOutputViewExecuting_BarWidthAdaptsToTerminalWidth(t *testing.T) {
 	narrow := baseModel(40)
 	narrow.outputView()
 
-	narrowBarWidth := progressModel.Width()
+	narrowBarWidth := narrow.progress.Width()
 
 	assert.Less(t, narrowBarWidth, wideBarWidth, "bar should shrink again on a narrower terminal")
 }
