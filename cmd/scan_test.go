@@ -279,3 +279,44 @@ func TestRepoAddWithGroup(t *testing.T) {
 	require.Len(t, cfg.Repos, 1)
 	assert.Equal(t, []string{filepath.Base(repoDir)}, cfg.Groups["work"].Repos)
 }
+
+func TestRepoAddWithMultipleGroups(t *testing.T) {
+	backend.ResetDetectCache()
+
+	repoDir := setupFakeGitRepo(t)
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	require.NoError(
+		t,
+		runHRD(t, cfgPath, []string{"repo", "add", "-g", "public", "-g", "@spoon,tools", repoDir}),
+	)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+
+	name := filepath.Base(repoDir)
+	for _, g := range []string{"public", "spoon", "tools"} {
+		assert.Equal(t, []string{name}, cfg.Groups[g].Repos, g)
+	}
+}
+
+func TestRepoScanAddMultipleGroups(t *testing.T) {
+	backend.ResetDetectCache()
+
+	root := discovertest.Tree(t)
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	require.NoError(
+		t,
+		runHRD(
+			t,
+			cfgPath,
+			[]string{"repo", cmdNameScan, cmdNameScanAdd, "-g", "work", "-g", "all", root},
+		),
+	)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"app", "work-app"}, cfg.Groups["work"].Repos)
+	assert.ElementsMatch(t, []string{"app", "work-app"}, cfg.Groups["all"].Repos)
+}

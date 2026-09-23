@@ -36,7 +36,6 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/hugoh/hrd/cmd.version={{.Version}}
-
 nfpms:
   - maintainer: "Hugo Haas <hugoh@hugoh.net>"
     description: "Multi-repo manager for git and jj with parallel execution and live status"

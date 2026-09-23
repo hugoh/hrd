@@ -55,7 +55,7 @@ func repoAddCmd(cfgPath *string) *cobra.Command {
 		RunE:              repoAddAction(cfgPath),
 	}
 	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single repo)")
-	cmd.Flags().StringP(cmdNameGroup, "g", "", "add the repo(s) to this group")
+	cmd.Flags().StringSliceP(cmdNameGroup, "g", nil, "add the repo(s) to these groups (repeatable)")
 
 	return cmd
 }
@@ -63,8 +63,8 @@ func repoAddCmd(cfgPath *string) *cobra.Command {
 // addFlags holds the --name and --group flags shared by "repo add" and
 // "repo root add".
 type addFlags struct {
-	name  string
-	group string
+	name   string
+	groups []string
 }
 
 // prepareAdd resolves the --name/--group flags and loads config for an
@@ -83,12 +83,12 @@ func prepareAdd(
 		return addFlags{}, config.Config{}, err
 	}
 
-	group, err := validGroupFlag(cmd)
+	groups, err := validGroupFlags(cmd)
 	if err != nil {
 		return addFlags{}, config.Config{}, err
 	}
 
-	return addFlags{name: name, group: group}, cfg, nil
+	return addFlags{name: name, groups: groups}, cfg, nil
 }
 
 func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) error {
@@ -103,7 +103,7 @@ func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) erro
 		}
 
 		for _, arg := range args {
-			if err := addRepo(&cfg, arg, flags.name, flags.group); err != nil {
+			if err := addRepo(&cfg, arg, flags.name, flags.groups); err != nil {
 				return err
 			}
 		}
@@ -123,22 +123,40 @@ func singleNameFlag(cmd *cobra.Command, args []string) (string, error) {
 	return name, nil
 }
 
-// validGroupFlag returns the --group flag's value, stripped of its '@'
-// prefix and validated as a group name.
-func validGroupFlag(cmd *cobra.Command) (string, error) {
-	group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-	if group != "" {
+// validGroupFlags returns the --group flag's values, each stripped of its
+// '@' prefix and validated as a group name.
+func validGroupFlags(cmd *cobra.Command) ([]string, error) {
+	raw, _ := cmd.Flags().GetStringSlice(cmdNameGroup)
+
+	groups := make([]string, 0, len(raw))
+	for _, g := range raw {
+		group := stripGroupPrefix(g)
 		if err := config.ValidGroupName(group); err != nil {
-			return "", err //nolint:wrapcheck // config error already has context
+			return nil, err //nolint:wrapcheck // config error already has context
 		}
+
+		groups = append(groups, group)
 	}
 
-	return group, nil
+	return groups, nil
+}
+
+// addToGroups adds name to each group and logs the addition.
+func addToGroups(cfg *config.Config, path, name string, groups []string) {
+	for _, group := range groups {
+		cfg.AddRepoToGroup(name, group)
+	}
+
+	if len(groups) > 0 {
+		ui.Infof("added %s as %q in group %s", path, name, strings.Join(groups, ", "))
+	} else {
+		ui.Infof("added %s as %q", path, name)
+	}
 }
 
 // addRepo validates and registers a single repo path in cfg. An empty
 // explicitName derives the name from the directory base name.
-func addRepo(cfg *config.Config, path, explicitName, group string) error {
+func addRepo(cfg *config.Config, path, explicitName string, groups []string) error {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("resolving %q: %w", path, err)
@@ -163,16 +181,7 @@ func addRepo(cfg *config.Config, path, explicitName, group string) error {
 	}
 
 	cfg.AddRepo(name, config.Repo{Path: abs})
-
-	if group != "" {
-		cfg.AddRepoToGroup(name, group)
-	}
-
-	if group != "" {
-		ui.Infof("added %s as %q in group %s", abs, name, group)
-	} else {
-		ui.Infof("added %s as %q", abs, name)
-	}
+	addToGroups(cfg, abs, name, groups)
 
 	return nil
 }

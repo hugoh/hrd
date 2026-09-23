@@ -106,3 +106,17 @@ func TestRepoRootLsEmpty(t *testing.T) {
 	out := runAppCapture(t, cfgPath, []string{"repo", "root", "ls"})
 	assert.Empty(t, strings.TrimSpace(out))
 }
+
+func TestRepoRootAddMultipleGroups(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := setupTestConfig(t, config.Config{})
+
+	err := runHRD(t, cfgPath, []string{
+		"repo", "root", "add", dir, "-n", "myroots", "-g", "personal", "-g", "oss",
+	})
+	require.NoError(t, err)
+
+	cfg, err := config.Load(cfgPath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"personal", "oss"}, cfg.Roots["myroots"].Groups)
+}

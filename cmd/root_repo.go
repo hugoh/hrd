@@ -59,7 +59,7 @@ persisted, so new repos added under dir appear automatically.`,
 	}
 	cmd.Flags().StringP("name", "n", "", "explicit name (only valid when adding a single root)")
 	cmd.Flags().
-		StringP(cmdNameGroup, "g", "", "assign repos discovered under these roots to a group")
+		StringSliceP(cmdNameGroup, "g", nil, "assign repos discovered under these roots to these groups (repeatable)")
 	cmd.Flags().
 		Int("depth", defaultRootDepth, "maximum directory depth to walk on every invocation")
 
@@ -80,7 +80,7 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 		depth := flagInt(cmd, "depth")
 
 		for _, dir := range args {
-			if err := addRoot(&cfg, dir, flags.name, flags.group, depth); err != nil {
+			if err := addRoot(&cfg, dir, flags.name, flags.groups, depth); err != nil {
 				return err
 			}
 		}
@@ -91,7 +91,7 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 
 // addRoot validates and registers a single directory root in cfg. An empty
 // explicitName derives the name from the directory base name.
-func addRoot(cfg *config.Config, dir, explicitName, group string, depth int) error {
+func addRoot(cfg *config.Config, dir, explicitName string, groups []string, depth int) error {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		return fmt.Errorf("resolving %q: %w", dir, err)
@@ -109,11 +109,6 @@ func addRoot(cfg *config.Config, dir, explicitName, group string, depth int) err
 			name,
 			cfg.Roots[name].Path,
 		)
-	}
-
-	var groups []string
-	if group != "" {
-		groups = []string{group}
 	}
 
 	cfg.AddRoot(name, config.Root{

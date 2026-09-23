@@ -366,6 +366,7 @@ func TestValidGroupName(t *testing.T) {
 	require.Error(t, ValidGroupName("@work"))
 	require.Error(t, ValidGroupName("@@none"))
 	require.Error(t, ValidGroupName("@@foo"))
+	require.Error(t, ValidGroupName("public,spoon"))
 }
 
 func TestAddRepo(t *testing.T) {

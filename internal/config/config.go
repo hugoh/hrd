@@ -369,15 +369,25 @@ func IsKnownReservedGroup(name string) bool {
 	})
 }
 
-var errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
+var (
+	errReservedGroupName = errors.New("group names cannot start with \"@\" (reserved)")
+	errGroupNameComma    = errors.New(
+		"group names cannot contain \",\" (it separates groups in -g)",
+	)
+)
 
 // ValidGroupName rejects any group name starting with "@" — real group
 // names are stored bare (the CLI's leading "@" is display/input sugar,
 // stripped before storage) — so the "@@" pseudo-group namespace can never
-// collide with a stored group.
+// collide with a stored group. Commas are rejected too, since -g splits
+// on them.
 func ValidGroupName(name string) error {
 	if strings.HasPrefix(name, "@") {
 		return fmt.Errorf("%w: %q", errReservedGroupName, name)
+	}
+
+	if strings.Contains(name, ",") {
+		return fmt.Errorf("%w: %q", errGroupNameComma, name)
 	}
 
 	return nil
