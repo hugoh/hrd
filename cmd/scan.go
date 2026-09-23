@@ -51,7 +51,7 @@ matches unconditionally.`,
 	}
 	cmd.Flags().
 		StringP("pattern", "p", "", "glob pattern matched against repo directory name to filter results")
-	cmd.Flags().StringP(cmdNameGroup, "g", "", "add found repos to this group")
+	cmd.Flags().StringSliceP(cmdNameGroup, "g", nil, "add found repos to these groups (repeatable)")
 	cmd.Flags().Int("depth", defaultScanDepth, "maximum directory depth to descend")
 	cmd.Flags().BoolP("confirm", "i", false, "prompt before adding each repo")
 
@@ -123,11 +123,9 @@ func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 			return err
 		}
 
-		group := stripGroupPrefix(flagString(cmd, cmdNameGroup))
-		if group != "" {
-			if err := config.ValidGroupName(group); err != nil {
-				return err //nolint:wrapcheck // config error already has context
-			}
+		groups, err := validGroupFlags(cmd)
+		if err != nil {
+			return err
 		}
 
 		tracked := trackedPaths(&cfg)
@@ -144,7 +142,7 @@ func repoScanAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 			return err
 		}
 
-		added := addScanned(&cfg, tracked, filtered, group, confirm)
+		added := addScanned(&cfg, tracked, filtered, groups, confirm)
 
 		if added == 0 {
 			ui.Warnf("no new repos found")
@@ -254,7 +252,7 @@ func addScanned(
 	cfg *config.Config,
 	tracked map[string]string,
 	repoPaths []string,
-	group string,
+	groups []string,
 	confirm bool,
 ) int {
 	added := 0
@@ -277,13 +275,7 @@ func addScanned(
 
 		cfg.AddRepo(name, config.Repo{Path: path})
 		tracked[path] = name
-
-		if group != "" {
-			cfg.AddRepoToGroup(name, group)
-			ui.Infof("added %s as %q in group %s", path, name, group)
-		} else {
-			ui.Infof("added %s as %q", path, name)
-		}
+		addToGroups(cfg, path, name, groups)
 
 		added++
 	}
