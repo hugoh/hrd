@@ -21,7 +21,7 @@ var StatusSymbolDocs = []SymbolDoc{
 	{Symbol: "✓", Description: "Synced with remote"},
 	{Symbol: "↑N", Description: "N commits ahead of remote"},
 	{Symbol: "↓N", Description: "N commits behind remote"},
-	{Symbol: "⇡N", Description: "Working copy ahead of bookmark (local)"},
+	{Symbol: "⇡N", Description: "Non-empty commits between bookmark and working copy (local)"},
 	{Symbol: "↑N↓N", Description: "Diverged (ahead and behind)"},
 	{Symbol: "∅", Description: "Local only, no remote"},
 	{Symbol: "‼", Description: "Unresolved conflict"},

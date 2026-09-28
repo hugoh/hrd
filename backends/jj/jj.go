@@ -299,10 +299,7 @@ func (b *Backend) fillBookmarkTracking(
 			return nil
 		})
 		g.Go(func() error {
-			status.LocalAhead = b.countRevs(ctx, path, headName+"..@")
-			if status.LocalAhead > 0 {
-				status.LocalAhead--
-			}
+			status.LocalAhead = b.countRevs(ctx, path, headName+"..@- ~ empty()")
 
 			return nil
 		})
