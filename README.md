@@ -108,7 +108,7 @@ Status symbols at a glance:
 | `✓` | Synced with remote |
 | `↑N` | N commits ahead of remote |
 | `↓N` | N commits behind remote |
-| `⇡N` | Working copy ahead of bookmark (local) |
+| `⇡N` | Non-empty commits between bookmark and working copy (local) |
 | `↑N↓N` | Diverged (ahead and behind) |
 | `∅` | Local only, no remote |
 | `‼` | Unresolved conflict |

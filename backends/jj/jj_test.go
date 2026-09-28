@@ -521,6 +521,33 @@ func TestBackend_Status_AncestorWithDescription(t *testing.T) {
 	assert.Equal(t, "main", st.Bookmarks[0].Name)
 }
 
+func TestBackend_Status_LocalAheadIgnoresEmptyCommits(t *testing.T) {
+	dir := initJJRepo(t)
+
+	setup := func(args ...string) {
+		c := exec.CommandContext(t.Context(), "jj", args...)
+		c.Dir = dir
+		out, err := c.CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	setup("describe", "-m", "feat: initial")
+	setup("bookmark", "set", "main")
+	setup("new", "-m", "empty")
+	setup("new")
+
+	b := &Backend{}
+	st, err := b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 0, st.LocalAhead)
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644))
+	setup("commit", "-m", "feat: change")
+
+	st, err = b.Status(t.Context(), dir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, st.LocalAhead)
+}
+
 func TestBackend_Status_AncestorCommitTimeFormat(t *testing.T) {
 	// fillCommitMsgFromAncestors reuses parseWorkingCopy to decode ancestor
 	// output, so it must apply the same "(...)" CommitTime formatting.
@@ -748,7 +775,7 @@ func TestBackend_Status_MalformedWorkingCopyOutput(t *testing.T) {
 	assert.Empty(t, st.Ref)
 }
 
-//nolint:cyclop,funlen // table-driven test with 3 cases
+//nolint:funlen // table-driven test with 3 cases
 func TestBackend_Status_LocalAhead(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -795,9 +822,8 @@ func TestBackend_Status_LocalAhead(t *testing.T) {
 					return bookmarkRefJSON("main", "", false, true, false, 0, 0) + "\n", nil
 				}
 
-				if (slices.Contains(args, "main..@") || slices.Contains(args, "..@")) &&
-					slices.Contains(args, "--count") {
-					return "3", nil
+				if slices.Contains(args, "main..@- ~ empty()") && slices.Contains(args, "--count") {
+					return "2", nil
 				}
 
 				return "", nil
