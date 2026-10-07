@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"charm.land/bubbles/v2/list"
@@ -346,9 +347,15 @@ func (m *model) initTable() {
 
 func tableStyles(cursorVisible, dark bool) table.Styles {
 	selected := lipgloss.NewStyle() // empty: preserves Cell styling, no width change
+
 	if cursorVisible {
-		selected = lipgloss.NewStyle().
-			Background(lipgloss.Color(theme.SelectionBackground.Resolve(dark)))
+		bg := lipgloss.Color(theme.SelectionBackground.Resolve(dark))
+		bgSeq := lipgloss.NewStyle().Background(bg).Render("x")
+		bgSeq, _, _ = strings.Cut(bgSeq, "x")
+		// Cells carry their own styling; each reset would otherwise end the
+		// highlight mid-row.
+		resets := strings.NewReplacer("\x1b[0m", "\x1b[0m"+bgSeq, "\x1b[m", "\x1b[m"+bgSeq)
+		selected = lipgloss.NewStyle().Background(bg).Transform(resets.Replace)
 	}
 
 	return table.Styles{
@@ -359,6 +366,18 @@ func tableStyles(cursorVisible, dark bool) table.Styles {
 		Cell: lipgloss.NewStyle().
 			Padding(0, 1),
 		Selected: selected,
+	}
+}
+
+// setTableCursor moves the table cursor and scrolls the viewport to keep it
+// visible; the table's SetCursor alone leaves the viewport offset untouched.
+func (m *model) setTableCursor(i int) {
+	m.repoTable.SetCursor(i)
+
+	if m.repoTable.Cursor() >= m.repoTable.Height() {
+		m.repoTable.MoveDown(0)
+	} else {
+		m.repoTable.MoveUp(0)
 	}
 }
 

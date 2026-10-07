@@ -79,7 +79,7 @@ func (m *model) handleMainScreenClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd
 	}
 
 	m.cursor = row
-	m.repoTable.SetCursor(m.cursor)
+	m.setTableCursor(m.cursor)
 
 	if m.mode == modeSelect {
 		name := names[m.cursor]
@@ -147,10 +147,10 @@ func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		switch msg.Button {
 		case tea.MouseWheelUp:
 			m.cursor = max(0, m.cursor-delta)
-			m.repoTable.SetCursor(m.cursor)
+			m.setTableCursor(m.cursor)
 		case tea.MouseWheelDown:
 			m.cursor = min(len(names)-1, m.cursor+delta)
-			m.repoTable.SetCursor(m.cursor)
+			m.setTableCursor(m.cursor)
 		}
 
 		return m, nil

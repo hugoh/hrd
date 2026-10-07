@@ -31,7 +31,7 @@ func (m *model) toggleMode(target mode, saveSelection bool) {
 		for i, name := range m.tableRepos() {
 			if name == saved {
 				m.cursor = i
-				m.repoTable.SetCursor(i)
+				m.setTableCursor(i)
 
 				break
 			}
@@ -58,7 +58,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 
 	if m.cursor < len(names)-1 {
 		m.cursor++
-		m.repoTable.SetCursor(m.cursor)
+		m.setTableCursor(m.cursor)
 	}
 
 	return m, save
@@ -91,7 +91,7 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {
 	if m.cursor > 0 {
 		m.cursor--
-		m.repoTable.SetCursor(m.cursor)
+		m.setTableCursor(m.cursor)
 	}
 
 	return m, nil
@@ -100,7 +100,7 @@ func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {
 func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
 	if m.cursor < len(m.tableRepos())-1 {
 		m.cursor++
-		m.repoTable.SetCursor(m.cursor)
+		m.setTableCursor(m.cursor)
 	}
 
 	return m, nil
