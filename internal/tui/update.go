@@ -266,6 +266,17 @@ func (m *model) handleFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *model) exitMode() {
+	if m.mode == modeSelect && m.selectSaved != nil {
+		m.selected = m.selectSaved
+		m.selectSaved = nil
+	}
+
+	m.mode = modeNormal
+	m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
+	m.updateTableRows()
+}
+
 func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 	if m.groupNewInput {
 		m.groupNewInput = false
@@ -280,15 +291,8 @@ func (m *model) handleEscKey() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.mode != modeNormal {
-		if m.mode == modeSelect && m.selectSaved != nil {
-			m.selected = m.selectSaved
-			m.selectSaved = nil
-		}
-
-		m.mode = modeNormal
-		m.repoTable.SetStyles(tableStyles(false, m.darkBackground))
-		m.updateTableRows()
+	if m.screen == screenMain && m.mode != modeNormal {
+		m.exitMode()
 
 		return m, nil
 	}
@@ -566,7 +570,7 @@ func (m *model) updateTableRows() {
 
 	m.cursor = max(0, min(m.cursor, len(rows)-1))
 	m.repoTable.SetRows(rows)
-	m.repoTable.SetCursor(m.cursor)
+	m.setTableCursor(m.cursor)
 }
 
 // repoVCS returns the backend name for a repo without re-running

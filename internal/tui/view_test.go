@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -379,4 +380,116 @@ func TestSelHistoryViewEmpty(t *testing.T) {
 	}
 
 	assert.Empty(t, m.selHistoryView())
+}
+
+func TestFooterShowsScrollPosition(t *testing.T) {
+	names := make([]string, 30)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(8)
+	m.updateTableRows()
+	assert.Contains(t, m.renderFooter(), "1-7/30", "range while the cursor is hidden")
+
+	m.mode = modeSingle
+	assert.Contains(t, m.renderFooter(), "1/30")
+
+	m.handleCursorPage(1)
+	assert.Contains(t, m.renderFooter(), "14/30")
+
+	m.repoTable.SetHeight(100)
+	assert.NotContains(t, m.renderFooter(), "/30")
+	assert.NotContains(t, m.renderFooter(), "14/30")
+}
+
+func TestFooterShowsVisibleRangeWhenScrolledInNormalMode(t *testing.T) {
+	names := make([]string, 30)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(8)
+	m.updateTableRows()
+
+	for range 3 {
+		m.handleCursorPage(1)
+	}
+
+	assert.Contains(t, m.renderFooter(), "22-28/30")
+}
+
+func TestPageUpSnapsToTopWhenCursorWithinFirstPage(t *testing.T) {
+	names := make([]string, 60)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(43)
+	m.updateTableRows()
+
+	for range 3 {
+		m.handleCursorPage(1)
+	}
+
+	m.handleCursorPage(-1)
+
+	assert.Contains(t, m.renderFooter(), "1-42/60")
+}
+
+func TestPageDownFromTopScrollsWholePage(t *testing.T) {
+	names := make([]string, 100)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(9)
+	m.updateTableRows()
+
+	m.handleCursorPage(1)
+	assert.Contains(t, m.renderFooter(), "9-16/100")
+
+	m.handleCursorPage(-1)
+	assert.Contains(t, m.renderFooter(), "1-8/100")
+}
+
+func TestNormalModeScrollHasNoDeadZone(t *testing.T) {
+	names := make([]string, 100)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(9)
+	m.updateTableRows()
+	m.cursor = 5
+	m.setTableCursor(5)
+
+	for range 5 {
+		m.handleCursorUp()
+	}
+
+	assert.Contains(t, m.renderFooter(), "1-8/100")
+
+	m.handleCursorDown()
+	assert.Contains(t, m.renderFooter(), "2-9/100")
 }

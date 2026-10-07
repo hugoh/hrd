@@ -202,6 +202,12 @@ func (m *model) renderHeaderLeft() string {
 	case modeNormal:
 	}
 
+	return left + m.renderCountChips()
+}
+
+func (m *model) renderCountChips() string {
+	var chips string
+
 	if cnt := m.selectedCount(); cnt > 0 {
 		var repoCount string
 		if total := m.totalCount(); cnt == total {
@@ -210,10 +216,10 @@ func (m *model) renderHeaderLeft() string {
 			repoCount = fmt.Sprintf("%d/%d repos", cnt, total)
 		}
 
-		left += ui.WarnStyle().Render(" " + repoCount)
+		chips += ui.WarnStyle().Render(" " + repoCount)
 	}
 
-	return left
+	return chips
 }
 
 func (m *model) renderHeader() string {
@@ -325,7 +331,7 @@ func (m *model) renderFilterLine() string {
 	return ui.WarnStyle().Render("/") + m.filterInput.View()
 }
 
-func (*model) renderFooter() string {
+func (m *model) renderFooter() string {
 	var parts []string
 
 	for _, b := range mainBindings {
@@ -341,7 +347,70 @@ func (*model) renderFooter() string {
 		parts = append(parts, renderHint(dk, b.label))
 	}
 
-	return strings.Join(parts, " ")
+	left := strings.Join(parts, " ")
+
+	pos := m.scrollPosition()
+	if pos == "" {
+		return left
+	}
+
+	right := ui.Muted(pos + " ")
+	pad := max(m.width-lipgloss.Width(left)-lipgloss.Width(right), 1)
+
+	return left + strings.Repeat(" ", pad) + right
+}
+
+// scrollPosition describes where the table is scrolled: the cursor row while
+// the cursor is visible, otherwise the range of rows on screen. It is empty
+// when everything fits.
+func (m *model) scrollPosition() string {
+	total := len(m.repoTable.Rows())
+	if total <= m.repoTable.Height() {
+		return ""
+	}
+
+	if m.mode != modeNormal {
+		return fmt.Sprintf("%d/%d", m.cursor+1, total)
+	}
+
+	first, last := m.visibleRowRange()
+	if first < 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("%d-%d/%d", first+1, last+1, total)
+}
+
+// visibleRowRange finds the first and last table rows on screen by matching
+// repo names in the rendered table, since the table does not expose its
+// scroll offset. It returns -1, -1 when no row is found.
+func (m *model) visibleRowRange() (int, int) {
+	index := make(map[string]int)
+	for i, name := range m.tableRepos() {
+		index[name] = i
+	}
+
+	first, last := -1, -1
+
+	lines := strings.Split(ansi.Strip(m.repoTable.View()), "\n")
+	for _, line := range lines[1:] {
+		for field := range strings.FieldsSeq(line) {
+			i, ok := index[field]
+			if !ok {
+				continue
+			}
+
+			if first < 0 {
+				first = i
+			}
+
+			last = i
+
+			break
+		}
+	}
+
+	return first, last
 }
 
 func (m *model) outputView() string {

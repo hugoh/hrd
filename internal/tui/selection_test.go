@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/table"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/theme"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,4 +228,89 @@ func TestHandleCursorUpDown(t *testing.T) {
 	_, _ = m.handleCursorDown()
 
 	assert.Equal(t, 1, m.cursor, "cursor after down")
+}
+
+func TestCursorStaysVisibleAtBottom(t *testing.T) {
+	names := make([]string, 30)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.ready = true
+	m.repoTable.SetHeight(8)
+	m.toggleMode(modeSingle, false)
+
+	for range names {
+		m.handleCursorDown()
+		require.Contains(t, m.repoTable.View(), names[m.cursor])
+	}
+
+	for range names {
+		m.handleCursorUp()
+		require.Contains(t, m.repoTable.View(), names[m.cursor])
+	}
+}
+
+func TestEscOnOutputScreenKeepsMode(t *testing.T) {
+	m := baseModel([]string{"a", "b"}, map[string]bool{"a": true, "b": true})
+	m.ready = true
+	m.mode = modeSingle
+	m.screen = screenOutput
+
+	m.handleKeyMsg(tea.KeyPressMsg{Code: tea.KeyEsc})
+
+	assert.Equal(t, screenMain, m.screen)
+	assert.Equal(t, modeSingle, m.mode)
+}
+
+func TestSelectedRowKeepsBackgroundAfterInnerReset(t *testing.T) {
+	m := baseModel([]string{"a"}, map[string]bool{"a": true})
+	m.mode = modeSingle
+	m.repoTable.SetStyles(tableStyles(true, true))
+	m.repoTable.SetColumns([]table.Column{{Width: 2}, {Width: 4}, {Width: 3}, {Width: 20}})
+	m.repoTable.SetRows([]table.Row{{"", "a", "git", "\x1b[31mred\x1b[0m tail"}})
+
+	bg := lipgloss.NewStyle().
+		Background(lipgloss.Color(theme.SelectionBackground.Resolve(true))).
+		Render("x")
+	bg, _, _ = strings.Cut(bg, "x")
+
+	require.Contains(t, m.repoTable.View(), "\x1b[0m"+bg)
+}
+
+func TestPageUpDownMovesByTableHeight(t *testing.T) {
+	names := make([]string, 30)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(8)
+	m.updateTableRows()
+	h := m.repoTable.Height()
+
+	m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	assert.Equal(t, 2*h-1, m.cursor, "cursor lands on the last row of the next page")
+	require.Contains(t, m.repoTable.View(), names[m.cursor])
+
+	for range 10 {
+		m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+
+	assert.Equal(t, 29, m.cursor)
+	require.Contains(t, m.repoTable.View(), names[29])
+
+	for range 10 {
+		m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	}
+
+	assert.Equal(t, 0, m.cursor)
+	require.Contains(t, m.repoTable.View(), names[0])
 }

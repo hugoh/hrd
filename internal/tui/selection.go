@@ -31,7 +31,7 @@ func (m *model) toggleMode(target mode, saveSelection bool) {
 		for i, name := range m.tableRepos() {
 			if name == saved {
 				m.cursor = i
-				m.repoTable.SetCursor(i)
+				m.setTableCursor(i)
 
 				break
 			}
@@ -58,7 +58,7 @@ func (m *model) handleSelectOne() (tea.Model, tea.Cmd) {
 
 	if m.cursor < len(names)-1 {
 		m.cursor++
-		m.repoTable.SetCursor(m.cursor)
+		m.setTableCursor(m.cursor)
 	}
 
 	return m, save
@@ -88,20 +88,52 @@ func (m *model) handleSelectAll() (tea.Model, tea.Cmd) {
 	return m, save
 }
 
-func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {
-	if m.cursor > 0 {
-		m.cursor--
-		m.repoTable.SetCursor(m.cursor)
+// moveCursor moves the cursor by delta rows. With the cursor hidden (normal
+// mode) it moves from the last row on screen instead, so every press scrolls
+// the view rather than first walking an invisible cursor across it.
+func (m *model) moveCursor(delta int) {
+	target := m.cursor + delta
+
+	if m.mode == modeNormal {
+		if _, bottom := m.visibleRowRange(); bottom >= 0 {
+			target = bottom + delta
+		}
 	}
+
+	m.cursor = max(0, min(len(m.tableRepos())-1, target))
+	m.setTableCursor(m.cursor)
+}
+
+func (m *model) handleCursorUp() (tea.Model, tea.Cmd) {
+	m.moveCursor(-1)
 
 	return m, nil
 }
 
 func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
-	if m.cursor < len(m.tableRepos())-1 {
-		m.cursor++
-		m.repoTable.SetCursor(m.cursor)
+	m.moveCursor(1)
+
+	return m, nil
+}
+
+// handleCursorPage moves the cursor so the visible window shifts by one full
+// page, measured from the rows on screen rather than from the cursor, which
+// need not sit at the edge of the window.
+func (m *model) handleCursorPage(dir int) (tea.Model, tea.Cmd) {
+	last := max(0, len(m.tableRepos())-1)
+	page := max(1, m.repoTable.Height())
+	target := m.cursor + dir*page
+
+	if first, bottom := m.visibleRowRange(); first >= 0 {
+		if dir > 0 {
+			target = bottom + page
+		} else {
+			target = first - 1
+		}
 	}
+
+	m.cursor = max(0, min(last, target))
+	m.setTableCursor(m.cursor)
 
 	return m, nil
 }

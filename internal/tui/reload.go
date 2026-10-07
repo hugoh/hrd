@@ -118,7 +118,7 @@ func (m *model) restoreCursorByName(name string) {
 	for i, n := range m.tableRepos() {
 		if n == name {
 			m.cursor = i
-			m.repoTable.SetCursor(i)
+			m.setTableCursor(i)
 
 			return
 		}
