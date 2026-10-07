@@ -281,3 +281,36 @@ func TestSelectedRowKeepsBackgroundAfterInnerReset(t *testing.T) {
 
 	require.Contains(t, m.repoTable.View(), "\x1b[0m"+bg)
 }
+
+func TestPageUpDownMovesByTableHeight(t *testing.T) {
+	names := make([]string, 30)
+	sel := map[string]bool{}
+
+	for i := range names {
+		names[i] = fmt.Sprintf("repo%02d", i)
+		sel[names[i]] = true
+	}
+
+	m := baseModel(names, sel)
+	m.repoTable.SetHeight(8)
+	m.updateTableRows()
+	h := m.repoTable.Height()
+
+	m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	assert.Equal(t, h, m.cursor)
+	require.Contains(t, m.repoTable.View(), names[m.cursor])
+
+	for range 10 {
+		m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+
+	assert.Equal(t, 29, m.cursor)
+	require.Contains(t, m.repoTable.View(), names[29])
+
+	for range 10 {
+		m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	}
+
+	assert.Equal(t, 0, m.cursor)
+	require.Contains(t, m.repoTable.View(), names[0])
+}

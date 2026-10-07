@@ -36,6 +36,20 @@ var mainBindings = []binding{
 		section: secNavigation,
 		order:   20,
 	},
+	{
+		key:     "pgup",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleCursorPage(-1) },
+		section: secNavigation,
+		desc:    "Page up",
+		order:   30,
+	},
+	{
+		key:     "pgdown",
+		handler: func(m *model) (tea.Model, tea.Cmd) { return m.handleCursorPage(1) },
+		section: secNavigation,
+		desc:    "Page down",
+		order:   40,
+	},
 
 	// Selection
 	{

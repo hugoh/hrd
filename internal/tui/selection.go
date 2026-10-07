@@ -105,3 +105,11 @@ func (m *model) handleCursorDown() (tea.Model, tea.Cmd) {
 
 	return m, nil
 }
+
+func (m *model) handleCursorPage(dir int) (tea.Model, tea.Cmd) {
+	last := max(0, len(m.tableRepos())-1)
+	m.cursor = max(0, min(last, m.cursor+dir*max(1, m.repoTable.Height())))
+	m.setTableCursor(m.cursor)
+
+	return m, nil
+}
