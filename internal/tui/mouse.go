@@ -141,16 +141,13 @@ func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 
 		return m, cmd
 	case screenMain:
-		delta := 3
-		names := m.tableRepos()
+		const wheelRows = 3
 
 		switch msg.Button {
 		case tea.MouseWheelUp:
-			m.cursor = max(0, m.cursor-delta)
-			m.setTableCursor(m.cursor)
+			m.moveCursor(-wheelRows)
 		case tea.MouseWheelDown:
-			m.cursor = min(len(names)-1, m.cursor+delta)
-			m.setTableCursor(m.cursor)
+			m.moveCursor(wheelRows)
 		}
 
 		return m, nil

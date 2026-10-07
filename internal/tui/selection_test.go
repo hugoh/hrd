@@ -297,7 +297,7 @@ func TestPageUpDownMovesByTableHeight(t *testing.T) {
 	h := m.repoTable.Height()
 
 	m.handleMainKey(tea.KeyPressMsg{Code: tea.KeyPgDown})
-	assert.Equal(t, h, m.cursor)
+	assert.Equal(t, 2*h-1, m.cursor, "cursor lands on the last row of the next page")
 	require.Contains(t, m.repoTable.View(), names[m.cursor])
 
 	for range 10 {

@@ -376,9 +376,12 @@ func (m *model) setTableCursor(i int) {
 
 	if m.repoTable.Cursor() >= m.repoTable.Height() {
 		m.repoTable.MoveDown(0)
-	} else {
-		m.repoTable.MoveUp(0)
+
+		return
 	}
+
+	m.repoTable.GotoTop()
+	m.repoTable.SetCursor(i)
 }
 
 func (m *model) initInput() {
