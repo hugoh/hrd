@@ -143,7 +143,7 @@ func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	case screenMain:
 		const wheelRows = 3
 
-		switch msg.Button {
+		switch msg.Button { //nolint:exhaustive // only wheel events scroll
 		case tea.MouseWheelUp:
 			m.moveCursor(-wheelRows)
 		case tea.MouseWheelDown:
