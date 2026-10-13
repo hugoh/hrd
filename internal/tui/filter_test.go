@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/hugoh/hrd/internal/backend"
+	"github.com/hugoh/hrd/internal/config"
 	"github.com/hugoh/hrd/internal/runner"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFuzzyFilter(t *testing.T) {
@@ -109,4 +113,43 @@ func TestFilterHeaderShowsPattern(t *testing.T) {
 	m.nameFilter = "alp"
 
 	assert.Contains(t, m.renderHeader(), "/alp")
+}
+
+func TestAttentionScopeArgEnablesAttentionFilter(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(
+		"[repos.alpha]\npath = \""+t.TempDir()+"\"\n[repos.beta]\npath = \""+t.TempDir()+"\"\n",
+	), 0o600))
+
+	m, err := newTestModel(t.Context(), t, Options{
+		ConfigPath: cfgPath,
+		Repos:      []string{config.ReservedAttention},
+	})
+	require.NoError(t, err)
+
+	m.statuses = map[string]runner.StatusResult{
+		"alpha": {Status: backend.RepoStatus{Dirty: true}},
+		"beta":  {Status: backend.RepoStatus{}},
+	}
+	m.updateTableRows()
+
+	assert.True(t, m.attentionFilter)
+	assert.Equal(t, []string{"alpha"}, m.tableRepos())
+}
+
+func TestAttentionScopeLoadsStatusForAllRepos(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "config.toml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(
+		"[repos.alpha]\npath = \""+t.TempDir()+"\"\n[repos.beta]\npath = \""+t.TempDir()+"\"\n",
+	), 0o600))
+
+	m, err := newTestModel(t.Context(), t, Options{
+		ConfigPath: cfgPath,
+		Repos:      []string{config.ReservedAttention},
+	})
+	require.NoError(t, err)
+
+	_ = loadStatusesCmd(m)
+
+	assert.Equal(t, map[string]bool{"alpha": true, "beta": true}, m.pending)
 }

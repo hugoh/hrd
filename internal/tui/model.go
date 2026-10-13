@@ -259,6 +259,11 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 
 	var selected map[string]bool
 
+	scopeArgs := slices.DeleteFunc(slices.Clone(opts.Repos), func(a string) bool {
+		return a == config.ReservedAttention
+	})
+	attentionScope := len(scopeArgs) != len(opts.Repos)
+
 	if len(opts.Repos) > 0 {
 		resolved, err := cfg.ResolveScope(opts.Repos)
 		if err != nil {
@@ -294,16 +299,17 @@ func newModel(ctx context.Context, opts Options) (*model, error) {
 			spinner.WithSpinner(spinner.Jump),
 			spinner.WithStyle(ui.MutedStyle()),
 		),
-		progress:    newProgressBar(),
-		statuses:    make(map[string]runner.StatusResult, len(cfg.Repos)),
-		pending:     make(map[string]bool, len(cfg.Repos)),
-		vcsCache:    make(map[string]string, len(cfg.Repos)),
-		repoOrder:   repoOrder,
-		selected:    selected,
-		groupFilter: groupFilter,
-		stateFile:   statePath,
-		persState:   persState,
-		historyIdx:  -1,
+		progress:        newProgressBar(),
+		statuses:        make(map[string]runner.StatusResult, len(cfg.Repos)),
+		pending:         make(map[string]bool, len(cfg.Repos)),
+		vcsCache:        make(map[string]string, len(cfg.Repos)),
+		repoOrder:       repoOrder,
+		selected:        selected,
+		groupFilter:     groupFilter,
+		attentionFilter: attentionScope,
+		stateFile:       statePath,
+		persState:       persState,
+		historyIdx:      -1,
 	}
 
 	m.pushSelectionHistory()

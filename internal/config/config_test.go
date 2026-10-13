@@ -625,3 +625,28 @@ func TestActiveBackend_NoMatch(t *testing.T) {
 	r := Repo{Path: t.TempDir()}
 	assert.Empty(t, r.ActiveBackend())
 }
+
+func TestResolveScope_AttentionIsFilterMarker(t *testing.T) {
+	cfg := &Config{
+		Repos: map[string]Repo{
+			"r1": {Path: "/1", Groups: []string{"work"}},
+			"r2": {Path: "/2"},
+		},
+	}
+	cfg.rebuildGroupsCache()
+
+	for _, tt := range []struct {
+		name string
+		in   []string
+		want []string
+	}{
+		{"alone means all repos", []string{ReservedAttention}, []string{"r1", "r2"}},
+		{"narrows to the other names", []string{ReservedAttention, "work"}, []string{"r1"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cfg.ResolveScope(tt.in)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
