@@ -33,7 +33,7 @@ func waitForStatus(ch <-chan runner.StatusResult, gen int) tea.Cmd {
 }
 
 func loadStatusesCmd(m *model) tea.Cmd {
-	return loadStatusesForCmd(m, m.filteredRepos())
+	return loadStatusesForCmd(m, m.scopedRepos(false))
 }
 
 // loadStatusesForCmd refreshes status for exactly the named repos, merging

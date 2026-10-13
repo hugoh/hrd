@@ -73,7 +73,7 @@ func TestRepoGroupCompleterEmptyConfig(t *testing.T) {
 	completer := repoGroupCompleter(&cfgPath)
 	got, _ := completer(nil, nil, "")
 
-	assert.Empty(t, got)
+	assert.Equal(t, []string{config.ReservedNone, config.ReservedAttention}, got)
 }
 
 func TestRepoGroupCompleterBadPath(t *testing.T) {
@@ -189,4 +189,11 @@ func TestGroupsOnlyCompleter(t *testing.T) {
 	got, _ := completer(nil, nil, "")
 
 	assert.Contains(t, got, "@mygroup")
+}
+
+func TestRepoGroupCompleterIncludesReservedGroups(t *testing.T) {
+	cfgPath := twoRepoGroupConfig(t)
+	got, _ := repoGroupCompleter(&cfgPath)(nil, nil, "")
+	assert.Contains(t, got, config.ReservedAttention)
+	assert.Contains(t, got, config.ReservedNone)
 }

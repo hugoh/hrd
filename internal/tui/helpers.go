@@ -134,6 +134,13 @@ func (m *model) groupLabel() string {
 // per render. An unknown filter (stale persisted state) falls back to all
 // repos.
 func (m *model) activeRepoOrder() []string {
+	return m.scopedRepos(m.attentionFilter)
+}
+
+// scopedRepos is activeRepoOrder with the attention filter optional: status
+// loading must cover repos the attention filter would hide, since attention
+// is only known once their status has loaded.
+func (m *model) scopedRepos(withAttention bool) []string {
 	base := m.repoOrder
 
 	switch {
@@ -145,7 +152,7 @@ func (m *model) activeRepoOrder() []string {
 		}
 	}
 
-	if m.attentionFilter {
+	if withAttention {
 		base = filterByAttention(base, m.statuses)
 	}
 

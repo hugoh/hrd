@@ -56,6 +56,15 @@ func completeGroups(cfg *config.Config) []string {
 	return names
 }
 
+func completeReservedGroups(*config.Config) []string {
+	names := make([]string, len(config.ReservedGroups))
+	for i, rg := range config.ReservedGroups {
+		names[i] = rg.Name
+	}
+
+	return names
+}
+
 func makeCompleter(
 	cfgPath *string,
 	getters ...func(*config.Config) []string,
@@ -77,7 +86,7 @@ func makeCompleter(
 }
 
 func repoGroupCompleter(cfgPath *string) cobraCompleter {
-	return makeCompleter(cfgPath, completeRepos, completeGroups)
+	return makeCompleter(cfgPath, completeRepos, completeGroups, completeReservedGroups)
 }
 
 func reposOnlyCompleter(cfgPath *string) cobraCompleter {

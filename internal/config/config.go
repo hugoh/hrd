@@ -398,6 +398,10 @@ func ValidGroupName(name string) error {
 // groups are expanded inline. Duplicates are removed, preserving the
 // order of first appearance. Unknown names are an error.
 func (c *Config) ResolveScope(names []string) ([]string, error) {
+	names = slices.DeleteFunc(slices.Clone(names), func(n string) bool {
+		return n == ReservedAttention
+	})
+
 	if len(names) == 0 {
 		return c.allRepos(), nil
 	}
