@@ -56,7 +56,7 @@ func addDispatchFlags(fs *pflag.FlagSet) {
 //
 // attentionRequested is intentionally specific to @@attention, not a
 // generic "this scope needs live status" flag: the filter it forces
-// (dirty/ahead/behind=true) is exactly @@attention's definition
+// (statusFilter.attention) is exactly @@attention's definition
 // (backend.RepoStatus.NeedsAttention()). A future second reserved group
 // requiring live status but with different filter semantics would need its
 // own mechanism here, not a rename of this one.

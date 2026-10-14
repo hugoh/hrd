@@ -18,15 +18,29 @@ type SymbolDoc struct {
 //
 //nolint:gochecknoglobals // const-like documentation table
 var StatusSymbolDocs = []SymbolDoc{
-	{Symbol: "✓", Description: "Synced with remote"},
-	{Symbol: "↑N", Description: "N commits ahead of remote"},
-	{Symbol: "↓N", Description: "N commits behind remote"},
-	{Symbol: "⇡N", Description: "Non-empty commits between bookmark and working copy (local)"},
-	{Symbol: "↑N↓N", Description: "Diverged (ahead and behind)"},
-	{Symbol: "∅", Description: "Local only, no remote"},
-	{Symbol: "‼", Description: "Unresolved conflict"},
-	{Symbol: "!", Description: "Bookmark conflict (jj)"},
-	{Symbol: "✗", Description: "Remote was deleted"},
+	{Symbol: "✓", Description: "Branch/bookmark is in sync with its remote"},
+	{Symbol: "↑N", Description: "N commits ahead of the remote branch/bookmark"},
+	{Symbol: "↓N", Description: "N commits behind the remote branch/bookmark"},
+	{Symbol: "↑N↓N", Description: "Diverged from the remote (both ahead and behind)"},
+	{
+		Symbol:      "⇡N",
+		Description: "jj only: N non-empty commits between the bookmark and the working copy",
+	},
+	{
+		Symbol:      "⇑N",
+		Description: "N commits not yet merged into trunk (shown when it differs from ⇡N)",
+	},
+	{Symbol: "⎇", Description: "On a branch/bookmark that isn't trunk's, but at trunk's commit"},
+	{Symbol: "∅", Description: "No remote configured for the branch/bookmark"},
+	{Symbol: "✗", Description: "The remote branch/bookmark was deleted"},
+	{
+		Symbol:      "‼",
+		Description: "Unresolved conflict (merge conflict in git, conflicted commit in jj)",
+	},
+	{
+		Symbol:      "!",
+		Description: "jj only: bookmark conflict (the bookmark points to several commits)",
+	},
 	{Symbol: "*", Description: "Dirty working copy"},
 	{Symbol: "?", Description: "Unknown remote state"},
 }
@@ -236,6 +250,14 @@ func FormatSymbols(status backend.RepoStatus, colorFn func(color, symbol string)
 
 	if status.LocalAhead > 0 {
 		syms = append(syms, colorFn("blue", fmt.Sprintf("⇡%d", status.LocalAhead)))
+	}
+
+	if status.TrunkAhead > 0 && status.TrunkAhead != status.LocalAhead {
+		syms = append(syms, colorFn("cyan", fmt.Sprintf("⇑%d", status.TrunkAhead)))
+	}
+
+	if status.NotOnTrunk && status.TrunkAhead == 0 {
+		syms = append(syms, colorFn("cyan", "⎇"))
 	}
 
 	if status.Dirty {

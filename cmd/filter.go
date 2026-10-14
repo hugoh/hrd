@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"slices"
 
 	"github.com/hugoh/hrd/internal/backend"
 	"github.com/hugoh/hrd/internal/runner"
@@ -27,9 +28,10 @@ func addStatusFilterFlags(fs *pflag.FlagSet) {
 // statusFilter selects repos by their VCS status. Multiple criteria are a
 // union: a repo matches when any requested condition holds.
 type statusFilter struct {
-	dirty  bool
-	ahead  bool
-	behind bool
+	dirty     bool
+	ahead     bool
+	behind    bool
+	attention bool
 }
 
 func statusFilterFromCmd(cmd *cobra.Command) statusFilter {
@@ -41,10 +43,14 @@ func statusFilterFromCmd(cmd *cobra.Command) statusFilter {
 }
 
 func (f statusFilter) active() bool {
-	return f.dirty || f.ahead || f.behind
+	return f.dirty || f.ahead || f.behind || f.attention
 }
 
 func (f statusFilter) matches(st backend.RepoStatus) bool {
+	if f.attention && st.NeedsAttention() {
+		return true
+	}
+
 	if f.dirty && st.Dirty {
 		return true
 	}
@@ -53,17 +59,11 @@ func (f statusFilter) matches(st backend.RepoStatus) bool {
 		return true
 	}
 
-	for _, bm := range st.Bookmarks {
-		if f.ahead && bm.Ahead > 0 {
-			return true
-		}
+	return slices.ContainsFunc(st.Bookmarks, f.matchesBookmark)
+}
 
-		if f.behind && bm.Behind > 0 {
-			return true
-		}
-	}
-
-	return false
+func (f statusFilter) matchesBookmark(bm backend.BookmarkStatus) bool {
+	return (f.ahead && bm.Ahead > 0) || (f.behind && bm.Behind > 0)
 }
 
 // applyStatusFilter narrows scope.names down to repos matching the status
@@ -71,19 +71,17 @@ func (f statusFilter) matches(st backend.RepoStatus) bool {
 // set and scope.attentionRequested false, it returns the input unchanged and
 // a nil status map. attentionRequested is set when the caller's scope
 // explicitly named the "@@attention" reserved pseudo-group, which requires
-// the same dirty/ahead/behind union as backend.RepoStatus.NeedsAttention
-// even without explicit filter flags. Repos whose status cannot be read are
-// excluded with a warning. The gathered statuses are returned so callers
-// (ls) can render them without a second gather.
+// backend.RepoStatus.NeedsAttention even without explicit filter flags.
+// Repos whose status cannot be read are excluded with a warning. The
+// gathered statuses are returned so callers (ls) can render them without a
+// second gather.
 func applyStatusFilter(
 	ctx context.Context,
 	cmd *cobra.Command,
 	scope resolvedScope,
 ) ([]string, map[string]runner.StatusResult) {
 	filter := statusFilterFromCmd(cmd)
-	if scope.attentionRequested {
-		filter.dirty, filter.ahead, filter.behind = true, true, true
-	}
+	filter.attention = scope.attentionRequested
 
 	if !filter.active() {
 		return scope.names, nil
