@@ -105,15 +105,17 @@ Status symbols at a glance:
 
 | Symbol | Meaning |
 | ------ | ------- |
-| `✓` | Synced with remote |
-| `↑N` | N commits ahead of remote |
-| `↓N` | N commits behind remote |
-| `⇡N` | Non-empty commits between bookmark and working copy (local) |
-| `↑N↓N` | Diverged (ahead and behind) |
-| `∅` | Local only, no remote |
-| `‼` | Unresolved conflict |
-| `!` | Bookmark conflict (jj) |
-| `✗` | Remote was deleted |
+| `✓` | Branch/bookmark is in sync with its remote |
+| `↑N` | N commits ahead of the remote branch/bookmark |
+| `↓N` | N commits behind the remote branch/bookmark |
+| `↑N↓N` | Diverged from the remote (both ahead and behind) |
+| `⇡N` | jj only: N non-empty commits between the bookmark and the working copy |
+| `⇑N` | N commits not yet merged into trunk (shown when it differs from ⇡N) |
+| `⎇` | On a branch/bookmark that isn't trunk's, but at trunk's commit |
+| `∅` | No remote configured for the branch/bookmark |
+| `✗` | The remote branch/bookmark was deleted |
+| `‼` | Unresolved conflict (merge conflict in git, conflicted commit in jj) |
+| `!` | jj only: bookmark conflict (the bookmark points to several commits) |
 | `*` | Dirty working copy |
 | `?` | Unknown remote state |
 

@@ -178,3 +178,33 @@ func TestFormatSymbols(t *testing.T) {
 		assert.Equal(t, "[blue:⇡3]", result)
 	})
 }
+
+func TestFormatSymbolsTrunk(t *testing.T) {
+	colorFn := func(color, symbol string) string { return "[" + color + ":" + symbol + "]" }
+
+	tests := []struct {
+		name   string
+		status backend.RepoStatus
+		want   string
+	}{
+		{"trunk ahead only", backend.RepoStatus{TrunkAhead: 2, NotOnTrunk: true}, "[cyan:⇑2]"},
+		{
+			"trunk ahead same as local ahead",
+			backend.RepoStatus{TrunkAhead: 2, LocalAhead: 2},
+			"[blue:⇡2]",
+		},
+		{
+			"trunk ahead differs from local ahead",
+			backend.RepoStatus{TrunkAhead: 3, LocalAhead: 1},
+			"[blue:⇡1][cyan:⇑3]",
+		},
+		{"off trunk at trunk's commit", backend.RepoStatus{NotOnTrunk: true}, "[cyan:⎇]"},
+		{"on trunk", backend.RepoStatus{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, theme.FormatSymbols(tt.status, colorFn))
+		})
+	}
+}

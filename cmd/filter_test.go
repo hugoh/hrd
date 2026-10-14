@@ -26,6 +26,9 @@ func TestStatusFilterMatches(t *testing.T) {
 	cleanStatus := backend.RepoStatus{
 		Bookmarks: []backend.BookmarkStatus{{Name: "main"}},
 	}
+	trunkAheadStatus := backend.RepoStatus{TrunkAhead: 1}
+	notOnTrunkStatus := backend.RepoStatus{NotOnTrunk: true}
+	attention := statusFilter{attention: true}
 
 	for _, tt := range []struct {
 		name   string
@@ -41,6 +44,9 @@ func TestStatusFilterMatches(t *testing.T) {
 		{name: "behind matches bookmark behind", filter: statusFilter{behind: true}, status: behindStatus, want: true},
 		{name: "behind skips ahead", filter: statusFilter{behind: true}, status: aheadStatus, want: false},
 		{name: "union matches either", filter: statusFilter{dirty: true, behind: true}, status: behindStatus, want: true},
+		{name: "attention matches trunk ahead", filter: attention, status: trunkAheadStatus, want: true},
+		{name: "attention matches not on trunk", filter: attention, status: notOnTrunkStatus, want: true},
+		{name: "attention skips clean", filter: attention, status: cleanStatus, want: false},
 		{name: "no flags matches nothing", filter: statusFilter{}, status: dirtyStatus, want: false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
