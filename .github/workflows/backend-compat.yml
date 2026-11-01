@@ -88,7 +88,7 @@ jobs:
       matrix:
         runner: [ubuntu-24.04, ubuntu-22.04]
     steps:
-      - uses: hugoh/gh-workflows/setup@bbbf25812da61dd48510494ce8d6c55e6f919aa6 # v1.40.13
+      - uses: hugoh/gh-workflows/setup@1e09f883bc388f58e179d22768c320a1fe256998 # v1.40.14
       - name: git integration tests
         env:
           REQUIRE_INTEGRATION: "1"
