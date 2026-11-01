@@ -26,7 +26,16 @@ brew install hugoh/tap/hrd
 
 ### Linux (deb/rpm)
 
-Download the `.deb` or `.rpm` from the [releases page](https://github.com/hugoh/hrd/releases) and install with your package manager:
+On Debian/Ubuntu, install from the apt repository:
+
+```sh
+curl -1sLf 'https://dl.cloudsmith.io/public/hugoh/apt/setup.deb.sh' | sudo -E bash
+sudo apt install hrd
+```
+
+Package repository hosting is graciously provided by [Cloudsmith](https://cloudsmith.com).
+
+Or download the `.deb` or `.rpm` from the [releases page](https://github.com/hugoh/hrd/releases) and install with your package manager:
 
 ```sh
 # Debian/Ubuntu
