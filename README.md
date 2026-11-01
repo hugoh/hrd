@@ -24,18 +24,28 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 brew install hugoh/tap/hrd
 ```
 
-### Linux (deb/rpm)
-
-On Debian/Ubuntu, install from the apt repository:
+### Debian/Ubuntu (apt)
 
 ```sh
 curl -1sLf 'https://dl.cloudsmith.io/public/hugoh/apt/setup.deb.sh' | sudo -E bash
 sudo apt install hrd
 ```
 
-Package repository hosting is graciously provided by [Cloudsmith](https://cloudsmith.com).
+### RHEL/Fedora (dnf)
 
-Or download the `.deb` or `.rpm` from the [releases page](https://github.com/hugoh/hrd/releases) and install with your package manager:
+```sh
+curl -1sLf 'https://dl.cloudsmith.io/public/hugoh/rpm/setup.rpm.sh' | sudo -E bash
+sudo dnf install hrd
+```
+
+Package repository hosting is graciously provided by
+[Cloudsmith](https://cloudsmith.com).
+
+### Package files
+
+Download the `.deb` or `.rpm` from the
+[releases page](https://github.com/hugoh/hrd/releases) and install it
+with your package manager:
 
 ```sh
 # Debian/Ubuntu

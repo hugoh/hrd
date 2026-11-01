@@ -187,17 +187,48 @@ func generateLL() string {
 	return out + "\n"
 }
 
+func installSection(md string) string {
+	lines := strings.Split(md, "\n")
+	out := make([]string, 0, len(lines))
+	inFence := false
+
+	for _, line := range lines {
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+		}
+
+		switch {
+		case inFence:
+		case strings.HasPrefix(line, "<!--"), strings.HasPrefix(line, "# "):
+			continue
+		case strings.HasPrefix(line, "## "):
+			line = "#" + line
+		}
+
+		out = append(out, line)
+	}
+
+	return strings.TrimSpace(strings.Join(out, "\n")) + "\n"
+}
+
 type templateData struct {
-	LLOutput     string
-	HelpOutput   string
-	SymbolsTable string
+	InstallOutput string
+	LLOutput      string
+	HelpOutput    string
+	SymbolsTable  string
 }
 
 func run() error {
+	installMD, err := os.ReadFile("INSTALL.md")
+	if err != nil {
+		return fmt.Errorf("reading INSTALL.md: %w", err)
+	}
+
 	tmplData := templateData{
-		LLOutput:     generateLL(),
-		HelpOutput:   generateHelp(),
-		SymbolsTable: generateSymbolsTable(),
+		InstallOutput: installSection(string(installMD)),
+		LLOutput:      generateLL(),
+		HelpOutput:    generateHelp(),
+		SymbolsTable:  generateSymbolsTable(),
 	}
 
 	tplRaw, err := os.ReadFile("README.md.tpl")
