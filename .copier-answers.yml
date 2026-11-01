@@ -1,5 +1,5 @@
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
-_commit: v1.29.1
+_commit: v1.30.0
 _src_path: https://github.com/hugoh/go-tools.git
 coverage_total: 90
 gen_check_cmd: git diff --exit-code README.md
@@ -9,6 +9,7 @@ gen_cmd:
 gen_outputs:
 - README.md
 gen_sources:
+- INSTALL.md
 - README.md.tpl
 - cmd/**/*.go
 golangci_extra_disable:

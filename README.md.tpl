@@ -18,7 +18,7 @@ Herd your repos. Run commands across them in parallel. Watch results stream in l
 
 ## Install
 
-See [INSTALL.md](INSTALL.md) for installation instructions.
+{{ .InstallOutput }}
 
 ### Go install
 
