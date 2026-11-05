@@ -11,14 +11,14 @@ brew install hugoh/tap/hrd
 ## Debian/Ubuntu (apt)
 
 ```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/hugoh/apt/setup.deb.sh' | sudo -E bash
+curl -1sLf 'https://dl.cloudsmith.io/public/hugoh-oss/hrd/setup.deb.sh' | sudo -E bash
 sudo apt install hrd
 ```
 
 ## RHEL/Fedora (dnf)
 
 ```sh
-curl -1sLf 'https://dl.cloudsmith.io/public/hugoh/rpm/setup.rpm.sh' | sudo -E bash
+curl -1sLf 'https://dl.cloudsmith.io/public/hugoh-oss/hrd/setup.rpm.sh' | sudo -E bash
 sudo dnf install hrd
 ```
 
