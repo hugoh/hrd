@@ -4,7 +4,8 @@
 package tui
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -98,7 +99,7 @@ func loadState(
 func saveState(path string, state PersistentState) error {
 	state.Version = currentStateVersion
 
-	raw, err := json.MarshalIndent(state, "", "  ")
+	raw, err := json.Marshal(state, jsontext.WithIndent("  "))
 	if err != nil {
 		return fmt.Errorf("marshaling tui state: %w", err)
 	}
