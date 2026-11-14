@@ -198,9 +198,9 @@ Additional Commands:
   help        Help about any command
 
 Flags:
-  -c, --config string   path to config file (default "~/.config/hrd/config.toml")
-  -h, --help            help for hrd
-  -v, --version         version for hrd
+  -c, --config string          path to config file (default "~/.config/hrd/config.toml")
+  -h, --help[=true|false]      help for hrd
+  -v, --version[=true|false]   version for hrd
 
 Use "hrd [command] --help" for more information about a command.
 ```
