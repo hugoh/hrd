@@ -32,19 +32,32 @@ concurrency:
 
 jobs:
   hk:
-    uses: hugoh/go-tools/.github/workflows/go-hk.yml@c513f9734623ed7ffadaf18a23860c79d434749e # v1.33.2
+    uses: hugoh/go-tools/.github/workflows/go-hk.yml@6f96d33ef40b63555970521b5e33841d0ed222ac # v1.34.0
     permissions:
       contents: read
 
   goci:
-    uses: hugoh/go-tools/.github/workflows/go-ci.yml@c513f9734623ed7ffadaf18a23860c79d434749e # v1.33.2
+    uses: hugoh/go-tools/.github/workflows/go-ci.yml@6f96d33ef40b63555970521b5e33841d0ed222ac # v1.34.0
     permissions:
       contents: read
 
-  pages:
+  # The single required status check, and all that pages/release wait on.
+  # Add any new job that must pass to `needs`; downstream jobs stay out of it.
+  ci-gate:
+    if: always()
     needs: [hk, goci]
+    timeout-minutes: 2
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
+
+  pages:
+    needs: ci-gate
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: hugoh/go-tools/.github/workflows/go-pages.yml@c513f9734623ed7ffadaf18a23860c79d434749e # v1.33.2
+    uses: hugoh/go-tools/.github/workflows/go-pages.yml@6f96d33ef40b63555970521b5e33841d0ed222ac # v1.34.0
     permissions:
       contents: read
       pages: write
@@ -53,8 +66,8 @@ jobs:
       pages_dir: "site"
 
   release:
-    needs: [hk, goci]
-    uses: hugoh/go-tools/.github/workflows/go-release.yml@c513f9734623ed7ffadaf18a23860c79d434749e # v1.33.2
+    needs: ci-gate
+    uses: hugoh/go-tools/.github/workflows/go-release.yml@6f96d33ef40b63555970521b5e33841d0ed222ac # v1.34.0
     permissions:
       contents: write
     with:
