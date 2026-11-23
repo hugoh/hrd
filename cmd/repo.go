@@ -171,7 +171,13 @@ func addRepo(cfg *config.Config, path, explicitName string, groups []string) err
 		name = filepath.Base(abs)
 	}
 
-	if _, exists := cfg.Repos[name]; exists {
+	if existing, exists := cfg.Repos[name]; exists {
+		if filepath.Clean(existing.Path) == abs && len(groups) > 0 {
+			offerGroups(cfg, name, groups)
+
+			return nil
+		}
+
 		return fmt.Errorf(
 			"%w %q (path: %s). use --name/-n to specify a unique name",
 			errRepoExists,
@@ -184,6 +190,31 @@ func addRepo(cfg *config.Config, path, explicitName string, groups []string) err
 	addToGroups(cfg, abs, name, groups)
 
 	return nil
+}
+
+// offerGroups adds the already-tracked repo name to any of groups it is
+// missing from, after confirming with the user.
+func offerGroups(cfg *config.Config, name string, groups []string) {
+	missing := slices.DeleteFunc(slices.Clone(groups), func(g string) bool {
+		return slices.Contains(cfg.Repos[name].Groups, g)
+	})
+
+	if len(missing) == 0 {
+		ui.Infof("%q is already in group %s", name, strings.Join(groups, ", "))
+
+		return
+	}
+
+	joined := strings.Join(missing, ", ")
+	if !promptYN(fmt.Sprintf("%q is already tracked; add it to group %s?", name, joined)) {
+		return
+	}
+
+	for _, g := range missing {
+		cfg.AddRepoToGroup(name, g)
+	}
+
+	ui.Infof("added %q to group %s", name, joined)
 }
 
 func repoRemoveCmd(cfgPath *string) *cobra.Command {

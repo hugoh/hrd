@@ -542,3 +542,71 @@ func TestRootAction(t *testing.T) {
 	err := app.RunE(app, nil)
 	require.NoError(t, err)
 }
+
+func TestRepoAddExistingPathOffersGroup(t *testing.T) { //nolint:funlen
+	tests := []struct {
+		name       string
+		existing   []string
+		args       []string
+		answer     bool
+		wantPrompt bool
+		wantErr    error
+		wantGroups []string
+	}{
+		{"accepted", nil, []string{"-g", "obsidian"}, true, true, nil, []string{"obsidian"}},
+		{"declined", nil, []string{"-g", "obsidian"}, false, true, nil, nil},
+		{
+			"already in group",
+			[]string{"obsidian"},
+			[]string{"-g", "obsidian"},
+			true,
+			false,
+			nil,
+			[]string{"obsidian"},
+		},
+		{
+			"adds only missing group",
+			[]string{"a"},
+			[]string{"-g", "a", "-g", "b"},
+			true,
+			true,
+			nil,
+			[]string{"a", "b"},
+		},
+		{"no group requested", nil, nil, true, false, errRepoExists, nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := setupFakeGitRepo(t)
+			name := filepath.Base(dir)
+			cfgPath := setupTestConfig(t, config.Config{
+				Repos: map[string]config.Repo{name: {Path: dir, Groups: tt.existing}},
+			})
+
+			prompted := false
+			old := confirmFn
+			confirmFn = func(string) bool {
+				prompted = true
+
+				return tt.answer
+			}
+
+			t.Cleanup(func() { confirmFn = old })
+
+			err := runHRD(t, cfgPath, append([]string{"repo", "add"}, append(tt.args, dir)...))
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.wantPrompt, prompted)
+
+			cfg, err := config.Load(cfgPath)
+			require.NoError(t, err)
+			require.Len(t, cfg.Repos, 1)
+			assert.ElementsMatch(t, tt.wantGroups, cfg.Repos[name].Groups)
+		})
+	}
+}
