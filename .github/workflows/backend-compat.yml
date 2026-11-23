@@ -43,7 +43,7 @@ jobs:
   jj:
     needs: [changes]
     if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@a3238b3b919ed163f078c0f2cca338e290c5c788 # v1.32.2
+    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@8848a9dc48537ab0cf4032e9e1259bd27c9521e6 # v1.34.1
     permissions:
       contents: read
     with:
@@ -63,18 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Require the jj compat matrix to have passed, when relevant
-        env:
-          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
-          JJ_RESULT: ${{ needs.jj.result }}
-        run: |
-          set -euo pipefail
-          echo "backend_changed=$BACKEND_CHANGED jj=$JJ_RESULT"
-          if [ "$BACKEND_CHANGED" != "true" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "no backend-relevant changes; skipping"
-            exit 0
-          fi
-          [ "$JJ_RESULT" = success ] || exit 1
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          allowed-skips: jj
+          jobs: ${{ toJSON(needs) }}
 
   git:
     needs: [changes]
@@ -107,15 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions: {}
     steps:
-      - name: Require every git runner leg to have passed, when relevant
-        env:
-          BACKEND_CHANGED: ${{ needs.changes.outputs.backend }}
-          GIT_RESULT: ${{ needs.git.result }}
-        run: |
-          set -euo pipefail
-          echo "backend_changed=$BACKEND_CHANGED git=$GIT_RESULT"
-          if [ "$BACKEND_CHANGED" != "true" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "no backend-relevant changes; skipping"
-            exit 0
-          fi
-          [ "$GIT_RESULT" = success ] || exit 1
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          allowed-skips: git
+          jobs: ${{ toJSON(needs) }}
