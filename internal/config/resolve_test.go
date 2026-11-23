@@ -240,3 +240,82 @@ func TestResolveRoots_NonexistentRootReportsError(t *testing.T) {
 	errs := cfg.ResolveRoots()
 	assert.NotEmpty(t, errs)
 }
+
+func TestResolveRoots_SameRepoMergesIntoStaticEntry(t *testing.T) {
+	tests := []struct {
+		name       string
+		staticName string
+		staticGrps []string
+		rootGrps   []string
+		wantGroups []string
+	}{
+		{
+			"same name, union groups",
+			"foo",
+			[]string{"work"},
+			[]string{"personal"},
+			[]string{"personal", "work"},
+		},
+		{
+			"different static name",
+			"myfoo",
+			[]string{"work"},
+			[]string{"personal"},
+			[]string{"personal", "work"},
+		},
+		{
+			"shared group not repeated",
+			"foo",
+			[]string{"work", "x"},
+			[]string{"x"},
+			[]string{"work", "x"},
+		},
+		{"static has no groups", "foo", nil, []string{"personal"}, []string{"personal"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			backend.ResetDetectCache()
+
+			root := rootWithOneFooRepo(t)
+			repoPath := filepath.Join(root, "foo")
+			cfg := &Config{
+				Repos: map[string]Repo{
+					tt.staticName: {Path: repoPath, Groups: tt.staticGrps},
+				},
+				Roots: map[string]Root{
+					"myroot": {Path: root, Groups: tt.rootGrps},
+				},
+			}
+
+			errs := cfg.ResolveRoots()
+			require.Empty(t, errs)
+			require.Len(t, cfg.Repos, 1)
+			require.Contains(t, cfg.Repos, tt.staticName)
+			assert.Equal(t, repoPath, cfg.Repos[tt.staticName].Path)
+			assert.ElementsMatch(t, tt.wantGroups, cfg.Repos[tt.staticName].Groups)
+
+			for _, g := range tt.wantGroups {
+				assert.Equal(t, []string{tt.staticName}, cfg.Groups[g].Repos)
+			}
+		})
+	}
+}
+
+func TestResolveRoots_SameRepoUnderTwoRootsMergesGroups(t *testing.T) {
+	backend.ResetDetectCache()
+
+	root := rootWithOneFooRepo(t)
+	cfg := &Config{
+		Repos: map[string]Repo{},
+		Roots: map[string]Root{
+			"a": {Path: root, Groups: []string{"ga"}},
+			"b": {Path: root, Groups: []string{"gb"}},
+		},
+	}
+
+	errs := cfg.ResolveRoots()
+	require.Empty(t, errs)
+	require.Len(t, cfg.Repos, 1)
+	assert.ElementsMatch(t, []string{"ga", "gb"}, cfg.Repos["foo"].Groups)
+}

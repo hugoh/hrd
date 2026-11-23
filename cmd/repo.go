@@ -171,7 +171,13 @@ func addRepo(cfg *config.Config, path, explicitName string, groups []string) err
 		name = filepath.Base(abs)
 	}
 
-	if _, exists := cfg.Repos[name]; exists {
+	if existing, exists := cfg.Repos[name]; exists {
+		if filepath.Clean(existing.Path) == abs && len(groups) > 0 {
+			offerGroups(cfg, name, groups)
+
+			return nil
+		}
+
 		return fmt.Errorf(
 			"%w %q (path: %s). use --name/-n to specify a unique name",
 			errRepoExists,
@@ -184,6 +190,31 @@ func addRepo(cfg *config.Config, path, explicitName string, groups []string) err
 	addToGroups(cfg, abs, name, groups)
 
 	return nil
+}
+
+// offerGroups adds the already-tracked repo name to any of groups it is
+// missing from, after confirming with the user.
+func offerGroups(cfg *config.Config, name string, groups []string) {
+	missing := slices.DeleteFunc(slices.Clone(groups), func(g string) bool {
+		return slices.Contains(cfg.Repos[name].Groups, g)
+	})
+
+	if len(missing) == 0 {
+		ui.Infof("%q is already in group %s", name, strings.Join(groups, ", "))
+
+		return
+	}
+
+	joined := strings.Join(missing, ", ")
+	if !promptYN(fmt.Sprintf("%q is already tracked; add it to group %s?", name, joined)) {
+		return
+	}
+
+	for _, g := range missing {
+		cfg.AddRepoToGroup(name, g)
+	}
+
+	ui.Infof("added %q to group %s", name, joined)
 }
 
 func repoRemoveCmd(cfgPath *string) *cobra.Command {
@@ -386,13 +417,40 @@ func resolveRepoArg(cfg *config.Config, arg string) (string, error) {
 	return "", fmt.Errorf("%w %q", errUnknownRepo, arg)
 }
 
+// loadRootResolved returns the config with root-discovered repos merged in,
+// or an empty config when it can't be loaded.
+func loadRootResolved(cfgPath *string) *config.Config {
+	cfg, _, err := config.LoadResolved(*cfgPath)
+	if err != nil {
+		return &config.Config{}
+	}
+
+	return &cfg
+}
+
+// materializeRootRepo finds arg (a name or path) among the repos in
+// resolved and copies it into cfg as a static entry, returning its name.
+func materializeRootRepo(cfg, resolved *config.Config, arg string) (string, error) {
+	name, err := resolveRepoArg(resolved, arg)
+	if err != nil {
+		return "", err
+	}
+
+	cfg.AddRepo(name, config.Repo{Path: resolved.Repos[name].Path})
+
+	return name, nil
+}
+
 // groupMemberAction returns a RunE for "hrd group add/rm <group> <repo>...":
 // validates the group name, loads config, applies act to each repo in turn
-// (failing fast on an unknown repo), and saves once at the end.
+// (failing fast on an unknown repo), and saves once at the end. With
+// includeRootRepos, a repo only known through a root is materialized as a
+// static entry so the membership persists.
 func groupMemberAction(
 	cfgPath *string,
 	cmdLabel string,
 	usageErr error,
+	includeRootRepos bool,
 	act func(*config.Config, string, string),
 ) func(cmd *cobra.Command, args []string) error {
 	return func(_ *cobra.Command, args []string) error {
@@ -410,8 +468,18 @@ func groupMemberAction(
 			return err
 		}
 
+		var resolved *config.Config
+
 		for _, repoArg := range args[1:] {
 			repoName, err := resolveRepoArg(&cfg, repoArg)
+			if err != nil && includeRootRepos {
+				if resolved == nil {
+					resolved = loadRootResolved(cfgPath)
+				}
+
+				repoName, err = materializeRootRepo(&cfg, resolved, repoArg)
+			}
+
 			if err != nil {
 				return err
 			}
@@ -429,7 +497,7 @@ func groupAddCmd(cfgPath *string) *cobra.Command {
 		Short:             "add one or more repos to a group",
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: completeFirstArgWithGroups(cfgPath),
-		RunE: groupMemberAction(cfgPath, "group add", errGroupAddUsage,
+		RunE: groupMemberAction(cfgPath, "group add", errGroupAddUsage, true,
 			func(cfg *config.Config, name, group string) {
 				cfg.AddRepoToGroup(name, group)
 				ui.Infof("added %q to group %q", name, group)
@@ -443,7 +511,7 @@ func groupRmCmd(cfgPath *string) *cobra.Command {
 		Short:             "remove one or more repos from a group",
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: completeFirstArgWithGroups(cfgPath),
-		RunE: groupMemberAction(cfgPath, "group rm", errGroupRmUsage,
+		RunE: groupMemberAction(cfgPath, "group rm", errGroupRmUsage, false,
 			func(cfg *config.Config, name, group string) {
 				cfg.RemoveRepoFromGroup(name, group)
 				ui.Infof("removed %q from group %q", name, group)

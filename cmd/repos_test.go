@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/hugoh/hrd/internal/config"
+	"github.com/hugoh/hrd/internal/discover/discovertest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zenizh/go-capturer"
@@ -301,4 +303,52 @@ func TestGroupRmValidatesGroupName(t *testing.T) {
 
 	err := runHRD(t, cfgPath, []string{"group", "rm", "@@none", "repo1"})
 	require.Error(t, err)
+}
+
+func TestGroupAddMaterializesRootDiscoveredRepo(t *testing.T) {
+	tests := []struct {
+		name     string
+		arg      func(root string) string
+		wantName string
+		wantPath string
+	}{
+		{"by name", func(string) string { return "app" }, "app", "oss/app"},
+		{"by fallback name", func(string) string { return "r-app" }, "r-app", "work/app"},
+		{
+			"by path",
+			func(root string) string { return filepath.Join(root, "work", "app") },
+			"r-app",
+			"work/app",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := discovertest.Tree(t)
+			cfgPath := setupTestConfig(t, config.Config{
+				Roots: map[string]config.Root{"r": {Path: root, Depth: 3}},
+			})
+
+			err := runHRD(t, cfgPath, []string{"group", "add", "work", tt.arg(root)})
+			require.NoError(t, err)
+
+			cfg, err := config.Load(cfgPath)
+			require.NoError(t, err)
+			require.Len(t, cfg.Repos, 1)
+			require.Contains(t, cfg.Repos, tt.wantName)
+			assert.Equal(t, filepath.Join(root, tt.wantPath), cfg.Repos[tt.wantName].Path)
+			assert.Equal(t, []string{"work"}, cfg.Repos[tt.wantName].Groups)
+			assert.Contains(t, cfg.Roots, "r")
+		})
+	}
+}
+
+func TestGroupRmDoesNotMaterializeRootDiscoveredRepo(t *testing.T) {
+	root := discovertest.Tree(t)
+	cfgPath := setupTestConfig(t, config.Config{
+		Roots: map[string]config.Root{"r": {Path: root, Depth: 3}},
+	})
+
+	err := runHRD(t, cfgPath, []string{"group", "rm", "work", "app"})
+	require.ErrorIs(t, err, errUnknownRepo)
 }

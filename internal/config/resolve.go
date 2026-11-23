@@ -62,6 +62,10 @@ func (c *Config) ResolveRoots() []error {
 		}
 
 		for _, path := range paths {
+			if c.mergeIntoExisting(path, root.Groups) {
+				continue
+			}
+
 			name, ok := c.discoveredRepoName(rootName, path)
 			if !ok {
 				errs = append(errs, fmt.Errorf(
@@ -95,4 +99,38 @@ func (c *Config) discoveredRepoName(rootName, path string) (string, bool) {
 	}
 
 	return alt, false
+}
+
+// mergeIntoExisting folds groups into the entry already tracking path, if
+// any, and reports whether one was found.
+func (c *Config) mergeIntoExisting(path string, groups []string) bool {
+	for name, repo := range c.Repos {
+		if !samePath(repo.Path, path) {
+			continue
+		}
+
+		for _, g := range groups {
+			if !slices.Contains(repo.Groups, g) {
+				repo.Groups = append(repo.Groups, g)
+			}
+		}
+
+		c.Repos[name] = repo
+
+		return true
+	}
+
+	return false
+}
+
+func samePath(a, b string) bool {
+	return canonicalPath(a) == canonicalPath(b)
+}
+
+func canonicalPath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+
+	return filepath.Clean(p)
 }
