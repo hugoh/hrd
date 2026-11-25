@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -20,6 +21,9 @@ const (
 var (
 	errUnknownRoot        = errors.New("unknown root")
 	errRootExists         = errors.New("root already exists")
+	errRootPathTracked    = errors.New("root path already tracked")
+	errRootDepthConflict  = errors.New("root already tracked with a different depth")
+	errRootNotDir         = errors.New("not a directory")
 	errAtLeastOneRootName = errors.New("at least one root name required")
 )
 
@@ -79,13 +83,9 @@ func repoRootAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) 
 
 		depth := flagInt(cmd, "depth")
 
-		for _, dir := range args {
-			if err := addRoot(&cfg, dir, flags.name, flags.groups, depth); err != nil {
-				return err
-			}
-		}
-
-		return config.Save(*cfgPath, cfg)
+		return applyBatch(*cfgPath, cfg, args, func(c *config.Config, dir string) error {
+			return addRoot(c, dir, flags.name, flags.groups, depth)
+		})
 	}
 }
 
@@ -102,13 +102,27 @@ func addRoot(cfg *config.Config, dir, explicitName string, groups []string, dept
 		name = filepath.Base(abs)
 	}
 
-	if _, exists := cfg.Roots[name]; exists {
-		return fmt.Errorf(
-			"%w %q (path: %s). use --name/-n to specify a unique name",
-			errRootExists,
-			name,
-			cfg.Roots[name].Path,
-		)
+	if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+		return fmt.Errorf("%w: %s", errRootNotDir, abs)
+	}
+
+	if existing, exists := cfg.Roots[name]; exists {
+		if !samePath(existing.Path, abs) {
+			return fmt.Errorf(
+				"%w %q (path: %s). use --name/-n to specify a unique name",
+				errRootExists,
+				name,
+				existing.Path,
+			)
+		}
+
+		return mergeRoot(cfg, name, existing, groups, depth)
+	}
+
+	for other, root := range cfg.Roots {
+		if samePath(root.Path, abs) {
+			return fmt.Errorf("%w: %s is already tracked as %q", errRootPathTracked, abs, other)
+		}
 	}
 
 	cfg.AddRoot(name, config.Root{
@@ -120,6 +134,42 @@ func addRoot(cfg *config.Config, dir, explicitName string, groups []string, dept
 	ui.Infof("tracking root %s as %q", abs, name)
 
 	return nil
+}
+
+// mergeRoot re-adds an already-tracked root: groups are unioned in, and a
+// different depth is rejected rather than silently overwritten.
+func mergeRoot(
+	cfg *config.Config,
+	name string,
+	existing config.Root,
+	groups []string,
+	depth int,
+) error {
+	if effectiveDepth(existing.Depth) != effectiveDepth(depth) {
+		return fmt.Errorf(
+			"%w %q (depth %d, requested %d). remove it first to change the depth",
+			errRootDepthConflict, name, effectiveDepth(existing.Depth), effectiveDepth(depth),
+		)
+	}
+
+	for _, g := range groups {
+		if !slices.Contains(existing.Groups, g) {
+			existing.Groups = append(existing.Groups, g)
+		}
+	}
+
+	cfg.AddRoot(name, existing)
+	ui.Infof("root %q is already tracked", name)
+
+	return nil
+}
+
+func effectiveDepth(depth int) int {
+	if depth == 0 {
+		return defaultRootDepth
+	}
+
+	return depth
 }
 
 func repoRootRemoveCmd(cfgPath *string) *cobra.Command {
@@ -138,16 +188,16 @@ func repoRootRemoveCmd(cfgPath *string) *cobra.Command {
 				return err
 			}
 
-			for _, name := range args {
-				if _, ok := cfg.Roots[name]; !ok {
+			return applyBatch(*cfgPath, cfg, args, func(c *config.Config, name string) error {
+				if _, ok := c.Roots[name]; !ok {
 					return fmt.Errorf("%w %q", errUnknownRoot, name)
 				}
 
-				cfg.RemoveRoot(name)
+				c.RemoveRoot(name)
 				ui.Infof("removed root %q", name)
-			}
 
-			return config.Save(*cfgPath, cfg)
+				return nil
+			})
 		},
 	}
 }

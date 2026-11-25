@@ -23,6 +23,7 @@ var (
 	errUnknownRepo     = errors.New("unknown repo")
 	errRepoExists      = errors.New("repo already exists")
 	errRepoNoVCS       = errors.New("no VCS detected")
+	errRepoPathTracked = errors.New("path already tracked")
 	errUnknownGroup    = errors.New("unknown group")
 	errGroupAddUsage   = errors.New("usage: group add <group> <repo> [<repo>...]")
 	errGroupRmUsage    = errors.New("usage: group rm <group> <repo> [<repo>...]")
@@ -102,13 +103,9 @@ func repoAddAction(cfgPath *string) func(cmd *cobra.Command, args []string) erro
 			return err
 		}
 
-		for _, arg := range args {
-			if err := addRepo(&cfg, arg, flags.name, flags.groups); err != nil {
-				return err
-			}
-		}
-
-		return config.Save(*cfgPath, cfg)
+		return applyBatch(*cfgPath, cfg, args, func(c *config.Config, arg string) error {
+			return addRepo(c, arg, flags.name, flags.groups)
+		})
 	}
 }
 
@@ -172,24 +169,74 @@ func addRepo(cfg *config.Config, path, explicitName string, groups []string) err
 	}
 
 	if existing, exists := cfg.Repos[name]; exists {
-		if filepath.Clean(existing.Path) == abs && len(groups) > 0 {
-			offerGroups(cfg, name, groups)
-
-			return nil
+		if !samePath(existing.Path, abs) {
+			return fmt.Errorf(
+				"%w %q (path: %s). use --name/-n to specify a unique name",
+				errRepoExists,
+				name,
+				existing.Path,
+			)
 		}
 
-		return fmt.Errorf(
-			"%w %q (path: %s). use --name/-n to specify a unique name",
-			errRepoExists,
-			name,
-			cfg.Repos[name].Path,
-		)
+		if len(groups) > 0 {
+			offerGroups(cfg, name, groups)
+		} else {
+			ui.Infof("%q is already tracked", name)
+		}
+
+		return nil
+	}
+
+	for other, repo := range cfg.Repos {
+		if samePath(repo.Path, abs) {
+			return fmt.Errorf("%w: %s is already tracked as %q", errRepoPathTracked, abs, other)
+		}
 	}
 
 	cfg.AddRepo(name, config.Repo{Path: abs})
 	addToGroups(cfg, abs, name, groups)
 
 	return nil
+}
+
+// applyBatch applies fn to each item, keeps the changes from the items that
+// succeeded, saves the config, and returns the failures joined, so one bad
+// item doesn't discard the rest. fn must not modify cfg when it fails. When
+// every item fails the config is left untouched.
+func applyBatch[T any](
+	cfgPath string, cfg config.Config, items []T, fn func(*config.Config, T) error,
+) error {
+	var failures []error
+
+	for _, item := range items {
+		if err := fn(&cfg, item); err != nil {
+			failures = append(failures, err)
+		}
+	}
+
+	if len(failures) > 0 && len(failures) == len(items) {
+		return errors.Join(failures...)
+	}
+
+	if err := config.Save(cfgPath, cfg); err != nil {
+		return err //nolint:wrapcheck // config error already has context
+	}
+
+	return errors.Join(failures...)
+}
+
+// samePath reports whether a and b name the same directory, following
+// symlinks when both exist on disk.
+func samePath(a, b string) bool {
+	if resolved, err := filepath.EvalSymlinks(a); err == nil {
+		a = resolved
+	}
+
+	if resolved, err := filepath.EvalSymlinks(b); err == nil {
+		b = resolved
+	}
+
+	return filepath.Clean(a) == filepath.Clean(b)
 }
 
 // offerGroups adds the already-tracked repo name to any of groups it is
@@ -233,16 +280,16 @@ func repoRemoveCmd(cfgPath *string) *cobra.Command {
 				return err
 			}
 
-			for _, name := range args {
-				if _, ok := cfg.Repos[name]; !ok {
+			return applyBatch(*cfgPath, cfg, args, func(c *config.Config, name string) error {
+				if _, ok := c.Repos[name]; !ok {
 					return fmt.Errorf("%w %q", errUnknownRepo, name)
 				}
 
-				cfg.RemoveRepo(name)
+				c.RemoveRepo(name)
 				ui.Infof("removed %q", name)
-			}
 
-			return config.Save(*cfgPath, cfg)
+				return nil
+			})
 		},
 	}
 }
@@ -470,24 +517,24 @@ func groupMemberAction(
 
 		var resolved *config.Config
 
-		for _, repoArg := range args[1:] {
-			repoName, err := resolveRepoArg(&cfg, repoArg)
+		return applyBatch(*cfgPath, cfg, args[1:], func(c *config.Config, repoArg string) error {
+			repoName, err := resolveRepoArg(c, repoArg)
 			if err != nil && includeRootRepos {
 				if resolved == nil {
 					resolved = loadRootResolved(cfgPath)
 				}
 
-				repoName, err = materializeRootRepo(&cfg, resolved, repoArg)
+				repoName, err = materializeRootRepo(c, resolved, repoArg)
 			}
 
 			if err != nil {
 				return err
 			}
 
-			act(&cfg, repoName, group)
-		}
+			act(c, repoName, group)
 
-		return config.Save(*cfgPath, cfg)
+			return nil
+		})
 	}
 }
 
