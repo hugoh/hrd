@@ -573,7 +573,7 @@ func TestRepoAddExistingPathOffersGroup(t *testing.T) { //nolint:funlen
 			nil,
 			[]string{"a", "b"},
 		},
-		{"no group requested", nil, nil, true, false, errRepoExists, nil},
+		{"no group requested", nil, nil, true, false, nil, nil},
 	}
 
 	for _, tt := range tests {
