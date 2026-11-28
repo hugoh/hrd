@@ -43,7 +43,7 @@ jobs:
   jj:
     needs: [changes]
     if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
-    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@8848a9dc48537ab0cf4032e9e1259bd27c9521e6 # v1.34.1
+    uses: hugoh/go-tools/.github/workflows/go-tool-compat.yml@1060072de74a95c0005f5d80e028e89e400525e1 # v1.34.2
     permissions:
       contents: read
     with:
@@ -80,7 +80,7 @@ jobs:
       matrix:
         runner: [ubuntu-26.04, ubuntu-24.04]
     steps:
-      - uses: hugoh/gh-workflows/setup@8d17bc6b4d7edc0bbec893e0466eb0ba60728721 # v1.40.27
+      - uses: hugoh/gh-workflows/setup@1990006622d3176e00fbf0d3d0b40723cfe8dbeb # v1.40.28
       - name: git integration tests
         env:
           REQUIRE_INTEGRATION: "1"
